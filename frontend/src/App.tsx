@@ -179,6 +179,8 @@ function App() {
   const raceName = year && round
     ? `${year} ${dataService.getRaceName(year, round).toUpperCase()}`
     : 'F1 RACE REPLAY';
+  const trackName = year && round ? dataService.getTrackName(year, round) : '';
+  const location = year && round ? dataService.getLocation(year, round) : '';
 
   return (
     <div className="app-container">
@@ -209,7 +211,14 @@ function App() {
             ☰
           </button>
           <div style={{ background: 'var(--f1-red)', padding: '4px 12px', fontWeight: 900, fontSize: '0.75rem' }}>REPLAY</div>
-          <h1 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em' }}>{raceName}</h1>
+          <div>
+            <h1 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em', margin: 0 }}>{raceName}</h1>
+            {trackName && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', margin: '4px 0 0 0', fontFamily: 'monospace' }}>
+                {trackName}
+              </p>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
           {weather && (
@@ -220,8 +229,15 @@ function App() {
             </div>
           )}
         </div>
-        <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
-          STATUS: <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+        <div style={{ textAlign: 'right' }}>
+          {location && (
+            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)', marginBottom: '4px' }}>
+              {location}
+            </div>
+          )}
+          <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
+            STATUS: <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+          </div>
         </div>
       </header>
 
