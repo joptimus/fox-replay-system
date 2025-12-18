@@ -62,13 +62,10 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         const decoded = decoder.unpack(data) as FrameData;
 
         if (!decoded.error) {
-          console.log(`Frame ${decoded.frame_index}: drivers=${Object.keys(decoded.drivers).length}`);
           setCurrentFrame(decoded);
           if (decoded.frame_index !== undefined) {
             setFrameIndex(decoded.frame_index);
           }
-        } else {
-          console.warn("Frame error:", decoded.error);
         }
       } catch (error) {
         console.error("Failed to decode frame:", error);
