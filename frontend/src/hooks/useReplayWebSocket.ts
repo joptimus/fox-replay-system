@@ -18,6 +18,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   const wsRef = useRef<WebSocket | null>(null);
   const { currentFrame, setCurrentFrame, playback, setFrameIndex } = useReplayStore();
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
+  const sendCommandRef = useRef<((message: WebSocketMessage) => void) | null>(null);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -38,7 +39,10 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
     wsRef.current.onopen = () => {
       console.log("WebSocket connected");
-      // Don't send commands here - use effects below to handle syncing
+      // Request initial frame when connection opens
+      if (sendCommandRef.current) {
+        sendCommandRef.current({ action: "seek", frame: 0 });
+      }
     };
 
     wsRef.current.onmessage = async (event) => {
@@ -101,6 +105,11 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     }
   }, []);
 
+  // Update sendCommandRef so onopen handler can call it
+  useEffect(() => {
+    sendCommandRef.current = sendCommand;
+  }, [sendCommand]);
+
   // Sync playback state to WebSocket
   useEffect(() => {
     if (playback.isPlaying) {
@@ -112,13 +121,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       sendCommand({ action: "pause" });
     }
   }, [playback.isPlaying, playback.speed, sendCommand]);
-
-  // Request initial frame when WebSocket connects
-  useEffect(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      sendCommand({ action: "seek", frame: 0 });
-    }
-  }, [sessionId, sendCommand]);
 
   // Sync frame index (seeking) to WebSocket
   useEffect(() => {
