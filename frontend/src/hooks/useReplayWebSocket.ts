@@ -38,8 +38,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
     wsRef.current.onopen = () => {
       console.log("WebSocket connected");
-      // Request initial frame
-      sendCommand({ action: "seek", frame: 0 });
+      // Don't send commands here - use effects below to handle syncing
     };
 
     wsRef.current.onmessage = async (event) => {
@@ -59,10 +58,13 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         const decoded = decoder.unpack(data) as FrameData;
 
         if (!decoded.error) {
+          console.log(`Frame ${decoded.frame_index}: drivers=${Object.keys(decoded.drivers).length}`);
           setCurrentFrame(decoded);
           if (decoded.frame_index !== undefined) {
             setFrameIndex(decoded.frame_index);
           }
+        } else {
+          console.warn("Frame error:", decoded.error);
         }
       } catch (error) {
         console.error("Failed to decode frame:", error);
@@ -110,6 +112,13 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       sendCommand({ action: "pause" });
     }
   }, [playback.isPlaying, playback.speed, sendCommand]);
+
+  // Request initial frame when WebSocket connects
+  useEffect(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      sendCommand({ action: "seek", frame: 0 });
+    }
+  }, [sessionId, sendCommand]);
 
   // Sync frame index (seeking) to WebSocket
   useEffect(() => {
