@@ -16,7 +16,7 @@ interface WebSocketMessage {
 
 export const useReplayWebSocket = (sessionId: string | null) => {
   const wsRef = useRef<WebSocket | null>(null);
-  const { currentFrame, setCurrentFrame, playback, session, setFrameIndex } = useReplayStore();
+  const { currentFrame, setCurrentFrame, playback, setFrameIndex } = useReplayStore();
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
 
   // Initialize WebSocket connection
