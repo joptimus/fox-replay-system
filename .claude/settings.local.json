@@ -20,7 +20,8 @@
       "Bash(python3:*)",
       "Bash(npx tsc:*)",
       "Bash(git commit:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(timeout 300 python:*)"
     ]
   }
 }

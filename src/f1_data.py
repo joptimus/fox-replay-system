@@ -180,6 +180,15 @@ def get_race_telemetry(session, session_type='R'):
         for num in drivers
     }
 
+    grid_positions = {}
+    try:
+        results = session.results
+        for _, row in results.iterrows():
+            code = row["Abbreviation"]
+            grid_positions[code] = int(row["GridPosition"])
+    except Exception as e:
+        print(f"Warning: Could not get grid positions: {e}")
+
     driver_data = {}
 
     global_t_min = None
@@ -357,7 +366,13 @@ def get_race_telemetry(session, session_type='R'):
 
         # 5b. Sort by race distance to get POSITIONS (1–20)
         # Leader = largest race distance covered
-        snapshot.sort(key=lambda r: r["dist"], reverse=True)
+        # For the first lap (very early in the race), use grid positions as primary sort
+        first_lap = all(car["lap"] <= 1.5 for car in snapshot)
+        if first_lap and grid_positions:
+            # Use grid position primarily, distance as tiebreaker
+            snapshot.sort(key=lambda r: (grid_positions.get(r["code"], 999), -r["dist"]))
+        else:
+            snapshot.sort(key=lambda r: r["dist"], reverse=True)
 
         leader = snapshot[0]
         leader_lap = leader["lap"]

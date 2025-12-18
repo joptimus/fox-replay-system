@@ -9,7 +9,7 @@ import { X, Settings, Upload } from "lucide-react";
 interface SidebarMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  onLoadSession: () => void;
+  onLoadSession?: () => void;
 }
 
 export const SidebarMenu: React.FC<SidebarMenuProps> = ({
@@ -98,41 +98,43 @@ export const SidebarMenu: React.FC<SidebarMenuProps> = ({
             <div style={{ flex: 1, overflow: "auto", padding: "12px" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {/* Load Session */}
-                <button
-                  onClick={() => {
-                    onLoadSession();
-                    onClose();
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    padding: "12px 16px",
-                    borderRadius: "6px",
-                    border: "1px solid #374151",
-                    background: "#111318",
-                    color: "#d1d5db",
-                    cursor: "pointer",
-                    fontSize: "0.875rem",
-                    fontWeight: 600,
-                    transition: "all 0.2s ease",
-                    width: "100%",
-                    textAlign: "left",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as any).style.background = "#1f1f27";
-                    (e.currentTarget as any).style.borderColor = "#4b5563";
-                    (e.currentTarget as any).style.color = "#f3f4f6";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as any).style.background = "#111318";
-                    (e.currentTarget as any).style.borderColor = "#374151";
-                    (e.currentTarget as any).style.color = "#d1d5db";
-                  }}
-                >
-                  <Upload size={18} />
-                  <span>Load Season</span>
-                </button>
+                {onLoadSession && (
+                  <button
+                    onClick={() => {
+                      onLoadSession();
+                      onClose();
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      padding: "12px 16px",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
+                      background: "#111318",
+                      color: "#d1d5db",
+                      cursor: "pointer",
+                      fontSize: "0.875rem",
+                      fontWeight: 600,
+                      transition: "all 0.2s ease",
+                      width: "100%",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as any).style.background = "#1f1f27";
+                      (e.currentTarget as any).style.borderColor = "#4b5563";
+                      (e.currentTarget as any).style.color = "#f3f4f6";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as any).style.background = "#111318";
+                      (e.currentTarget as any).style.borderColor = "#374151";
+                      (e.currentTarget as any).style.color = "#d1d5db";
+                    }}
+                  >
+                    <Upload size={18} />
+                    <span>Load Season</span>
+                  </button>
+                )}
 
                 {/* Settings (placeholder) */}
                 <button

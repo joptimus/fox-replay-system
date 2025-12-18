@@ -9,7 +9,7 @@ import { PlaybackControls } from "./components/PlaybackControls";
 import { Leaderboard } from "./components/Leaderboard";
 import { TelemetryChart } from "./components/TelemetryChart";
 import { SidebarMenu } from "./components/SidebarMenu";
-import { SessionModal } from "./components/SessionModal";
+import { SessionSelector } from "./components/SessionSelector";
 import { LoadingModal } from "./components/LoadingModal";
 import { motion } from "framer-motion";
 import { dataService } from "./services/dataService";
@@ -96,7 +96,6 @@ const DriverHero = ({ year }: { year?: number }) => {
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [loadingSessionYear, setLoadingSessionYear] = useState(0);
   const [loadingSessionRound, setLoadingSessionRound] = useState(0);
   const { session, setSession, setSessionLoading, pause } = useReplayStore();
@@ -221,6 +220,12 @@ function App() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+          <SessionSelector
+            currentYear={year}
+            currentRound={round}
+            isLoading={session.isLoading}
+            onSessionSelect={handleSessionSelect}
+          />
           {weather && (
             <div className="f1-monospace" style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', display: 'flex', gap: '12px' }}>
               <div style={{ whiteSpace: 'nowrap' }}>T {Math.round(weather.track_temp)}°</div>
@@ -262,16 +267,6 @@ function App() {
       <SidebarMenu
         isOpen={menuOpen}
         onClose={() => setMenuOpen(false)}
-        onLoadSession={() => setSessionModalOpen(true)}
-      />
-
-      <SessionModal
-        isOpen={sessionModalOpen}
-        onClose={() => setSessionModalOpen(false)}
-        onSessionSelect={handleSessionSelect}
-        currentYear={year}
-        currentRound={round}
-        isLoading={session.isLoading}
       />
 
       <LoadingModal
