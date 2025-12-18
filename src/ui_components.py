@@ -4,6 +4,8 @@ from typing import Sequence, Optional, Tuple
 from src.lib.time import format_time
 import numpy as np
 import os
+from PIL import Image
+import io
 
 def _format_wind_direction(degrees: Optional[float]) -> str:
   if degrees is None:
@@ -40,7 +42,8 @@ class LegendComponent(BaseComponent):
                 self.y - (i * 25),
                 arcade.color.LIGHT_GRAY if i > 0 else arcade.color.WHITE,
                 14,
-                bold=(i == 0)
+                bold=(i == 0),
+                font_name="Titillium Web"
             ).draw()
 
 class WeatherComponent(BaseComponent):
@@ -66,7 +69,7 @@ class WeatherComponent(BaseComponent):
         panel_top = window.height - self.top_offset
         if not self.info and not getattr(window, "has_weather", False):
             return
-        arcade.Text("Weather", self.left + 12, panel_top - 10, arcade.color.WHITE, 18, bold=True, anchor_y="top").draw()
+        arcade.Text("Weather", self.left + 12, panel_top - 10, arcade.color.WHITE, 18, bold=True, anchor_y="top", font_name="Titillium Web").draw()
         def _fmt(val, suffix="", precision=1):
             return f"{val:.{precision}f}{suffix}" if val is not None else "N/A"
         info = self.info or {}
@@ -98,7 +101,7 @@ class WeatherComponent(BaseComponent):
             
             # Draw text
             line_text = f"{label}: {value}"
-            arcade.Text(line_text, self.left + 38, line_y, arcade.color.LIGHT_GRAY, 14, anchor_y="top").draw()
+            arcade.Text(line_text, self.left + 38, line_y, arcade.color.LIGHT_GRAY, 14, anchor_y="top", font_name="Titillium Web").draw()
 
 class LeaderboardComponent(BaseComponent):
     def __init__(self, x: int, right_margin: int = 260, width: int = 240):
@@ -123,7 +126,7 @@ class LeaderboardComponent(BaseComponent):
         self.entries = entries
     def draw(self, window):
         leaderboard_y = window.height - 40
-        arcade.Text("Leaderboard", self.x, leaderboard_y, arcade.color.WHITE, 20, bold=True, anchor_x="left", anchor_y="top").draw()
+        arcade.Text("Leaderboard", self.x, leaderboard_y, arcade.color.WHITE, 20, bold=True, anchor_x="left", anchor_y="top", font_name="Titillium Web").draw()
         self.rects = []
         for i, (code, color, pos, progress_m) in enumerate(self.entries):
             current_pos = i + 1
@@ -139,7 +142,7 @@ class LeaderboardComponent(BaseComponent):
             else:
                 text_color = color
             text = f"{current_pos}. {code}" if pos.get("rel_dist",0) != 1 else f"{current_pos}. {code}   OUT"
-            arcade.Text(text, left_x, top_y, text_color, 16, anchor_x="left", anchor_y="top").draw()
+            arcade.Text(text, left_x, top_y, text_color, 16, anchor_x="left", anchor_y="top", font_name="Titillium Web").draw()
 
              # Tyre Icons
             tyre_texture = self._tyre_textures.get(str(pos.get("tyre", "?")).upper())
@@ -187,7 +190,7 @@ class LapTimeLeaderboardComponent(BaseComponent):
 
     def draw(self, window):
         leaderboard_y = window.height - 40
-        arcade.Text("Lap Times", self.x, leaderboard_y, arcade.color.WHITE, 20, bold=True, anchor_x="left", anchor_y="top").draw()
+        arcade.Text("Lap Times", self.x, leaderboard_y, arcade.color.WHITE, 20, bold=True, anchor_x="left", anchor_y="top", font_name="Titillium Web").draw()
         self.rects = []
         for i, entry in enumerate(self.entries):
             pos = entry.get('pos', i + 1)
@@ -212,8 +215,8 @@ class LapTimeLeaderboardComponent(BaseComponent):
                 text_color = tuple(color) if isinstance(color, (list, tuple)) else arcade.color.WHITE
 
             # Draw code on left, time right-aligned
-            arcade.Text(f"{pos}. {code}", left_x + 8, top_y, text_color, 16, anchor_x="left", anchor_y="top").draw()
-            arcade.Text(time_str, right_x - 8, top_y, text_color, 14, anchor_x="right", anchor_y="top").draw()
+            arcade.Text(f"{pos}. {code}", left_x + 8, top_y, text_color, 16, anchor_x="left", anchor_y="top", font_name="Titillium Web").draw()
+            arcade.Text(time_str, right_x - 8, top_y, text_color, 14, anchor_x="right", anchor_y="top", font_name="Titillium Web").draw()
 
     def on_mouse_press(self, window, x: float, y: float, button: int, modifiers: int):
         for code, left, bottom, right, top in self.rects:
@@ -256,8 +259,8 @@ class QualifyingSegmentSelectorComponent(BaseComponent):
         
         # Draw title
         title = f"Qualifying Sessions - {driver_result.get('code','')}"
-        arcade.Text(title, left + 20, top - 30, arcade.color.WHITE, 18, 
-               bold=True, anchor_x="left", anchor_y="center").draw()
+        arcade.Text(title, left + 20, top - 30, arcade.color.WHITE, 18,
+               bold=True, anchor_x="left", anchor_y="center", font_name="Titillium Web").draw()
         
         # Draw segments
         segment_height = 50
@@ -303,16 +306,16 @@ class QualifyingSegmentSelectorComponent(BaseComponent):
             segment_text = f"{segment.upper()}"
             time_text = format_time(float(data.get('time', 'No Time')))
             
-            arcade.Text(segment_text, left + 30, segment_top - 20, 
-                       text_color, 16, bold=True, anchor_x="left", anchor_y="center").draw()
-            arcade.Text(time_text, right - 30, segment_top - 20, 
-                       text_color, 14, anchor_x="right", anchor_y="center").draw()
-        
+            arcade.Text(segment_text, left + 30, segment_top - 20,
+                       text_color, 16, bold=True, anchor_x="left", anchor_y="center", font_name="Titillium Web").draw()
+            arcade.Text(time_text, right - 30, segment_top - 20,
+                       text_color, 14, anchor_x="right", anchor_y="center", font_name="Titillium Web").draw()
+
         # Draw close button
         close_btn_rect = arcade.XYWH(right - 30, top - 30, 20, 20)
         arcade.draw_rect_filled(close_btn_rect, arcade.color.RED)
-        arcade.Text("×", right - 30, top - 30, arcade.color.WHITE, 16, 
-               bold=True, anchor_x="center", anchor_y="center").draw()
+        arcade.Text("×", right - 30, top - 30, arcade.color.WHITE, 16,
+               bold=True, anchor_x="center", anchor_y="center", font_name="Titillium Web").draw()
 
     def on_mouse_press(self, window, x: float, y: float, button: int, modifiers: int):        
         if not getattr(window, "selected_driver", None):
@@ -384,149 +387,237 @@ class QualifyingSegmentSelectorComponent(BaseComponent):
 
 
 class DriverInfoComponent(BaseComponent):
-    def __init__(self, left=20, width=220, min_top=220):
+    """F1.com style driver info card with cropped driver photo (shoulders up)"""
+    def __init__(self, left=20, width=300, min_top=220):
         self.left = left
         self.width = width
         self.min_top = min_top
+        self._driver_textures = {}
+        self._driver_names = {}
+        self._driver_teams = {}
+
+        # Load driver pictures from images/drivers/2025 folder
+        drivers_folder = os.path.join("images", "drivers", "2025")
+        if os.path.exists(drivers_folder):
+            for filename in os.listdir(drivers_folder):
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.avif')):
+                    driver_code = os.path.splitext(filename)[0].upper()
+                    texture_path = os.path.join(drivers_folder, filename)
+                    try:
+                        # Load and crop image - keep only head and shoulders
+                        img = Image.open(texture_path)
+                        width_px, height_px = img.size
+
+                        # Crop to show top 20% of image (head and neck only)
+                        crop_box = (0, 0, width_px, int(height_px * 0.20))
+                        cropped_img = img.crop(crop_box)
+
+                        # Convert PIL image to arcade texture
+                        # Save to bytes buffer
+                        img_bytes = io.BytesIO()
+                        cropped_img.save(img_bytes, format='PNG')
+                        img_bytes.seek(0)
+
+                        # Load as arcade texture
+                        self._driver_textures[driver_code] = arcade.load_texture(img_bytes)
+                    except Exception as e:
+                        print(f"Failed to load/crop driver texture {driver_code}: {e}")
+        else:
+            print(f"Driver images folder not found: {drivers_folder}")
 
     def draw(self, window):
+        """Draw F1.com style driver card with two-section layout"""
         if not getattr(window, "selected_driver", None):
             return
 
         code = window.selected_driver
-        if not window.frames: return
+        if not window.frames:
+            return
 
         idx = min(int(window.frame_index), window.n_frames - 1)
         frame = window.frames[idx]
 
-        if code not in frame["drivers"]: return
+        if code not in frame["drivers"]:
+            return
         driver_pos = frame["drivers"][code]
 
-        box_width = self.width
-        box_height = 160
+        # Card dimensions - F1.com style layout
+        card_width = self.width
+        card_height = 480
+        card_x = self.left
+        card_y = window.height - 100
 
-        center_x = self.left + box_width / 2
+        # Get team color
+        team_color = window.driver_colors.get(code, (100, 100, 100))
+        team_color_tuple = tuple(team_color) if isinstance(team_color, (list, tuple)) else (100, 100, 100)
 
-        default_y = window.height / 2
-        weather_bottom = getattr(window, "weather_bottom", None)
+        # ===== TOP SECTION: Driver Info + Photo (Team Color Background) =====
+        photo_height = 200
+        top_section_rect = arcade.XYWH(card_x + card_width / 2, card_y - photo_height / 2, card_width, photo_height)
+        arcade.draw_rect_filled(top_section_rect, team_color_tuple)
+        arcade.draw_rect_outline(top_section_rect, arcade.color.WHITE, 2)
 
-        if weather_bottom:
-            top_limit = weather_bottom - 20
-            center_y = top_limit - (box_height / 2)
-        else:
-            center_y = default_y
+        # Left side: Driver info (50% of width)
+        left_col_width = int(card_width * 0.5)
+        info_x = card_x + 15
+        info_y = card_y - 20  # Top of card
 
-        center_y -= 30
+        # Driver name (large)
+        arcade.Text(
+            code,
+            info_x,
+            info_y,
+            arcade.color.WHITE,
+            22,
+            anchor_y="top",
+            bold=True,
+            font_name="Titillium Web"
+        ).draw()
 
-        # driver box height limit
-        center_y = max(center_y, self.min_top + box_height / 2)
+        # Team name (smaller)
+        team_name = getattr(window, 'driver_team_names', {}).get(code, 'Team Unknown')
+        arcade.Text(
+            team_name,
+            info_x,
+            info_y - 35,
+            arcade.color.WHITE,
+            12,
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
 
-        # actual drawing area  (Top / Bottom / Left / Right)
-        top = center_y + box_height / 2
-        bottom = center_y - box_height / 2
-        left = center_x - box_width / 2
-        right = center_x + box_width / 2
+        # Driver number (very large)
+        driver_num = getattr(window, 'driver_numbers', {}).get(code, '?')
+        arcade.Text(
+            str(driver_num),
+            info_x,
+            info_y - 60,
+            arcade.color.WHITE,
+            48,
+            anchor_y="top",
+            bold=True,
+            font_name="Titillium Web"
+        ).draw()
 
-        rect = arcade.XYWH(center_x, center_y, box_width, box_height)
-        arcade.draw_rect_filled(rect, (0, 0, 0, 200))
+        # Right side: Driver photo (50% of width)
+        photo_x = card_x + left_col_width + 5
+        photo_width = int(card_width * 0.45)
+        driver_texture = self._driver_textures.get(code)
+        if driver_texture:
+            photo_rect = arcade.XYWH(photo_x + photo_width / 2, card_y - photo_height / 2, photo_width, photo_height)
+            arcade.draw_texture_rect(
+                rect=photo_rect,
+                texture=driver_texture,
+                angle=0,
+                alpha=255
+            )
 
-        team_color = window.driver_colors.get(code, arcade.color.GRAY)
-        arcade.draw_rect_outline(rect, team_color, 2)
+        # ===== BOTTOM SECTION: Telemetry (Dark Background) =====
+        bottom_height = card_height - photo_height
+        bottom_y = card_y - photo_height
+        bottom_section_rect = arcade.XYWH(card_x + card_width / 2, bottom_y - bottom_height / 2, card_width, bottom_height)
+        arcade.draw_rect_filled(bottom_section_rect, (30, 30, 30))
 
-        header_height = 30
-        header_cy = top - (header_height / 2)
-        header_rect = arcade.XYWH(center_x, header_cy, box_width, header_height)
-        arcade.draw_rect_filled(header_rect, team_color)
+        # Telemetry data
+        telemetry_y = card_y - photo_height - 20
 
-        arcade.Text(f"Driver: {code}", left + 10, header_cy,
-                    arcade.color.BLACK, 14, anchor_y="center", bold=True).draw()
-
-        header_bottom = top - header_height
-        cursor_y = header_bottom - 25
-        left_text_x = left + 15
-        row_gap = 25
-
-        # (A) Speed
+        # Left column telemetry
         speed = driver_pos.get('speed', 0)
-        arcade.Text(f"Speed: {speed:.0f} km/h", left_text_x, cursor_y, arcade.color.WHITE, 12, anchor_y="center").draw()
-        cursor_y -= row_gap
+        arcade.Text(
+            "Speed",
+            card_x + 20,
+            telemetry_y,
+            (150, 150, 150),
+            11,
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
+        arcade.Text(
+            f"{speed:.0f} km/h",
+            card_x + 20,
+            telemetry_y - 22,
+            arcade.color.WHITE,
+            14,
+            bold=True,
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
 
-        # (B) Gear
         gear = driver_pos.get('gear', '-')
-        arcade.Text(f"Gear: {gear}", left_text_x, cursor_y, arcade.color.WHITE, 12, anchor_y="center").draw()
-        cursor_y -= row_gap
+        arcade.Text(
+            "Gear",
+            card_x + 20,
+            telemetry_y - 55,
+            (150, 150, 150),
+            11,
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
+        arcade.Text(
+            f"{gear}",
+            card_x + 20,
+            telemetry_y - 77,
+            arcade.color.WHITE,
+            14,
+            bold=True,
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
 
-        # (C) DRS
-        drs_val = driver_pos.get('drs', 0)
-        drs_str = "DRS: OFF"
-        drs_color = arcade.color.GRAY
-
-        if drs_val in [10, 12, 14]:
-            drs_str = "DRS: ON"
-            drs_color = arcade.color.GREEN
-        elif drs_val == 8:
-            drs_str = "DRS: AVAIL"
-            drs_color = arcade.color.YELLOW
-
-        arcade.Text(drs_str, left_text_x, cursor_y, drs_color, 12, anchor_y="center", bold=True).draw()
-        cursor_y -= (row_gap + 5)
-
-        # ---------------------------------------------------
-        # [4] vertical stick graph (right side)
-        # ---------------------------------------------------
-        # get data
+        # Right column - Throttle/Brake bars
         throttle = driver_pos.get('throttle', 0)
         brake = driver_pos.get('brake', 0)
 
-        # 0~100 range normalization (preparing if the data has 0~1 range)
         t_ratio = max(0.0, min(1.0, throttle / 100.0))
-        if brake > 1.0:
-            b_ratio = max(0.0, min(1.0, brake / 100.0))
-        else:
-            b_ratio = max(0.0, min(1.0, brake))
+        b_ratio = max(0.0, min(1.0, brake / 100.0 if brake > 1.0 else brake))
 
-        # set graph location
+        bar_x = card_x + card_width - 80
+        bar_height = 70
         bar_width = 20
-        bar_max_height = 80
-        bar_bottom_y = bottom + 35  # 바닥에서 약간 위
 
-        # center value of right section
-        right_section_center = right - 50
+        # Throttle label
+        arcade.Text(
+            "THR",
+            bar_x - 30,
+            telemetry_y,
+            (150, 150, 150),
+            11,
+            anchor_x="center",
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
 
-        # (D) Throttle Bar
-        th_x = right_section_center - 15
+        # Throttle bar background
+        thr_bar_bg = arcade.XYWH(bar_x - 30, telemetry_y - 60, bar_width, bar_height)
+        arcade.draw_rect_filled(thr_bar_bg, (50, 50, 50))
+        arcade.draw_rect_outline(thr_bar_bg, (80, 80, 80), 1)
 
-        # throttle label
-        arcade.Text("THR", th_x, bar_bottom_y - 20, arcade.color.WHITE, 10, anchor_x="center").draw()
-
-        # throttle bg_color (grey) - XYWH는 중심점 기준이므로 계산 주의
-        # center Y = bottom Y + (height / 2)
-        bg_cy = bar_bottom_y + (bar_max_height / 2)
-        arcade.draw_rect_filled(arcade.XYWH(th_x, bg_cy, bar_width, bar_max_height), arcade.color.DARK_GRAY)
-
-        # throttle value (green) - filled from bottom to top
         if t_ratio > 0:
-            val_height = bar_max_height * t_ratio
-            val_cy = bar_bottom_y + (val_height / 2)
-            arcade.draw_rect_filled(arcade.XYWH(th_x, val_cy, bar_width, val_height), arcade.color.GREEN)
+            thr_fill_height = bar_height * t_ratio
+            thr_fill = arcade.XYWH(bar_x - 30, telemetry_y - 60 + (bar_height - thr_fill_height), bar_width, thr_fill_height)
+            arcade.draw_rect_filled(thr_fill, (0, 200, 100))
 
-        # (E) Brake Bar
-        br_x = right_section_center + 15
+        # Brake label
+        arcade.Text(
+            "BRK",
+            bar_x + 10,
+            telemetry_y,
+            (150, 150, 150),
+            11,
+            anchor_x="center",
+            anchor_y="top",
+            font_name="Titillium Web"
+        ).draw()
 
-        # brake label
-        arcade.Text("BRK", br_x, bar_bottom_y - 20, arcade.color.WHITE, 10, anchor_x="center").draw()
+        # Brake bar background
+        brk_bar_bg = arcade.XYWH(bar_x + 10, telemetry_y - 60, bar_width, bar_height)
+        arcade.draw_rect_filled(brk_bar_bg, (50, 50, 50))
+        arcade.draw_rect_outline(brk_bar_bg, (80, 80, 80), 1)
 
-        # brake bg_color (grey)
-        arcade.draw_rect_filled(arcade.XYWH(br_x, bg_cy, bar_width, bar_max_height), arcade.color.DARK_GRAY)
-
-        # brake value (red)
         if b_ratio > 0:
-            val_height = bar_max_height * b_ratio
-            val_cy = bar_bottom_y + (val_height / 2)
-            arcade.draw_rect_filled(arcade.XYWH(br_x, val_cy, bar_width, val_height), arcade.color.RED)
-
-    def _get_driver_color(self, window, code):
-        return window.driver_colors.get(code, arcade.color.GRAY)
+            brk_fill_height = bar_height * b_ratio
+            brk_fill = arcade.XYWH(bar_x + 10, telemetry_y - 60 + (bar_height - brk_fill_height), bar_width, brk_fill_height)
+            arcade.draw_rect_filled(brk_fill, (220, 50, 50))
       
 # Feature: race progress bar with event markers
 class RaceProgressBarComponent(BaseComponent):
@@ -718,7 +809,7 @@ class RaceProgressBarComponent(BaseComponent):
                         str(lap),
                         lap_x, self.bottom - 4,
                         self.COLORS["text"], 9,
-                        anchor_x="center", anchor_y="top"
+                        anchor_x="center", anchor_y="top", font_name="Titillium Web"
                     ).draw()
         
         # 4. Draw event markers
@@ -857,7 +948,7 @@ class RaceProgressBarComponent(BaseComponent):
             tooltip_text,
             tooltip_x, tooltip_y,
             (255, 255, 255), 12,
-            anchor_x="center", anchor_y="center"
+            anchor_x="center", anchor_y="center", font_name="Titillium Web"
         ).draw()
         
     def _draw_legend(self, window):
@@ -878,13 +969,13 @@ class RaceProgressBarComponent(BaseComponent):
                 symbol,
                 x, legend_y + 2,
                 color, 10, bold=True,
-                anchor_x="center", anchor_y="center"
+                anchor_x="center", anchor_y="center", font_name="Titillium Web"
             ).draw()
             arcade.Text(
                 label,
                 x, legend_y - 10,
                 self.COLORS["text"], 8,
-                anchor_x="center", anchor_y="top"
+                anchor_x="center", anchor_y="top", font_name="Titillium Web"
             ).draw()
         
     def on_mouse_motion(self, window, x: float, y: float, dx: float, dy: float):

@@ -1,0 +1,33 @@
+{
+  "name": "f1-race-replay",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.56.24",
+    "@react-three/fiber": "^8.13.0",
+    "clsx": "2.0.0",
+    "framer-motion": "10.16.1",
+    "lucide-react": "^0.561.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "recharts": "^2.8.0",
+    "three": "^0.182.0",
+    "zustand": "4.3.9"
+  },
+  "devDependencies": {
+    "@types/react": "18.2.37",
+    "@types/react-dom": "18.2.15",
+    "@vitejs/plugin-react": "4.2.0",
+    "autoprefixer": "10.4.16",
+    "postcss": "8.4.31",
+    "tailwindcss": "3.3.0",
+    "typescript": "5.2.2",
+    "vite": "5.0.2"
+  }
+}

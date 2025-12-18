@@ -180,7 +180,7 @@ class QualifyingReplay(arcade.Window):
 
         # Add disclaimer about experimental charting feature
 
-        arcade.Text("This feature is still in development.", 20, 40, arcade.color.RED, 12, anchor_x="left", anchor_y="top").draw()
+        arcade.Text("This feature is still in development.", 20, 40, arcade.color.RED, 12, anchor_x="left", anchor_y="top", font_name="Titillium Web").draw()
 
         # Draw simple line chart if telemetry is loaded
         if self.chart_active and self.loaded_telemetry:
@@ -243,9 +243,9 @@ class QualifyingReplay(arcade.Window):
 
                 # Add Subtitles to the charts
 
-                arcade.Text("Speed (km/h)", chart_left + 10, speed_top + 10, arcade.color.ANTI_FLASH_WHITE, 14).draw()
-                arcade.Text("Gear", chart_left + 10, gear_top + 10, arcade.color.ANTI_FLASH_WHITE, 14).draw()
-                arcade.Text("Throttle / Brake (%)", chart_left + 10, ctrl_top + 10, arcade.color.ANTI_FLASH_WHITE, 14).draw()
+                arcade.Text("Speed (km/h)", chart_left + 10, speed_top + 10, arcade.color.ANTI_FLASH_WHITE, 14, font_name="Titillium Web").draw()
+                arcade.Text("Gear", chart_left + 10, gear_top + 10, arcade.color.ANTI_FLASH_WHITE, 14, font_name="Titillium Web").draw()
+                arcade.Text("Throttle / Brake (%)", chart_left + 10, ctrl_top + 10, arcade.color.ANTI_FLASH_WHITE, 14, font_name="Titillium Web").draw()
 
                 # DRS key at right of the speed subtitle (green square + label)
                 key_size = 12
@@ -262,7 +262,7 @@ class QualifyingReplay(arcade.Window):
                     key_y,
                     arcade.color.ANTI_FLASH_WHITE,
                     12,
-                    anchor_y="center"
+                    anchor_y="center", font_name="Titillium Web"
                 ).draw()
 
                 # compute global ranges from all frames (use distance for x-axis) - Should be max of 1.0 rel_dist, but just in case
@@ -377,7 +377,7 @@ class QualifyingReplay(arcade.Window):
                         arcade.draw_line_strip(pts, arcade.color.ANTI_FLASH_WHITE, 2)
                         # Show current speed in km/h
                         current_speed = draw_speeds[-1] if draw_speeds else 0
-                        arcade.Text(f"{current_speed:.0f} km/h", pts[-1][0] + 10, pts[-1][1] + 5, arcade.color.ANTI_FLASH_WHITE, 12).draw()
+                        arcade.Text(f"{current_speed:.0f} km/h", pts[-1][0] + 10, pts[-1][1] + 5, arcade.color.ANTI_FLASH_WHITE, 12, font_name="Titillium Web").draw()
                     except Exception as e:
                         print("Chart draw error (speed):", e)
 
@@ -400,7 +400,7 @@ class QualifyingReplay(arcade.Window):
                         # Show current gear next to the line
 
                         current_gear = draw_gears[-1] if draw_gears else 0
-                        arcade.Text(f"Gear: {int(current_gear)}", gear_pts[-1][0] + 10, gear_pts[-1][1] + 5, arcade.color.LIGHT_GRAY, 12).draw()
+                        arcade.Text(f"Gear: {int(current_gear)}", gear_pts[-1][0] + 10, gear_pts[-1][1] + 5, arcade.color.LIGHT_GRAY, 12, font_name="Titillium Web").draw()
                         
                 except Exception as e:
                     print("Chart draw error (gear):", e)
@@ -441,9 +441,9 @@ class QualifyingReplay(arcade.Window):
                     
                 formatted_time = format_time(current_t)
 
-                arcade.Text(f"Lap Time: {formatted_time}", map_left + 10, map_top - 30, arcade.color.ANTI_FLASH_WHITE, 16).draw()
+                arcade.Text(f"Lap Time: {formatted_time}", map_left + 10, map_top - 30, arcade.color.ANTI_FLASH_WHITE, 16, font_name="Titillium Web").draw()
 
-                arcade.Text(f"Playback Speed: {self.playback_speed:.1f}x", map_left + 10, map_top - 50, arcade.color.ANTI_FLASH_WHITE, 14).draw()
+                arcade.Text(f"Playback Speed: {self.playback_speed:.1f}x", map_left + 10, map_top - 50, arcade.color.ANTI_FLASH_WHITE, 14, font_name="Titillium Web").draw()
 
                 # Legends
                 legend_x = chart_right - 100
@@ -515,9 +515,9 @@ class QualifyingReplay(arcade.Window):
                     cur_gear = tel.get("gear") or tel.get("nGear") or tel.get("Gear")
                     if cur_gear is None:
                         cur_gear = draw_gears[-1] if draw_gears else None
-                    arcade.Text(self.loaded_driver_code or "", sx + 10, sy + 4, arcade.color.WHITE, 12).draw()
+                    arcade.Text(self.loaded_driver_code or "", sx + 10, sy + 4, arcade.color.WHITE, 12, font_name="Titillium Web").draw()
                     if cur_gear is not None:
-                        arcade.Text(f"G:{int(cur_gear)}", sx + 10, sy - 10, arcade.color.LIGHT_GRAY, 12).draw()
+                        arcade.Text(f"G:{int(cur_gear)}", sx + 10, sy - 10, arcade.color.LIGHT_GRAY, 12, font_name="Titillium Web").draw()
 
             # Controls Legend - Bottom Left (keeps small offset from left UI edge)
             legend_x = max(12, self.left_ui_margin - 320) if hasattr(self, "left_ui_margin") else 20
@@ -537,7 +537,8 @@ class QualifyingReplay(arcade.Window):
                     legend_y - (i * 25),
                     arcade.color.LIGHT_GRAY if i > 0 else arcade.color.WHITE,
                     14,
-                    bold=(i == 0)
+                    bold=(i == 0),
+                    font_name="Titillium Web"
                 ).draw()
         else:
             # Add "click a driver to view their qualifying lap" text in the center of the chart area
@@ -547,7 +548,7 @@ class QualifyingReplay(arcade.Window):
                 info_text,
                 self.width / 2, self.height / 2,
                 arcade.color.LIGHT_GRAY, 18,
-                anchor_x="center", anchor_y="center"
+                anchor_x="center", anchor_y="center", font_name="Titillium Web"
             ).draw()
 
         self.leaderboard.draw(self)

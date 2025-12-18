@@ -2,7 +2,7 @@
  * Session selector modal for choosing F1 season and round
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -15,6 +15,16 @@ interface SessionModalProps {
   isLoading?: boolean;
 }
 
+// F1 2025 Season - 24 rounds
+const ROUNDS_2025 = Array.from({ length: 24 }, (_, i) => i + 1);
+// F1 2024 Season - 24 rounds
+const ROUNDS_2024 = Array.from({ length: 24 }, (_, i) => i + 1);
+
+const ROUNDS_BY_YEAR: Record<number, number[]> = {
+  2024: ROUNDS_2024,
+  2025: ROUNDS_2025,
+};
+
 export const SessionModal: React.FC<SessionModalProps> = ({
   isOpen,
   onClose,
@@ -25,33 +35,12 @@ export const SessionModal: React.FC<SessionModalProps> = ({
 }) => {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedRound, setSelectedRound] = useState(currentRound);
-  const [availableRounds, setAvailableRounds] = useState<number[]>([]);
-  const [years] = useState([2024, 2025]);
-
-  useEffect(() => {
-    loadRounds(selectedYear);
-  }, [selectedYear]);
-
-  const loadRounds = async (year: number) => {
-    try {
-      const response = await fetch("/api/rounds", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year }),
-      });
-      const data = await response.json();
-      setAvailableRounds(data.rounds || []);
-    } catch (err) {
-      console.error("Failed to load rounds:", err);
-      setAvailableRounds([]);
-    }
-  };
+  const years = Object.keys(ROUNDS_BY_YEAR).map(Number).sort().reverse();
+  const availableRounds = ROUNDS_BY_YEAR[selectedYear] || [];
 
   const handleSelect = () => {
-    if (availableRounds.includes(selectedRound)) {
-      onSessionSelect(selectedYear, selectedRound);
-      onClose();
-    }
+    onSessionSelect(selectedYear, selectedRound);
+    onClose();
   };
 
   return (

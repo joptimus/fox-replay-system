@@ -35,6 +35,10 @@ class F1RaceReplayWindow(arcade.Window):
         self.total_laps = total_laps
         self.has_weather = any("weather" in frame for frame in frames) if frames else False
 
+        # Initialize driver info attributes
+        self.driver_numbers = self._load_driver_numbers()
+        self.driver_team_names = self._load_driver_team_names()
+
         # Rotation (degrees) to apply to the whole circuit around its centre
         self.circuit_rotation = circuit_rotation
         self._rot_rad = float(np.deg2rad(self.circuit_rotation)) if self.circuit_rotation else 0.0
@@ -111,6 +115,53 @@ class F1RaceReplayWindow(arcade.Window):
         # Selection & hit-testing state for leaderboard
         self.selected_driver = None
         self.leaderboard_rects = []  # list of tuples: (code, left, bottom, right, top)
+
+    def _load_driver_numbers(self):
+        """Load driver numbers from driver data"""
+        numbers = {}
+
+        # First, try to get numbers from the driver objects (FastF1 data)
+        try:
+            for driver in self.drivers:
+                driver_code = getattr(driver, 'abbreviation', None)
+                driver_number = getattr(driver, 'driver_number', None)
+                if driver_code and driver_number:
+                    numbers[driver_code] = driver_number
+        except Exception as e:
+            print(f"Error loading driver numbers from driver data: {e}")
+
+        # Fall back to loading from images/numbers/2025/ folder if available
+        numbers_folder = os.path.join("images", "numbers", "2025")
+        if os.path.exists(numbers_folder):
+            for filename in os.listdir(numbers_folder):
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    # Extract driver code from filename (e.g., "VER.png" -> "VER")
+                    driver_code = os.path.splitext(filename)[0].upper()
+                    # Only add if we don't already have this driver's number
+                    if driver_code not in numbers:
+                        # Try to extract number from filename (e.g., "VER_1.png" -> "1")
+                        if '_' in driver_code:
+                            parts = driver_code.split('_')
+                            try:
+                                numbers[parts[0]] = int(parts[1])
+                            except (ValueError, IndexError):
+                                pass
+
+        return numbers
+
+    def _load_driver_team_names(self):
+        """Load driver team names from the drivers data"""
+        team_names = {}
+        # Extract team names from drivers (drivers is a list of driver objects from FastF1)
+        try:
+            for driver in self.drivers:
+                # FastF1 driver objects have these attributes
+                driver_code = getattr(driver, 'abbreviation', str(driver))
+                team_name = getattr(driver, 'team_name', 'Unknown Team')
+                team_names[driver_code] = team_name
+        except Exception as e:
+            print(f"Error loading team names: {e}")
+        return team_names
 
     def _interpolate_points(self, xs, ys, interp_points=2000):
         t_old = np.linspace(0, 1, len(xs))
@@ -334,35 +385,35 @@ class F1RaceReplayWindow(arcade.Window):
         if self.total_laps is not None:
             lap_str += f"/{self.total_laps}"
 
-        # Draw HUD - Top Left                         
+        # Draw HUD - Top Left
         arcade.Text(lap_str,
-                          20, self.height - 40, 
-                          arcade.color.WHITE, 24, anchor_y="top").draw()
-        
-        arcade.Text(f"Race Time: {time_str} (x{self.playback_speed})", 
-                         20, self.height - 80, 
-                         arcade.color.WHITE, 20, anchor_y="top").draw()
-        
+                          20, self.height - 40,
+                          arcade.color.WHITE, 24, anchor_y="top", font_name="Titillium Web").draw()
+
+        arcade.Text(f"Race Time: {time_str} (x{self.playback_speed})",
+                         20, self.height - 80,
+                         arcade.color.WHITE, 20, anchor_y="top", font_name="Titillium Web").draw()
+
         if current_track_status == "2":
             status_text = "YELLOW FLAG"
-            arcade.Text(status_text, 
+            arcade.Text(status_text,
                              20, self.height - 120,
-                             arcade.color.YELLOW, 24, bold=True, anchor_y="top").draw()
+                             arcade.color.YELLOW, 24, bold=True, anchor_y="top", font_name="Titillium Web").draw()
         elif current_track_status == "5":
             status_text = "RED FLAG"
-            arcade.Text(status_text, 
-                             20, self.height - 120, 
-                             arcade.color.RED, 24, bold=True, anchor_y="top").draw()
+            arcade.Text(status_text,
+                             20, self.height - 120,
+                             arcade.color.RED, 24, bold=True, anchor_y="top", font_name="Titillium Web").draw()
         elif current_track_status == "6":
             status_text = "VIRTUAL SAFETY CAR"
-            arcade.Text(status_text, 
-                             20, self.height - 120, 
-                             arcade.color.ORANGE, 24, bold=True, anchor_y="top").draw()
+            arcade.Text(status_text,
+                             20, self.height - 120,
+                             arcade.color.ORANGE, 24, bold=True, anchor_y="top", font_name="Titillium Web").draw()
         elif current_track_status == "4":
             status_text = "SAFETY CAR"
-            arcade.Text(status_text, 
-                             20, self.height - 120, 
-                             arcade.color.BROWN, 24, bold=True, anchor_y="top").draw()
+            arcade.Text(status_text,
+                             20, self.height - 120,
+                             arcade.color.BROWN, 24, bold=True, anchor_y="top", font_name="Titillium Web").draw()
 
         # Weather component (set info then draw)
         weather_info = frame.get("weather") if frame else None
@@ -402,7 +453,8 @@ class F1RaceReplayWindow(arcade.Window):
                 legend_y - (i * 25),
                 arcade.color.LIGHT_GRAY if i > 0 else arcade.color.WHITE,
                 14,
-                bold=(i == 0)
+                bold=(i == 0),
+                font_name="Titillium Web"
             ).draw()
         
         # Selected driver info component

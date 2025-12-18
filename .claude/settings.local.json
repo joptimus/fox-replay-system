@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(dir:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell:*)",
+      "Bash(....python3 -m pip install fastf1 numpy pandas matplotlib requests)",
+      "Bash(npm install:*)",
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout 5 powershell:*)",
+      "Bash(timeout 3 powershell:*)",
+      "Bash(python3:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
