@@ -1,8 +1,8 @@
 /**
- * FP1 Dashboard - Expanded leader table with detailed telemetry columns
+ * FP1 Dashboard - Practice session with sector telemetry visualization
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentFrame, useSelectedDriver, useReplayStore } from "../store/replayStore";
 
@@ -10,20 +10,13 @@ const TYRE_MAP: Record<number, string> = {
   0: '0.0.png', 1: '1.0.png', 2: '2.0.png', 3: '3.0.png', 4: '4.0.png'
 };
 
-interface ColumnDef {
-  key: string;
-  label: string;
-  width: string;
-  format: (value: any, data: any, leader?: any) => string;
-  align?: 'left' | 'center' | 'right';
-}
-
 export const FP1Dashboard: React.FC = () => {
   const currentFrame = useCurrentFrame();
   const selectedDriver = useSelectedDriver();
   const { setSelectedDriver } = useReplayStore();
   const session = useReplayStore((state) => state.session);
   const metadata = session?.metadata;
+  const [expandedTimes, setExpandedTimes] = useState<Set<string>>(new Set());
 
   if (!currentFrame || !metadata || !currentFrame.drivers) {
     return <div className="p-4 f1-monospace">LOADING...</div>;
@@ -38,121 +31,80 @@ export const FP1Dashboard: React.FC = () => {
     }))
     .sort((a, b) => a.position - b.position);
 
-  const fastestLap = drivers.reduce((fastest, driver) => {
-    if (!driver.data.lap_time || driver.data.lap_time === 0) return fastest;
-    if (!fastest || (driver.data.lap_time > 0 && driver.data.lap_time < fastest.data.lap_time)) {
-      return driver;
-    }
-    return fastest;
-  }, null as typeof drivers[0] | null);
+  const fastestS1 = Math.min(...drivers.filter(d => d.data.sector1).map(d => d.data.sector1));
+  const fastestS2 = Math.min(...drivers.filter(d => d.data.sector2).map(d => d.data.sector2));
+  const fastestS3 = Math.min(...drivers.filter(d => d.data.sector3).map(d => d.data.sector3));
 
-  const columns: ColumnDef[] = [
-    {
-      key: 'pos',
-      label: 'POS',
-      width: '45px',
-      align: 'center',
-      format: (_, driver) => driver.position.toString(),
-    },
-    {
-      key: 'driver',
-      label: 'DRIVER',
-      width: '60px',
-      align: 'left',
-      format: (_, driver) => driver.code,
-    },
-    {
-      key: 'lap',
-      label: 'LAP',
-      width: '45px',
-      align: 'center',
-      format: (_, driver) => driver.data.lap.toString(),
-    },
-    {
-      key: 'sector1',
-      label: 'S1',
-      width: '75px',
-      align: 'right',
-      format: (_, driver, leader) => {
-        if (!driver.data.sector1 || driver.data.sector1 === 0) return '-';
-        const sector1 = driver.data.sector1 / 1000; // Convert ms to seconds
-        const fastestS1 = leader?.data.sector1 ? leader.data.sector1 / 1000 : null;
-        const delta = fastestS1 ? sector1 - fastestS1 : null;
-        const deltaStr = delta ? (delta > 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)) : '';
-        return `${sector1.toFixed(3)}${deltaStr ? ` (${deltaStr})` : ''}`;
-      },
-    },
-    {
-      key: 'sector2',
-      label: 'S2',
-      width: '75px',
-      align: 'right',
-      format: (_, driver, leader) => {
-        if (!driver.data.sector2 || driver.data.sector2 === 0) return '-';
-        const sector2 = driver.data.sector2 / 1000;
-        const fastestS2 = leader?.data.sector2 ? leader.data.sector2 / 1000 : null;
-        const delta = fastestS2 ? sector2 - fastestS2 : null;
-        const deltaStr = delta ? (delta > 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)) : '';
-        return `${sector2.toFixed(3)}${deltaStr ? ` (${deltaStr})` : ''}`;
-      },
-    },
-    {
-      key: 'sector3',
-      label: 'S3',
-      width: '75px',
-      align: 'right',
-      format: (_, driver, leader) => {
-        if (!driver.data.sector3 || driver.data.sector3 === 0) return '-';
-        const sector3 = driver.data.sector3 / 1000;
-        const fastestS3 = leader?.data.sector3 ? leader.data.sector3 / 1000 : null;
-        const delta = fastestS3 ? sector3 - fastestS3 : null;
-        const deltaStr = delta ? (delta > 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)) : '';
-        return `${sector3.toFixed(3)}${deltaStr ? ` (${deltaStr})` : ''}`;
-      },
-    },
-    {
-      key: 'lapTime',
-      label: 'LAP TIME',
-      width: '85px',
-      align: 'right',
-      format: (_, driver, leader) => {
-        if (!driver.data.lap_time || driver.data.lap_time === 0) return '-';
-        const lapTime = driver.data.lap_time / 1000;
-        const fastestTime = leader?.data.lap_time ? leader.data.lap_time / 1000 : null;
-        const delta = fastestTime ? lapTime - fastestTime : null;
-        const deltaStr = delta && delta !== 0 ? (delta > 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)) : '';
-        return `${lapTime.toFixed(3)}${deltaStr ? ` (${deltaStr})` : ''}`;
-      },
-    },
-    {
-      key: 'topSpeed',
-      label: 'TOP SPEED',
-      width: '80px',
-      align: 'right',
-      format: (_, driver) => `${driver.data.speed.toFixed(1)} km/h`,
-    },
-    {
-      key: 'gear',
-      label: 'GEAR',
-      width: '50px',
-      align: 'center',
-      format: (_, driver) => driver.data.gear.toString(),
-    },
-    {
-      key: 'throttle',
-      label: 'THR',
-      width: '50px',
-      align: 'right',
-      format: (_, driver) => `${driver.data.throttle.toFixed(0)}%`,
-    },
-    {
-      key: 'brake',
-      label: 'BRK',
-      width: '50px',
-      align: 'right',
-      format: (_, driver) => `${driver.data.brake.toFixed(0)}%`,
-    },
-  ];
+  const formatTimeDisplay = (milliseconds: number | null, expanded: boolean = false): string => {
+    if (!milliseconds) return "-";
+    const seconds = milliseconds / 1000;
+    if (seconds < 60) {
+      return seconds.toFixed(expanded ? 3 : 1) + "s";
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      const decimalPlaces = expanded ? 3 : 1;
+      return `${minutes}:${secs.toFixed(decimalPlaces).padStart(expanded ? 7 : 5, '0')}`;
+    }
+  };
+
+  const toggleTimeExpanded = (timeKey: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExpanded = new Set(expandedTimes);
+    if (newExpanded.has(timeKey)) {
+      newExpanded.delete(timeKey);
+    } else {
+      newExpanded.add(timeKey);
+    }
+    setExpandedTimes(newExpanded);
+  };
+
+  const SectorCell = ({ value, fastest, timeKey }: { value: number | null; fastest: number; timeKey: string }) => {
+    const isExpanded = expandedTimes.has(timeKey);
+    let borderColor = '#6b7280';
+
+    if (value && Math.abs(value - fastest) < 0.1) {
+      borderColor = '#a855f7';
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+        <div
+          onClick={(e) => toggleTimeExpanded(timeKey, e)}
+          className="f1-monospace"
+          style={{
+            padding: '8px 12px',
+            border: `2px solid ${borderColor}`,
+            borderRadius: '4px',
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            fontWeight: value && Math.abs(value - fastest) < 0.1 ? 700 : 400,
+            color: value && Math.abs(value - fastest) < 0.1 ? borderColor : 'inherit',
+            minWidth: '70px',
+            textAlign: 'right',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLDivElement).style.opacity = '1';
+          }}
+        >
+          {formatTimeDisplay(value, isExpanded)}
+        </div>
+        <div
+          style={{
+            height: '4px',
+            width: '70px',
+            backgroundColor: borderColor,
+            borderRadius: '2px',
+            opacity: 0.8,
+          }}
+        />
+      </div>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--f1-black)' }}>
@@ -166,37 +118,16 @@ export const FP1Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Column Headers */}
-      <div style={{
-        display: 'flex',
-        gap: '8px',
-        paddingBottom: '8px',
-        borderBottom: '1px solid var(--f1-border)',
-        marginBottom: '8px',
-        overflow: 'hidden',
-        alignItems: 'center',
-      }}>
-        {columns.map(col => (
-          <div
-            key={col.key}
-            style={{
-              width: col.width,
-              flexShrink: 0,
-              fontSize: '0.65rem',
-              fontWeight: 600,
-              color: '#9ca3af',
-              textAlign: col.align || 'left',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
-          >
-            {col.label}
-          </div>
-        ))}
+      {/* Legend */}
+      <div style={{ marginBottom: '12px', display: 'flex', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ width: '10px', height: '10px', backgroundColor: '#a855f7', borderRadius: '2px' }} />
+          <span className="f1-monospace" style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>Fastest</span>
+        </div>
       </div>
 
-      {/* Driver Rows */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Drivers List */}
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <AnimatePresence mode="popLayout">
           {drivers.map((driver) => {
             const isSelected = selectedDriver?.code === driver.code;
@@ -214,58 +145,87 @@ export const FP1Dashboard: React.FC = () => {
                   }
                 }}
                 style={{
-                  display: 'flex',
-                  gap: '8px',
-                  padding: '8px 4px',
-                  marginBottom: '4px',
+                  padding: '12px',
                   borderLeft: `3px solid ${hexColor}`,
-                  borderRadius: '2px',
-                  backgroundColor: isSelected ? 'rgba(225, 6, 0, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '4px',
+                  backgroundColor: isSelected ? 'rgba(225, 6, 0, 0.15)' : 'rgba(255, 255, 255, 0.05)',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  alignItems: 'center',
-                  overflow: 'hidden',
-                  backdropFilter: 'blur(4px)',
                 }}
                 whileHover={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  paddingLeft: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
                 }}
               >
-                {columns.map(col => (
-                  <div
-                    key={col.key}
-                    style={{
-                      width: col.width,
-                      flexShrink: 0,
-                      fontSize: '0.7rem',
-                      fontFamily: 'monospace',
-                      textAlign: col.align || 'left',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {col.format(null, driver, fastestLap)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span className="f1-monospace" style={{ fontSize: '0.8rem', fontWeight: 900, color: hexColor, minWidth: '25px' }}>
+                      P{driver.position}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{driver.code}</span>
+                    <span className="f1-monospace" style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                      LAP {driver.data.lap}
+                    </span>
                   </div>
-                ))}
+                  <span className="f1-monospace" style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Speed: {driver.data.speed.toFixed(0)} km/h
+                  </span>
+                </div>
+
+                {/* Sectors Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  <div>
+                    <div className="f1-monospace" style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>
+                      S1
+                    </div>
+                    <SectorCell value={driver.data.sector1} fastest={fastestS1} timeKey={`${driver.code}-s1`} />
+                  </div>
+                  <div>
+                    <div className="f1-monospace" style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>
+                      S2
+                    </div>
+                    <SectorCell value={driver.data.sector2} fastest={fastestS2} timeKey={`${driver.code}-s2`} />
+                  </div>
+                  <div>
+                    <div className="f1-monospace" style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>
+                      S3
+                    </div>
+                    <SectorCell value={driver.data.sector3} fastest={fastestS3} timeKey={`${driver.code}-s3`} />
+                  </div>
+                </div>
+
+                {/* Lap Time */}
+                {driver.data.lap_time && driver.data.lap_time > 0 && (
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    <div className="f1-monospace" style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>
+                      LAP TIME
+                    </div>
+                    <div
+                      onClick={(e) => toggleTimeExpanded(`${driver.code}-lap`, e)}
+                      className="f1-monospace"
+                      style={{
+                        padding: '8px 12px',
+                        border: '2px solid #374151',
+                        borderRadius: '4px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.opacity = '0.8';
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLDivElement).style.opacity = '1';
+                      }}
+                    >
+                      {formatTimeDisplay(driver.data.lap_time, expandedTimes.has(`${driver.code}-lap`))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             );
           })}
         </AnimatePresence>
-      </div>
-
-      {/* Footer */}
-      <div style={{
-        borderTop: '1px solid var(--f1-border)',
-        marginTop: '12px',
-        paddingTop: '8px',
-        fontSize: '0.65rem',
-        color: '#9ca3af',
-      }}>
-        <div className="f1-monospace">
-          {fastestLap ? `Fastest: ${fastestLap.code} - ${(fastestLap.data.lap_time / 1000).toFixed(3)}s` : 'No lap times yet'}
-        </div>
       </div>
     </div>
   );
