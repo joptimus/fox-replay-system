@@ -36,9 +36,12 @@ Watch for messages prefixed with `[WS]`:
 - `[WS] Client connected for session` - Connection established
 - `[WS] Session loaded with X frames` - Session ready
 - `[WS] Play/Pause/Seek commands` - Commands being received
-- `[WS] Error receiving command` - Problem with client input
-- `[WS] Error sending frame` - Problem with frame transmission
+- `[WS] Client disconnected for session` - Client closed connection (expected)
+- `[WS] Error receiving command` - Problem with client input (non-disconnect)
+- `[WS] Error sending frame` - Problem with frame transmission (non-disconnect)
 - `[WS] Unexpected WebSocket error` - Unexpected failure (with traceback)
+
+**Note:** Normal client disconnects (closing browser, navigating away) should NOT produce ASGI error logs or tracebacks.
 
 ### 3. Navigate to a Session
 1. Go to http://localhost:5173

@@ -74,22 +74,26 @@ The error flow is now:
 
 ## Error Messages
 
-### Before
+### Before Fix
 ```
 [WS] Error receiving command: Cannot call receive on a disconnect message has been received
 [WS] Error receiving command: Cannot call receive on a disconnect message has been received
 [WS] Error receiving command: Cannot call receive on a disconnect message has been received
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "uvicorn/.../websockets_impl.py", line 244, in run_asgi
+    ...
 ```
 
-### After
+### After Fix (Expected Output)
 ```
-[WS] Client disconnected for session 2025_18_R
+[WS] Client connected for session 2025_7_R
+[WS] Session loaded with 138300 frames
+[WS] Seek command: frame=0
+[WS] Client disconnected for session 2025_7_R
 ```
 
-Or:
-```
-[WS] Client disconnected (RuntimeError): Cannot call receive on a disconnect message has been received
-```
+**No ASGI error logs or tracebacks for normal disconnects!**
 
 ## Testing
 
