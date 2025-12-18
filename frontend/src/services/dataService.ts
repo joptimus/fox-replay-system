@@ -14,10 +14,15 @@ export const dataService = {
 
     if (!drivers) return null;
 
-    const driver = drivers.find(
-      d => `${d.First.charAt(0)}${d.Last.toUpperCase()}`.substring(0, 3).toUpperCase() === code.toUpperCase() ||
-           d.CarNumber === code
-    );
+    const codeLower = code.toLowerCase();
+
+    const driver = drivers.find(d => {
+      const firstInitial = d.First.charAt(0).toLowerCase();
+      const lastNameFirst3 = d.Last.substring(0, 3).toLowerCase();
+      const driverCode = (firstInitial + lastNameFirst3);
+
+      return driverCode === codeLower || d.CarNumber === code;
+    });
 
     return driver || null;
   },
