@@ -5,6 +5,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import { dataService } from "../services/dataService";
 
 interface SessionModalProps {
   isOpen: boolean;
@@ -14,16 +15,6 @@ interface SessionModalProps {
   currentRound?: number;
   isLoading?: boolean;
 }
-
-// F1 2025 Season - 24 rounds
-const ROUNDS_2025 = Array.from({ length: 24 }, (_, i) => i + 1);
-// F1 2024 Season - 24 rounds
-const ROUNDS_2024 = Array.from({ length: 24 }, (_, i) => i + 1);
-
-const ROUNDS_BY_YEAR: Record<number, number[]> = {
-  2024: ROUNDS_2024,
-  2025: ROUNDS_2025,
-};
 
 export const SessionModal: React.FC<SessionModalProps> = ({
   isOpen,
@@ -35,8 +26,8 @@ export const SessionModal: React.FC<SessionModalProps> = ({
 }) => {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedRound, setSelectedRound] = useState(currentRound);
-  const years = Object.keys(ROUNDS_BY_YEAR).map(Number).sort().reverse();
-  const availableRounds = ROUNDS_BY_YEAR[selectedYear] || [];
+  const years = dataService.getAvailableYears();
+  const availableRounds = dataService.getRoundsForYear(selectedYear);
 
   const handleSelect = () => {
     onSessionSelect(selectedYear, selectedRound);
@@ -186,53 +177,38 @@ export const SessionModal: React.FC<SessionModalProps> = ({
                     letterSpacing: "0.05em",
                   }}
                 >
-                  Round
+                  Grand Prix
                 </label>
-                <div
+                <select
+                  value={selectedRound}
+                  onChange={(e) => setSelectedRound(Number(e.target.value))}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, 1fr)",
-                    gap: "6px",
-                    maxHeight: "200px",
-                    overflowY: "auto",
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: "6px",
+                    border: "1px solid #374151",
+                    background: "#111318",
+                    color: "#d1d5db",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as any).style.borderColor = "#4b5563";
+                    (e.currentTarget as any).style.background = "#1f1f27";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as any).style.borderColor = "#374151";
+                    (e.currentTarget as any).style.background = "#111318";
                   }}
                 >
-                  {availableRounds.map((round) => (
-                    <button
-                      key={round}
-                      onClick={() => setSelectedRound(round)}
-                      style={{
-                        padding: "12px 8px",
-                        borderRadius: "6px",
-                        border:
-                          selectedRound === round
-                            ? "2px solid #e10600"
-                            : "1px solid #374151",
-                        background:
-                          selectedRound === round ? "#e10600" : "#111318",
-                        color: selectedRound === round ? "white" : "#9ca3af",
-                        cursor: "pointer",
-                        fontWeight: 700,
-                        fontSize: "0.875rem",
-                        transition: "all 0.2s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (selectedRound !== round) {
-                          (e.currentTarget as any).style.borderColor = "#4b5563";
-                          (e.currentTarget as any).style.background = "#1f1f27";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedRound !== round) {
-                          (e.currentTarget as any).style.borderColor = "#374151";
-                          (e.currentTarget as any).style.background = "#111318";
-                        }
-                      }}
-                    >
-                      R{round}
-                    </button>
+                  {availableRounds.map((roundData) => (
+                    <option key={roundData.round} value={roundData.round}>
+                      R{roundData.round} - {roundData.raceName}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* Action Buttons */}

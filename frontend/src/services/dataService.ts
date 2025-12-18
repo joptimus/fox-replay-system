@@ -80,4 +80,9 @@ export const dataService = {
     ].sort((a, b) => b - a);
     return years;
   },
+
+  getRoundsForYear(year: number): RoundData[] {
+    const yearStr = year.toString();
+    return typedRoundsData[yearStr] || [];
+  },
 };
