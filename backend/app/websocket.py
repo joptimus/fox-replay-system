@@ -62,15 +62,12 @@ async def handle_replay_websocket(websocket: WebSocket, session_id: str, active_
                     print(f"[WS] Seek command: frame={frame_index}")
             except asyncio.TimeoutError:
                 pass
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RuntimeError) as disconnect_error:
+                if isinstance(disconnect_error, RuntimeError) and "disconnect" not in str(disconnect_error).lower():
+                    print(f"[WS] Error receiving command: {disconnect_error}")
+                    continue
                 print(f"[WS] Client disconnected for session {session_id}")
                 break
-            except RuntimeError as cmd_error:
-                if "disconnect" in str(cmd_error).lower():
-                    print(f"[WS] Client disconnected (RuntimeError): {cmd_error}")
-                    break
-                print(f"[WS] Error receiving command: {cmd_error}")
-                continue
             except Exception as cmd_error:
                 print(f"[WS] Error receiving command: {cmd_error}")
                 continue
@@ -90,16 +87,27 @@ async def handle_replay_websocket(websocket: WebSocket, session_id: str, active_
                     frame_index = len(session.frames) - 1
 
                 await asyncio.sleep(1 / 60)
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RuntimeError) as disconnect_error:
+                if isinstance(disconnect_error, RuntimeError) and "disconnect" not in str(disconnect_error).lower():
+                    print(f"[WS] Error sending frame: {disconnect_error}")
+                    break
                 print(f"[WS] Client disconnected while sending frames")
                 break
             except Exception as send_error:
                 print(f"[WS] Error sending frame: {send_error}")
                 break
 
+    except (WebSocketDisconnect, RuntimeError) as e:
+        if isinstance(e, RuntimeError) and "disconnect" not in str(e).lower():
+            print(f"[WS] Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
     except Exception as e:
         print(f"[WS] Unexpected WebSocket error: {e}")
         import traceback
         traceback.print_exc()
     finally:
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception as close_error:
+            print(f"[WS] Error closing WebSocket: {close_error}")
