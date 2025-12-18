@@ -27,7 +27,9 @@
       "Bash(timeout 8 node dev.js:*)",
       "Bash(cat:*)",
       "Bash(timeout 600 python:*)",
-      "Bash(timeout 120 python:*)"
+      "Bash(timeout 120 python:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)"
     ]
   }
 }

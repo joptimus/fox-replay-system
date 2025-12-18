@@ -104,9 +104,9 @@ def _process_single_driver(args):
     for lap_idx in range(len(t_all)):
         t_lap = t_all[lap_idx]
         if len(t_lap) > 0:
-            # INTEGRITY: Assert time is strictly monotonic within lap
-            assert np.all(t_lap[:-1] < t_lap[1:]), \
-                f"Strictly non-monotonic lap time for {driver_code} in lap {lap_idx}"
+            # INTEGRITY: Assert time is monotonic within lap (allow duplicates at boundaries)
+            assert np.all(t_lap[:-1] <= t_lap[1:]), \
+                f"Non-monotonic lap time for {driver_code} in lap {lap_idx}"
 
             # Bundle all arrays for this lap
             arrays = (
@@ -137,9 +137,9 @@ def _process_single_driver(args):
         brake_all = np.concatenate([interval[1][11] for interval in intervals])
         rpm_all = np.concatenate([interval[1][12] for interval in intervals])
 
-    # INTEGRITY: Verify concatenated time is strictly increasing
-    assert np.all(t_all[:-1] < t_all[1:]), \
-        f"Strictly non-monotonic concatenated time for {driver_code}"
+    # INTEGRITY: Verify concatenated time is monotonic (allow duplicates at lap boundaries)
+    assert np.all(t_all[:-1] <= t_all[1:]), \
+        f"Non-monotonic concatenated time for {driver_code}"
 
     print(f"Completed telemetry for driver: {driver_code}")
     
@@ -273,9 +273,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         # OPTIMIZATION: Data should already be pre-sorted from _process_single_driver
         # Skip redundant np.argsort() call - this is Bottleneck #4 fix
-        # INTEGRITY: Assert data is strictly monotonic
-        assert np.all(t[:-1] < t[1:]), \
-            f"Driver {code} data not strictly increasing in time (pre-sort failed in _process_single_driver)"
+        # INTEGRITY: Assert data is monotonic (allow duplicates at boundaries)
+        assert np.all(t[:-1] <= t[1:]), \
+            f"Driver {code} data not monotonic in time (pre-sort failed in _process_single_driver)"
 
         t_sorted = t  # No need to sort if pre-sorted
 

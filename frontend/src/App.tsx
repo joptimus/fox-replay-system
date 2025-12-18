@@ -216,12 +216,6 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
         onToggleSectorColors={toggleSectorColors}
       />
 
-      <LoadingModal
-        isOpen={session.isLoading}
-        year={year}
-        round={round}
-        isFullyLoaded={!!session.metadata?.total_frames && !session.isLoading}
-      />
     </div>
   );
 };
@@ -302,9 +296,17 @@ function AppRoutes() {
 }
 
 function App() {
+  const { session } = useReplayStore();
+
   return (
     <BrowserRouter>
       <AppRoutes />
+      <LoadingModal
+        isOpen={session.isLoading}
+        year={session.metadata?.year}
+        round={session.metadata?.round}
+        isFullyLoaded={!!session.metadata?.total_frames && !session.isLoading}
+      />
     </BrowserRouter>
   );
 }

@@ -51,3 +51,7 @@ backend_fresh.log
 
 # Windows
 nul
+
+#Claude
+.claude/
+CLAUDE.md

@@ -15,7 +15,7 @@ interface WebSocketMessage {
 
 export const useReplayWebSocket = (sessionId: string | null) => {
   const wsRef = useRef<WebSocket | null>(null);
-  const { currentFrame, setCurrentFrame, playback, session } = useReplayStore();
+  const { currentFrame, setCurrentFrame, playback, session, setFrameIndex } = useReplayStore();
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
 
   // Initialize WebSocket connection
@@ -44,6 +44,9 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
         if (!decoded.error) {
           setCurrentFrame(decoded);
+          if (decoded.frame_index !== undefined) {
+            setFrameIndex(decoded.frame_index);
+          }
         }
       } catch (error) {
         console.error("Failed to decode frame:", error);
@@ -63,7 +66,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         wsRef.current.close();
       }
     };
-  }, [sessionId, session.metadata, setCurrentFrame]);
+  }, [sessionId, session.metadata, setCurrentFrame, setFrameIndex]);
 
   // Send control commands to server
   const sendCommand = useCallback((message: WebSocketMessage) => {

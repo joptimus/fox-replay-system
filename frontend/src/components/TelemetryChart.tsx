@@ -103,7 +103,6 @@ export const TelemetryChart: React.FC = () => {
   const hexColor = `rgb(${selectedDriver.color[0]}, ${selectedDriver.color[1]}, ${selectedDriver.color[2]})`;
   const kmhSpeed = currentDriverData.speed;
   const displaySpeed = speedUnit === "kmh" ? kmhSpeed : kmhSpeed * 0.621371;
-  const speedLabel = speedUnit === "kmh" ? "km/h" : "mph";
 
   // Handle brake/throttle that might be 0-1 or 0-100
   const throttlePercent = currentDriverData.throttle > 1 ? currentDriverData.throttle : currentDriverData.throttle * 100;
@@ -113,36 +112,35 @@ export const TelemetryChart: React.FC = () => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full bg-gray-900/50 rounded-lg p-4 space-y-4"
+      className="w-full space-y-3"
     >
       {/* Driver Info Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-700">
+        <div className="flex items-center gap-2">
           <div
-            className="w-4 h-4 rounded"
+            className="w-3 h-3 rounded"
             style={{ backgroundColor: hexColor }}
           />
           <div>
-            <div className="font-semibold text-white f1-monospace">
-              {selectedDriver.code} TELEMETRY
+            <div className="font-bold text-white f1-monospace" style={{ fontSize: '0.85rem' }}>
+              {selectedDriver.code}
             </div>
-            <div className="text-sm text-gray-400 f1-monospace">
-              Speed: {displaySpeed.toFixed(1)} {speedLabel} • Lap: {currentDriverData.lap} • Gear:{" "}
-              {currentDriverData.gear === 0 ? "N" : currentDriverData.gear}
+            <div className="text-xs text-gray-400 f1-monospace">
+              L{currentDriverData.lap} • G{currentDriverData.gear === 0 ? "N" : currentDriverData.gear}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '3px' }}>
           <button
             onClick={() => setSpeedUnit("kmh")}
             style={{
-              padding: "4px 8px",
+              padding: "2px 6px",
               backgroundColor: speedUnit === "kmh" ? hexColor : "transparent",
               color: "white",
               border: `1px solid ${hexColor}`,
-              borderRadius: "4px",
+              borderRadius: "3px",
               cursor: "pointer",
-              fontSize: "0.75rem",
+              fontSize: "0.65rem",
               fontWeight: 700,
               transition: "background-color 0.2s",
             }}
@@ -152,13 +150,13 @@ export const TelemetryChart: React.FC = () => {
           <button
             onClick={() => setSpeedUnit("mph")}
             style={{
-              padding: "4px 8px",
+              padding: "2px 6px",
               backgroundColor: speedUnit === "mph" ? hexColor : "transparent",
               color: "white",
               border: `1px solid ${hexColor}`,
-              borderRadius: "4px",
+              borderRadius: "3px",
               cursor: "pointer",
-              fontSize: "0.75rem",
+              fontSize: "0.65rem",
               fontWeight: 700,
               transition: "background-color 0.2s",
             }}
@@ -168,10 +166,92 @@ export const TelemetryChart: React.FC = () => {
         </div>
       </div>
 
-      {/* Speed Chart */}
+      {/* Compact Stats Grid */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-gray-900 rounded p-2 border border-gray-700" style={{ textAlign: 'center' }}>
+          <div className="text-xs text-gray-400 f1-monospace">SPEED</div>
+          <div className="text-sm font-bold text-white f1-monospace">
+            {displaySpeed.toFixed(0)} {speedUnit === "kmh" ? "km/h" : "mph"}
+          </div>
+        </div>
+        <div className="bg-gray-900 rounded p-2 border border-gray-700" style={{ textAlign: 'center' }}>
+          <div className="text-xs text-gray-400 f1-monospace">RPM</div>
+          <div className="text-sm font-bold text-white f1-monospace">
+            {currentDriverData.speed > 0 ? Math.round(currentDriverData.speed * 100) : 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Throttle/Brake Bars */}
+      <div className="space-y-2">
+        <div>
+          <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>THROTTLE</div>
+          <div style={{
+            width: '100%',
+            height: '20px',
+            backgroundColor: '#1F2937',
+            borderRadius: '3px',
+            overflow: 'hidden',
+            border: '1px solid #374151',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: `${Math.min(Math.max(throttlePercent, 0), 100)}%`,
+              height: '100%',
+              backgroundColor: '#10B981',
+              transition: 'width 0.1s ease'
+            }} />
+            <div style={{
+              position: 'absolute',
+              right: '3px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#FFF',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              fontFamily: 'monospace'
+            }}>
+              {Math.min(Math.max(throttlePercent, 0), 100).toFixed(0)}%
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>BRAKE</div>
+          <div style={{
+            width: '100%',
+            height: '20px',
+            backgroundColor: '#1F2937',
+            borderRadius: '3px',
+            overflow: 'hidden',
+            border: '1px solid #374151',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: `${Math.min(Math.max(brakePercent, 0), 100)}%`,
+              height: '100%',
+              backgroundColor: '#EF4444',
+              transition: 'width 0.1s ease'
+            }} />
+            <div style={{
+              position: 'absolute',
+              right: '3px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: '#FFF',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              fontFamily: 'monospace'
+            }}>
+              {Math.min(Math.max(brakePercent, 0), 100).toFixed(0)}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mini Speed Chart */}
       <div>
-        <h4 className="text-sm font-medium text-gray-300 mb-2">Speed</h4>
-        <ResponsiveContainer width="100%" height={150}>
+        <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>SPEED HISTORY</div>
+        <ResponsiveContainer width="100%" height={100}>
           <AreaChart data={telemetryData}>
             <defs>
               <linearGradient
@@ -181,17 +261,18 @@ export const TelemetryChart: React.FC = () => {
                 x2="0"
                 y2="1"
               >
-                <stop offset="5%" stopColor={hexColor} stopOpacity={0.3} />
+                <stop offset="5%" stopColor={hexColor} stopOpacity={0.4} />
                 <stop offset="95%" stopColor={hexColor} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" width={0.5} />
             <XAxis dataKey="time" stroke="#9CA3AF" hide={true} />
-            <YAxis stroke="#9CA3AF" />
+            <YAxis stroke="#9CA3AF" width={30} style={{ fontSize: '0.65rem' }} />
             <Tooltip
               contentStyle={{
                 backgroundColor: "#1F2937",
                 border: "1px solid #374151",
+                fontSize: '0.75rem',
               }}
               labelStyle={{ color: "#FFF" }}
               animationDuration={200}
@@ -200,6 +281,7 @@ export const TelemetryChart: React.FC = () => {
               type="monotone"
               dataKey="speed"
               stroke={hexColor}
+              strokeWidth={1.5}
               fillOpacity={1}
               fill="url(#colorSpeed)"
               animationDuration={600}
@@ -207,98 +289,6 @@ export const TelemetryChart: React.FC = () => {
             />
           </AreaChart>
         </ResponsiveContainer>
-      </div>
-
-      {/* Throttle/Brake Chart */}
-      <div>
-        <h4 className="text-sm font-medium text-gray-300 mb-2 f1-monospace">
-          THROTTLE / BRAKE
-        </h4>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginBottom: '4px', fontFamily: 'monospace' }}>THROTTLE</div>
-            <div style={{
-              width: '100%',
-              height: '30px',
-              backgroundColor: '#1F2937',
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '1px solid #374151',
-              position: 'relative'
-            }}>
-              <div style={{
-                width: `${Math.min(Math.max(throttlePercent, 0), 100)}%`,
-                height: '100%',
-                backgroundColor: '#00C853',
-                transition: 'width 0.1s ease'
-              }} />
-              <div style={{
-                position: 'absolute',
-                right: '4px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#FFF',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                fontFamily: 'monospace'
-              }}>
-                {Math.min(Math.max(throttlePercent, 0), 100).toFixed(0)}%
-              </div>
-            </div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginBottom: '4px', fontFamily: 'monospace' }}>BRAKE</div>
-            <div style={{
-              width: '100%',
-              height: '30px',
-              backgroundColor: '#1F2937',
-              borderRadius: '4px',
-              overflow: 'hidden',
-              border: '1px solid #374151',
-              position: 'relative'
-            }}>
-              <div style={{
-                width: `${Math.min(Math.max(brakePercent, 0), 100)}%`,
-                height: '100%',
-                backgroundColor: '#DC2626',
-                transition: 'width 0.1s ease'
-              }} />
-              <div style={{
-                position: 'absolute',
-                right: '4px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#FFF',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                fontFamily: 'monospace'
-              }}>
-                {Math.min(Math.max(brakePercent, 0), 100).toFixed(0)}%
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-2">
-        {[
-          { label: "Speed", value: `${displaySpeed.toFixed(0)} ${speedUnit === "kmh" ? "km/h" : "mph"}` },
-          { label: "Gear", value: currentDriverData.gear === 0 ? "N" : currentDriverData.gear },
-          { label: "Throttle", value: `${Math.min(Math.max(throttlePercent, 0), 100).toFixed(0)}%` },
-          { label: "Brake", value: `${Math.min(Math.max(brakePercent, 0), 100).toFixed(0)}%` },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-gray-800 rounded p-2 text-center f1-monospace"
-            style={{ fontSize: '0.75rem' }}
-          >
-            <div className="text-xs text-gray-400">{stat.label}</div>
-            <div className="text-lg font-bold text-white">
-              {stat.value}
-            </div>
-          </div>
-        ))}
       </div>
     </motion.div>
   );

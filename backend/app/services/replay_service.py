@@ -86,6 +86,7 @@ class F1ReplaySession:
         frame = self.frames[frame_index]
 
         payload = {
+            "frame_index": frame_index,
             "t": safe_float(frame.get("t"), 0.0),
             "lap": frame.get("lap", 1),
             "drivers": {},

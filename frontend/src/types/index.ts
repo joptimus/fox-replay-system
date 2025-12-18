@@ -19,6 +19,7 @@ export interface DriverData {
 }
 
 export interface FrameData {
+  frame_index?: number;
   t: number;
   lap: number;
   drivers: Record<string, DriverData>;
