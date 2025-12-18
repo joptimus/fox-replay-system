@@ -1,9 +1,10 @@
 /**
  * WebSocket hook for real-time frame streaming
- * Handles JSON deserialization and state updates
+ * Handles msgpack deserialization and state updates
  */
 
 import { useEffect, useRef, useCallback } from "react";
+import { Unpackr } from "msgpackr";
 import { useReplayStore } from "../store/replayStore";
 import { FrameData } from "../types";
 
@@ -20,7 +21,10 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    if (!sessionId || !session.metadata) {
+    if (!sessionId) {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
       return;
     }
 
@@ -38,9 +42,21 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       sendCommand({ action: "seek", frame: 0 });
     };
 
-    wsRef.current.onmessage = (event) => {
+    wsRef.current.onmessage = async (event) => {
       try {
-        const decoded = JSON.parse(event.data) as FrameData;
+        // Convert Blob to Uint8Array for msgpack deserialization
+        let data: Uint8Array;
+        if (event.data instanceof Blob) {
+          const arrayBuffer = await event.data.arrayBuffer();
+          data = new Uint8Array(arrayBuffer);
+        } else if (event.data instanceof ArrayBuffer) {
+          data = new Uint8Array(event.data);
+        } else {
+          data = event.data;
+        }
+
+        const decoder = new Unpackr();
+        const decoded = decoder.unpack(data) as FrameData;
 
         if (!decoded.error) {
           setCurrentFrame(decoded);
@@ -66,7 +82,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         wsRef.current.close();
       }
     };
-  }, [sessionId, session.metadata, setCurrentFrame, setFrameIndex]);
+  }, [sessionId]);
 
   // Send control commands to server
   const sendCommand = useCallback((message: WebSocketMessage) => {
