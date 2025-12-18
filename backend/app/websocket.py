@@ -10,9 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 async def handle_replay_websocket(websocket: WebSocket, session_id: str, active_sessions: dict):
     await websocket.accept(subprotocol=None)
     print(f"[WS] Client connected for session {session_id}")
+    print(f"[WS] Active sessions: {list(active_sessions.keys())}")
 
     if session_id not in active_sessions:
-        print(f"[WS] Session {session_id} not found")
+        print(f"[WS] Session {session_id} not found in active_sessions")
+        print(f"[WS] Available sessions: {list(active_sessions.keys())}")
         await websocket.send_json({"error": "Session not found"})
         await websocket.close()
         return
