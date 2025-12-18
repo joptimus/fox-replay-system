@@ -234,20 +234,27 @@ class F1ReplaySession:
     def _extract_driver_numbers(self, session) -> dict:
         driver_numbers = {}
         try:
-            for driver in session.drivers:
-                driver_numbers[driver.abbreviation] = driver.car_number
+            for driver_num in session.drivers:
+                driver_info = session.get_driver(driver_num)
+                abbreviation = driver_info["Abbreviation"]
+                car_number = driver_info["DriverNumber"]
+                if abbreviation and car_number:
+                    driver_numbers[abbreviation] = str(int(car_number))
         except Exception as e:
-            print(f"[REPLAY] Warning: Could not extract driver numbers: {e}")
+            pass
         return driver_numbers
 
     def _extract_driver_teams(self, session) -> dict:
         driver_teams = {}
         try:
-            for driver in session.drivers:
-                team_name = driver.team.lower().replace(" ", "")
-                driver_teams[driver.abbreviation] = team_name
+            for driver_num in session.drivers:
+                driver_info = session.get_driver(driver_num)
+                abbreviation = driver_info["Abbreviation"]
+                team_name = driver_info["TeamId"]
+                if abbreviation and team_name:
+                    driver_teams[abbreviation] = team_name
         except Exception as e:
-            print(f"[REPLAY] Warning: Could not extract driver teams: {e}")
+            pass
         return driver_teams
 
     def get_metadata(self) -> dict:
