@@ -21,7 +21,17 @@ export const Leaderboard: React.FC = () => {
       position: data.position,
       color: metadata.driver_colors[code] || [255, 255, 255],
     }))
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => {
+      // Primary sort: by position
+      if (a.position !== b.position) {
+        return a.position - b.position;
+      }
+      // Tiebreaker: by distance (race distance) in descending order
+      const distDiff = (b.data.dist || 0) - (a.data.dist || 0);
+      if (distDiff !== 0) return distDiff;
+      // Final tiebreaker: alphabetically by code for stable sorting
+      return a.code.localeCompare(b.code);
+    });
 
   const totalLaps = metadata?.total_laps || 0;
   const currentLap = currentFrame?.lap || 0;

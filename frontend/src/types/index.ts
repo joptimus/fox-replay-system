@@ -13,6 +13,7 @@ export interface DriverData {
   throttle: number;
   brake: number;
   drs: number;
+  dist: number;
 }
 
 export interface FrameData {
