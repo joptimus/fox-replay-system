@@ -9,7 +9,6 @@ import { PlaybackControls } from "./components/PlaybackControls";
 import { Leaderboard } from "./components/Leaderboard";
 import { TelemetryChart } from "./components/TelemetryChart";
 import { SidebarMenu } from "./components/SidebarMenu";
-import { SessionSelector } from "./components/SessionSelector";
 import { LoadingModal } from "./components/LoadingModal";
 import { LandingPage } from "./components/LandingPage";
 import { motion } from "framer-motion";
@@ -104,6 +103,7 @@ function App() {
   const { session, setSession, setSessionLoading, pause, setTotalFrames } = useReplayStore();
   const currentFrame = useCurrentFrame();
   const { isConnected } = useReplayWebSocket(session.sessionId);
+  const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
 
   // Update total frames when session metadata changes
   useEffect(() => {
@@ -227,25 +227,18 @@ function App() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-          <SessionSelector
-            currentYear={year}
-            currentRound={round}
-            isLoading={session.isLoading}
-            onSessionSelect={handleSessionSelect}
-          />
+        <div style={{ flex: 1 }}></div>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {location && (
+            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
+              {location}
+            </div>
+          )}
           {weather && (
-            <div className="f1-monospace" style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', display: 'flex', gap: '12px' }}>
+            <div className="f1-monospace" style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <div style={{ whiteSpace: 'nowrap' }}>T {Math.round(weather.track_temp)}°</div>
               <div style={{ whiteSpace: 'nowrap' }}>W {Math.round(weather.wind_speed)}</div>
               {weather.rain_state !== 'Dry' && <div style={{ whiteSpace: 'nowrap' }}>{weather.rain_state}</div>}
-            </div>
-          )}
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          {location && (
-            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)', marginBottom: '4px' }}>
-              {location}
             </div>
           )}
           <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
@@ -277,9 +270,12 @@ function App() {
       <SidebarMenu
         isOpen={menuOpen}
         onClose={() => setMenuOpen(false)}
+        currentYear={year}
+        currentRound={round}
+        onSessionSelect={handleSessionSelect}
         onRefreshData={handleRefreshData}
-        showSectorColors={useSectorColors().isEnabled}
-        onToggleSectorColors={useSectorColors().toggle}
+        showSectorColors={showSectorColors}
+        onToggleSectorColors={toggleSectorColors}
       />
 
       <LoadingModal
