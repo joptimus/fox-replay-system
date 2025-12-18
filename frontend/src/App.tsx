@@ -13,6 +13,7 @@ import { SidebarMenu } from "./components/SidebarMenu";
 import { LoadingModal } from "./components/LoadingModal";
 import { LandingPage } from "./components/LandingPage";
 import { ComparisonPage } from "./components/ComparisonPage";
+import { VerticalNavMenu } from "./components/VerticalNavMenu";
 import { motion } from "framer-motion";
 import { dataService } from "./services/dataService";
 
@@ -27,6 +28,40 @@ const getImageExtension = (year: number, imageType: 'driver' | 'number' = 'drive
   if (year >= 2025) return "avif";
   if (year >= 2022) return "png";
   return "jpg";
+};
+
+const DriverImage = ({ year, code, ext }: { year: number; code: string; ext: string }) => {
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <img
+      src={imageError ? '/images/drivers/PLACEHOLDER.png' : `/images/drivers/${year}/${code.toUpperCase()}.${ext}`}
+      alt={code}
+      onError={() => setImageError(true)}
+      style={{ width: '100%', height: '100%' }}
+    />
+  );
+};
+
+const DriverNumberImage = ({ year, number, ext }: { year: number; number: string; ext: string }) => {
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <img
+      src={imageError ? '/images/numbers/PLACEHOLDER.png' : `/images/numbers/${year}/${number}.${ext}`}
+      alt={`Driver ${number}`}
+      onError={() => setImageError(true)}
+      style={{
+        height: '60px',
+        width: '100%',
+        maxWidth: '200px',
+        marginTop: '12px',
+        display: 'block',
+        objectFit: 'contain',
+        objectPosition: 'left'
+      }}
+    />
+  );
 };
 
 const DriverHero = ({ year }: { year?: number }) => {
@@ -87,37 +122,20 @@ const DriverHero = ({ year }: { year?: number }) => {
         <div className="f1-team-name">{code}</div>
 
         {/* Number Image */}
-        <img
-          src={`/images/numbers/${displayYear}/${driverNum}.${numberImgExt}`}
-          alt={`Driver ${driverNum}`}
-          style={{
-            height: '60px',
-            width: '100%',
-            maxWidth: '200px',
-            marginTop: '12px',
-            display: 'block',
-            objectFit: 'contain',
-            objectPosition: 'left'
-          }}
-          onError={(e) => console.error('Image load error:', e.currentTarget.src)}
-        />
+        <DriverNumberImage year={displayYear} number={driverNum} ext={numberImgExt} />
       </div>
 
       {/* 3. PHOTO CONTENT (Z-INDEX 5) */}
       <div className="f1-card-photo-wrapper">
         <div className="f1-card-photo-inner">
-          <img
-            src={`/images/drivers/${displayYear}/${code.toUpperCase()}.${driverImgExt}`}
-            alt={code}
-            onError={(e) => (e.currentTarget.style.display = 'none')}
-          />
+          <DriverImage year={displayYear} code={code} ext={driverImgExt} />
         </div>
       </div>
     </motion.div>
   );
 };
 
-const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void }) => {
+const ReplayView = ({ onSessionSelect, onRefreshData, onSessionTypeChange }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void; onSessionTypeChange: (year: number, round: number, sessionType: string) => void }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { session, setTotalFrames } = useReplayStore();
   const { isConnected } = useReplayWebSocket(session.sessionId);
@@ -139,87 +157,90 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   const location = year && round ? dataService.getLocation(year, round) : '';
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <div className="flex items-center" style={{ gap: '16px' }}>
-          <button
-            onClick={() => setMenuOpen(true)}
-            style={{
-              background: 'var(--f1-red)',
-              border: 'none',
-              padding: '6px 12px',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              color: 'white',
-              borderRadius: '4px',
-              transition: 'all 0.2s ease'
-            }}
-            title="Menu"
-            onMouseEnter={(e) => {
-              (e.currentTarget as any).style.background = '#c70000';
-              (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as any).style.background = 'var(--f1-red)';
-              (e.currentTarget as any).style.boxShadow = 'none';
-            }}
-          >
-            ☰
-          </button>
-          <div style={{ background: 'var(--f1-red)', padding: '4px 12px', fontWeight: 900, fontSize: '0.75rem' }}>REPLAY</div>
-          <div>
-            <h1 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em', margin: 0 }}>{raceName}</h1>
-            {trackName && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', margin: '4px 0 0 0', fontFamily: 'monospace' }}>
-                {trackName}
-              </p>
-            )}
-          </div>
-        </div>
-        <div style={{ flex: 1 }}></div>
-        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {location && (
-            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
-              {location}
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <VerticalNavMenu />
+      <div className="app-container">
+        <header className="app-header">
+          <div className="flex items-center" style={{ gap: '16px' }}>
+            <button
+              onClick={() => setMenuOpen(true)}
+              style={{
+                background: 'var(--f1-red)',
+                border: 'none',
+                padding: '6px 12px',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: 'white',
+                borderRadius: '4px',
+                transition: 'all 0.2s ease'
+              }}
+              title="Menu"
+              onMouseEnter={(e) => {
+                (e.currentTarget as any).style.background = '#c70000';
+                (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as any).style.background = 'var(--f1-red)';
+                (e.currentTarget as any).style.boxShadow = 'none';
+              }}
+            >
+              ☰
+            </button>
+            <div style={{ background: 'var(--f1-red)', padding: '4px 12px', fontWeight: 900, fontSize: '0.75rem' }}>REPLAY</div>
+            <div>
+              <h1 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em', margin: 0 }}>{raceName}</h1>
+              {trackName && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', margin: '4px 0 0 0', fontFamily: 'monospace' }}>
+                  {trackName}
+                </p>
+              )}
             </div>
-          )}
-          <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
-            STATUS: <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
           </div>
-        </div>
-      </header>
+          <div style={{ flex: 1 }}></div>
+          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {location && (
+              <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
+                {location}
+              </div>
+            )}
+            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
+              STATUS: <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+            </div>
+          </div>
+        </header>
 
-      <aside className="sidebar-scroll">
-        <Leaderboard />
-      </aside>
+        <aside className="sidebar-scroll">
+          <Leaderboard />
+        </aside>
 
-      <main style={{ position: 'relative', background: 'var(--f1-carbon)', border: '1px solid var(--f1-border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <TrackVisualization3D />
-        </div>
-        <div style={{ borderTop: '1px solid var(--f1-border)' }}>
-          <PlaybackControls />
-        </div>
-      </main>
+        <main style={{ position: 'relative', background: 'var(--f1-carbon)', border: '1px solid var(--f1-border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <TrackVisualization3D onSessionTypeChange={onSessionTypeChange} />
+          </div>
+          <div style={{ borderTop: '1px solid var(--f1-border)' }}>
+            <PlaybackControls />
+          </div>
+        </main>
 
-      <aside className="flex flex-col overflow-hidden h-full">
-        <DriverHero year={year} />
-        <div className="sidebar-scroll" style={{ background: 'var(--f1-black)', padding: '16px', borderRadius: '8px', border: '1px solid var(--f1-border)', flex: 1 }}>
-          <TelemetryChart />
-        </div>
-      </aside>
+        <aside className="flex flex-col overflow-hidden h-full">
+          <DriverHero year={year} />
+          <div className="sidebar-scroll" style={{ background: 'var(--f1-black)', padding: '16px', borderRadius: '8px', border: '1px solid var(--f1-border)', flex: 1 }}>
+            <TelemetryChart />
+          </div>
+        </aside>
 
-      <SidebarMenu
-        isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        currentYear={year}
-        currentRound={round}
-        onSessionSelect={onSessionSelect}
-        onRefreshData={onRefreshData}
-        showSectorColors={showSectorColors}
-        onToggleSectorColors={toggleSectorColors}
-      />
+        <SidebarMenu
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          currentYear={year}
+          currentRound={round}
+          onSessionSelect={onSessionSelect}
+          onRefreshData={onRefreshData}
+          showSectorColors={showSectorColors}
+          onToggleSectorColors={toggleSectorColors}
+        />
 
+      </div>
     </div>
   );
 };
@@ -289,10 +310,32 @@ function AppRoutes() {
     }
   };
 
+  const handleSessionTypeChange = async (year: number, round: number, sessionType: string) => {
+    try {
+      if (session.sessionId) {
+        pause();
+      }
+      setSessionLoading(true);
+
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, round_num: round, session_type: sessionType, refresh: false })
+      });
+      const data = await response.json();
+      setSession(data.session_id, data.metadata);
+      setSessionLoading(true);
+      pollSessionStatus(data.session_id);
+    } catch (err) {
+      console.error("Failed to load session:", err);
+      setSessionLoading(false);
+    }
+  };
+
   return (
     <Routes>
       <Route path="/" element={<LandingPage onSessionSelect={handleSessionSelect} isLoading={session.isLoading} />} />
-      <Route path="/replay" element={<ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} />} />
+      <Route path="/replay" element={<ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} onSessionTypeChange={handleSessionTypeChange} />} />
       <Route path="/comparison" element={<ComparisonPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

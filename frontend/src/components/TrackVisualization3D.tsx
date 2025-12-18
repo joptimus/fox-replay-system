@@ -9,9 +9,6 @@ import { useCurrentFrame, useSelectedDriver, useSessionMetadata, useSectorColors
 import { getTeamLogoPath } from "../utils/teamLogoMap";
 import { MapSettingsPanel } from "./MapSettingsPanel";
 import { Settings } from "lucide-react";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 interface SectorBoundary {
   s1: number;
@@ -80,7 +77,7 @@ function calculateSectorCentroid(
   };
 }
 
-export const TrackVisualization3D: React.FC = () => {
+export const TrackVisualization3D: React.FC<{ onSessionTypeChange?: (year: number, round: number, sessionType: string) => void }> = ({ onSessionTypeChange }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -92,11 +89,8 @@ export const TrackVisualization3D: React.FC = () => {
   const trackMaterialColorsRef = useRef<Float32Array | null>(null);
   const sectorBoundaryLinesRef = useRef<THREE.Group | null>(null);
   const rainSegmentsRef = useRef<THREE.LineSegments | null>(null);
-  const rainUniformsRef = useRef({ time: { value: 0 } });
   const clockRef = useRef<THREE.Clock | null>(null);
-  const composerRef = useRef<InstanceType<typeof EffectComposer> | null>(null);
   const noiseRenderTargetRef = useRef<THREE.WebGLRenderTarget | null>(null);
-  const bloomPassRef = useRef<InstanceType<typeof UnrealBloomPass> | null>(null);
   const initRef = useRef(false);
   const currentFrame = useCurrentFrame();
   const selectedDriver = useSelectedDriver();
@@ -106,6 +100,7 @@ export const TrackVisualization3D: React.FC = () => {
   const [showWeatherPanel, setShowWeatherPanel] = useState(true);
   const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>('C');
   const [currentSessionType, setCurrentSessionType] = useState<'R' | 'S' | 'Q' | 'FP1' | 'FP2' | 'FP3'>('R');
+  const [enableWeatherFx, setEnableWeatherFx] = useState(true); // 🔄 toggle for rain / weather FX
 
   // Setup scene and track (only once)
   useEffect(() => {
@@ -119,147 +114,229 @@ export const TrackVisualization3D: React.FC = () => {
       return;
     }
 
-    try {
-      console.log("Initializing Three.js scene...");
-      const container = containerRef.current;
-      initRef.current = true;
+try {
+  console.log("Initializing Three.js scene...");
+  const container = containerRef.current;
+  initRef.current = true;
 
-      // Scene setup
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x0f0f12);
-      sceneRef.current = scene;
+  // Scene setup
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  sceneRef.current = scene;
 
-      // Camera setup
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      console.log("Container dimensions:", { width, height });
+  // Camera setup (top-down ortho, no movement)
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  console.log("Container dimensions:", { width, height });
 
-      const camera = new THREE.OrthographicCamera(
-        -width / 2, width / 2, height / 2, -height / 2, 0.1, 100000
-      );
-      // Top-down view
-      camera.position.set(0, 5000, 0);
-      camera.lookAt(0, 0, 0);
-      cameraRef.current = camera;
-      console.log("Orthographic camera created for top-down view");
+  const camera = new THREE.OrthographicCamera(
+    -width / 2, width / 2, height / 2, -height / 2, 0.1, 100000
+  );
+  camera.position.set(0, 5000, 0);
+  camera.lookAt(0, 0, 0);
+  cameraRef.current = camera;
+  console.log("Orthographic camera created for top-down view");
 
-      // Renderer setup
-      const renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        preserveDrawingBuffer: true,
-        alpha: false
-      });
-      renderer.setSize(width, height);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setClearColor(0x0f0f12, 1);
-      container.appendChild(renderer.domElement);
-      rendererRef.current = renderer;
-      console.log("Renderer created and appended to DOM", {
-        canvasFound: !!renderer.domElement,
-        containerHasCanvas: container.querySelector('canvas') !== null
-      });
+  // Renderer setup
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    preserveDrawingBuffer: true,
+    alpha: false
+  });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x000000, 1);
+  container.appendChild(renderer.domElement);
+  rendererRef.current = renderer;
+  console.log("Renderer created and appended to DOM", {
+    canvasFound: !!renderer.domElement,
+    containerHasCanvas: container.querySelector('canvas') !== null
+  });
 
-      // Lighting - simple for flat view
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-      scene.add(ambientLight);
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+  scene.add(ambientLight);
 
-      // Initialize shader-based rain (line segments)
-      const gCount = 15000;
-      const gPos: number[] = [];
-      const gEnds: number[] = [];
+  // Create noise texture via render target (for rain shaping)
+  const noiseRenderTarget = new THREE.WebGLRenderTarget(512, 512);
+  noiseRenderTargetRef.current = noiseRenderTarget;
 
-      for (let i = 0; i < gCount; i++) {
-        const x = THREE.MathUtils.randFloatSpread(15000);
-        const y = THREE.MathUtils.randFloat(-100, 500);
-        const z = THREE.MathUtils.randFloatSpread(15000);
-        const len = THREE.MathUtils.randFloat(40, 80);
+  const noiseScene = new THREE.Scene();
+  const noiseCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-        gPos.push(x, y, z, x, y, z);
-        gEnds.push(0, len, 1, len);
+  const noiseShaderMat = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      varying vec2 vUv;
+
+      float N(vec2 st) {
+        return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
       }
 
-      const rainGeo = new THREE.BufferGeometry();
-      rainGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
-      rainGeo.setAttribute('gEnds', new THREE.Float32BufferAttribute(gEnds, 2));
+      float smoothNoise(vec2 ip) {
+        vec2 lv = fract(ip);
+        vec2 id = floor(ip);
+        lv = lv * lv * (3.0 - 2.0 * lv);
+        float bl = N(id);
+        float br = N(id + vec2(1.0, 0.0));
+        float tl = N(id + vec2(0.0, 1.0));
+        float tr = N(id + vec2(1.0, 1.0));
+        return mix(mix(bl, br, lv.x), mix(tl, tr, lv.x), lv.y);
+      }
 
-      const rainMat = new THREE.LineBasicMaterial({
-        color: 0x87ceeb,
-        transparent: true,
-        opacity: 0.9,
-      });
+      void main() {
+        vec2 uv = vUv * 5.0 + time * 0.1;
+        float h = smoothNoise(uv);
+        h += smoothNoise(uv * 2.0) * 0.5;
+        h += smoothNoise(uv * 4.0) * 0.25;
+        gl_FragColor = vec4(vec3(h), 1.0);
+      }
+    `
+  });
 
-      (rainMat as any).onBeforeCompile = (shader: any) => {
-        shader.uniforms.time = rainUniformsRef.current.time;
-        shader.vertexShader = `
-          uniform float time;
-          attribute vec2 gEnds;
-          varying float vGEnds;
-          ${shader.vertexShader}
-        `.replace(
-          `#include <begin_vertex>`,
-          `#include <begin_vertex>
-          vec3 pos = position;
-          pos.y = -mod(500. - (pos.y - time * 1200.), 600.) + 500.;
-          pos.y += gEnds.x * gEnds.y;
-          transformed = pos;
-          vGEnds = gEnds.x;`
-        );
-        shader.fragmentShader = `
-          varying float vGEnds;
-          ${shader.fragmentShader}
-        `.replace(
-          `vec4 diffuseColor = vec4( diffuse, opacity );`,
-          `float op = 1. - vGEnds;
-          op = pow(op, 2.);
-          op *= 0.8;
-          vec4 diffuseColor = vec4( diffuse, op * opacity );`
-        );
-      };
+  const noisePlane = new THREE.PlaneGeometry(2, 2);
+  const noiseMesh = new THREE.Mesh(noisePlane, noiseShaderMat);
+  noiseScene.add(noiseMesh);
 
-      const rainLines = new THREE.LineSegments(rainGeo, rainMat);
-      rainSegmentsRef.current = rainLines;
-      clockRef.current = new THREE.Clock();
+  // Initialize shader-based rain (line segments)
+  const gCount = 15000;
+  const gPos: number[] = [];
+  const gEnds: number[] = [];
 
-      // Handle window resize
-      const handleWindowResize = () => {
-        if (!containerRef.current || !renderer) return;
-        const width = containerRef.current.clientWidth;
-        const height = containerRef.current.clientHeight;
-        if (camera instanceof THREE.OrthographicCamera) {
-          camera.left = -width / 2;
-          camera.right = width / 2;
-          camera.top = height / 2;
-          camera.bottom = -height / 2;
-        }
-        camera.updateProjectionMatrix();
-        renderer.setSize(width, height);
-      };
+  for (let i = 0; i < gCount; i++) {
+    const x = THREE.MathUtils.randFloatSpread(15000);
+    const y = THREE.MathUtils.randFloat(-100, 500);
+    const z = THREE.MathUtils.randFloatSpread(15000);
+    const len = THREE.MathUtils.randFloat(150, 300);
 
-      window.addEventListener("resize", handleWindowResize);
+    gPos.push(x, y, z, x, y, z);
+    gEnds.push(0, len, 1, len);
+  }
 
-      // Animation loop
-      const animate = () => {
-        requestAnimationFrame(animate);
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
+  rainGeo.setAttribute('gEnds', new THREE.Float32BufferAttribute(gEnds, 2));
 
-        // Update rain shader time uniform
-        if (clockRef.current) {
-          rainUniformsRef.current.time.value = clockRef.current.getElapsedTime();
-        }
+  const rainShaderUniforms = {
+    time: { value: 0 },
+    noiseMap: { value: noiseRenderTarget.texture }
+  };
 
-        renderer.render(scene, camera);
-      };
+  const rainMat = new THREE.LineBasicMaterial({
+    color: 0x3388ff,
+    transparent: true,
+    opacity: 0.9,
+    linewidth: 3,
+  });
 
-      animate();
+  (rainMat as any).onBeforeCompile = (shader: any) => {
+    Object.assign(shader.uniforms, rainShaderUniforms);
+    shader.vertexShader = `
+      uniform float time;
+      uniform sampler2D noiseMap;
+      attribute vec2 gEnds;
+      varying float vGEnds;
+      varying float vH;
+      ${shader.vertexShader}
+    `.replace(
+      `#include <begin_vertex>`,
+      `#include <begin_vertex>
+      vec3 pos = position;
+      pos.y = -mod(500. - (pos.y - time * 1200.), 600.) + 500.;
+      pos.y += gEnds.x * gEnds.y;
+
+      vec2 noiseUv = pos.xz / 1000.0;
+      vec4 noiseH = texture2D(noiseMap, noiseUv);
+      float h = noiseH.r;
+      vH = smoothstep(3.0, 0.0, h);
+
+      transformed = pos;
+      vGEnds = gEnds.x;`
+    );
+
+    shader.fragmentShader = `
+      varying float vGEnds;
+      varying float vH;
+      ${shader.fragmentShader}
+    `.replace(
+      `vec4 diffuseColor = vec4( diffuse, opacity );`,
+      `float op = 1. - vGEnds;
+      op = pow(op, 2.);
+      op *= 0.8;
+
+      vec3 col = diffuse;
+      col += vH * vec3(0.5, 0.8, 1.0);
+      col *= 1. + smoothstep(0.99, 1.0, vH);
+
+      vec4 diffuseColor = vec4( col, op * opacity );`
+    );
+  };
+
+  const rainLines = new THREE.LineSegments(rainGeo, rainMat);
+  rainLines.frustumCulled = false;
+  rainSegmentsRef.current = rainLines;
+  clockRef.current = new THREE.Clock();
+
+  scene.add(rainLines);
+
+  (rainMat as any).rainShaderUniforms = rainShaderUniforms;
+  (rainMat as any).noiseShaderMat = noiseShaderMat;
+
+  const handleWindowResize = () => {
+    if (!containerRef.current || !renderer) return;
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+    if (camera instanceof THREE.OrthographicCamera) {
+      camera.left = -width / 2;
+      camera.right = width / 2;
+      camera.top = height / 2;
+      camera.bottom = -height / 2;
+    }
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height);
+  };
+
+  window.addEventListener("resize", handleWindowResize);
+
+  const animate = () => {
+    requestAnimationFrame(animate);
+
+    if (clockRef.current && rainSegmentsRef.current) {
+      const elapsed = clockRef.current.getElapsedTime();
+
+      const rainMat = rainSegmentsRef.current.material as any;
+      if (rainMat.rainShaderUniforms) {
+        rainMat.rainShaderUniforms.time.value = elapsed;
+      }
+
+      noiseShaderMat.uniforms.time.value = elapsed;
+      renderer.setRenderTarget(noiseRenderTarget);
+      renderer.render(noiseScene, noiseCam);
+      renderer.setRenderTarget(null);
+    }
+
+    renderer.render(scene, camera);
+  };
+
+  animate();
 
       // Cleanup
       return () => {
         console.log("Cleanup called, initRef.current:", initRef.current);
         window.removeEventListener("resize", handleWindowResize);
-        // Only cleanup if we're truly unmounting (not a Strict Mode remount)
         if (initRef.current === false) {
           if (containerRef.current && renderer.domElement.parentNode === containerRef.current) {
             containerRef.current.removeChild(renderer.domElement);
           }
+          noiseRenderTargetRef.current?.dispose();
           renderer.dispose();
         }
       };
@@ -282,17 +359,14 @@ export const TrackVisualization3D: React.FC = () => {
     const geometry = sessionMetadata.track_geometry;
     console.log("Building track geometry with bounds:", { x_min: geometry.x_min, x_max: geometry.x_max, y_min: geometry.y_min, y_max: geometry.y_max });
 
-    // Validate arrays have content
     if (!geometry.centerline_x?.length || !geometry.outer_x?.length || !geometry.inner_x?.length) {
       console.error("Track geometry arrays are empty or invalid");
       return;
     }
 
-    // Track geometry from telemetry
     const trackGroup = new THREE.Group();
 
     try {
-      // Create flat track surface mesh from centerline
       if (geometry.centerline_x.length > 1) {
         console.log("Creating track surface mesh");
         const trackGeom = new THREE.BufferGeometry();
@@ -354,7 +428,6 @@ export const TrackVisualization3D: React.FC = () => {
         trackMaterialColorsRef.current = new Float32Array(colors);
       }
 
-      // Create outer track edge as a thick LINE using TubeGeometry
       if (geometry.outer_x.length > 1) {
         console.log("Creating outer track edge with", geometry.outer_x.length, "points");
         const outerPoints = geometry.outer_x.map((x, i) => new THREE.Vector3(x, 0.5, geometry.outer_y[i]));
@@ -365,7 +438,6 @@ export const TrackVisualization3D: React.FC = () => {
         trackGroup.add(outerTube);
       }
 
-      // Create inner track edge as a thick LINE using TubeGeometry
       if (geometry.inner_x.length > 1) {
         console.log("Creating inner track edge with", geometry.inner_x.length, "points");
         const innerPoints = geometry.inner_x.map((x, i) => new THREE.Vector3(x, 0.5, geometry.inner_y[i]));
@@ -376,15 +448,12 @@ export const TrackVisualization3D: React.FC = () => {
         trackGroup.add(innerTube);
       }
 
-
-      // Calculate bounds for camera positioning
       const boundsX = geometry.x_max - geometry.x_min;
       const boundsY = geometry.y_max - geometry.y_min;
       const centerX = (geometry.x_min + geometry.x_max) / 2;
       const centerY = (geometry.y_min + geometry.y_max) / 2;
       const maxBound = Math.max(boundsX, boundsY);
 
-      // Position camera for orthographic top-down view
       if (camera instanceof THREE.OrthographicCamera) {
         camera.position.set(centerX, 5000, centerY);
         camera.left = -maxBound / 2 * 1.1;
@@ -483,9 +552,10 @@ export const TrackVisualization3D: React.FC = () => {
           const sector1Centroid = calculateSectorCentroid(0, s1EndIdx, geometry.inner_x, geometry.inner_y, geometry.outer_x, geometry.outer_y);
           const sector2Centroid = calculateSectorCentroid(s1EndIdx, s2EndIdx, geometry.inner_x, geometry.inner_y, geometry.outer_x, geometry.outer_y);
           const sector3Centroid = calculateSectorCentroid(s2EndIdx, totalPoints - 1, geometry.inner_x, geometry.inner_y, geometry.outer_x, geometry.outer_y);
+          // Start/finish is at the start of the track (beginning of sector 1, end of sector 3)
           const startFinishCentroid = {
-            x: (geometry.inner_x[s1EndIdx] + geometry.outer_x[s1EndIdx]) / 2,
-            y: (geometry.inner_y[s1EndIdx] + geometry.outer_y[s1EndIdx]) / 2
+            x: (geometry.inner_x[0] + geometry.outer_x[0]) / 2,
+            y: (geometry.inner_y[0] + geometry.outer_y[0]) / 2
           };
 
           const sectorCentroids = [sector1Centroid, sector2Centroid, sector3Centroid];
@@ -617,13 +687,11 @@ export const TrackVisualization3D: React.FC = () => {
     const container = containerRef.current;
     const drivers = Object.entries(currentFrame.drivers);
 
-    // Remove drivers that are no longer in the race
     driverMeshesRef.current.forEach((mesh, code) => {
       if (!currentFrame.drivers[code]) {
         scene.remove(mesh);
         driverMeshesRef.current.delete(code);
 
-        // Remove label
         const label = driverLabelsRef.current.get(code);
         if (label) {
           label.remove();
@@ -632,19 +700,16 @@ export const TrackVisualization3D: React.FC = () => {
       }
     });
 
-    // Update or create driver meshes
     drivers.forEach(([code, driver]) => {
       const x = driver.x;
       const y = driver.y;
 
-      // Get team color from metadata, fallback to red if not available
       const teamColor = sessionMetadata?.driver_colors?.[code] || [220, 38, 38];
       const hexColor = (teamColor[0] << 16) | (teamColor[1] << 8) | teamColor[2];
 
       let mesh = driverMeshesRef.current.get(code);
 
       if (!mesh) {
-        // Create new driver mesh - larger sphere for visibility
         const sphereGeometry = new THREE.SphereGeometry(80, 16, 16);
         const color = new THREE.Color(hexColor);
         const material = new THREE.MeshStandardMaterial({
@@ -657,10 +722,8 @@ export const TrackVisualization3D: React.FC = () => {
         driverMeshesRef.current.set(code, mesh);
       }
 
-      // Update position
       mesh.position.set(x, 50, y);
 
-      // Update color based on selection
       const material = mesh.material as THREE.MeshStandardMaterial;
       const isSelected = code === selectedDriver?.code;
       if (isSelected) {
@@ -671,7 +734,6 @@ export const TrackVisualization3D: React.FC = () => {
         mesh.scale.set(1, 1, 1);
       }
 
-      // Create or update label for selected driver
       if (isSelected) {
         let label = driverLabelsRef.current.get(code);
 
@@ -724,7 +786,6 @@ export const TrackVisualization3D: React.FC = () => {
           img.style.display = 'none';
         }
 
-        // Project mesh position to screen coordinates and update label position
         if (camera) {
           const vector = new THREE.Vector3(x, 50, y);
           vector.project(camera);
@@ -736,7 +797,6 @@ export const TrackVisualization3D: React.FC = () => {
           label.style.top = screenY - 50 + 'px';
         }
       } else {
-        // Remove label if driver is not selected
         const label = driverLabelsRef.current.get(code);
         if (label) {
           label.remove();
@@ -767,15 +827,17 @@ export const TrackVisualization3D: React.FC = () => {
     colorAttribute.needsUpdate = true;
   }, [showSectorColors]);
 
-  // Show/hide rain effect based on weather
+  // Show/hide rain based on weather conditions
   useEffect(() => {
     if (!sceneRef.current || !rainSegmentsRef.current) return;
 
     const isRaining = currentFrame?.weather?.rain_state === 'RAINING';
 
-    if (isRaining && !rainSegmentsRef.current.parent) {
-      sceneRef.current.add(rainSegmentsRef.current);
-    } else if (!isRaining && rainSegmentsRef.current.parent) {
+    if (isRaining) {
+      if (!rainSegmentsRef.current.parent) {
+        sceneRef.current.add(rainSegmentsRef.current);
+      }
+    } else if (rainSegmentsRef.current.parent) {
       sceneRef.current.remove(rainSegmentsRef.current);
     }
   }, [currentFrame?.weather?.rain_state]);
@@ -824,7 +886,12 @@ export const TrackVisualization3D: React.FC = () => {
         ].map(({ label, value }) => (
           <button
             key={value}
-            onClick={() => setCurrentSessionType(value === 'Q' ? 'Q' : value === 'R' ? 'R' : value === 'S' ? 'S' : value)}
+            onClick={() => {
+              setCurrentSessionType(value);
+              if (onSessionTypeChange && sessionMetadata?.year && sessionMetadata?.round) {
+                onSessionTypeChange(sessionMetadata.year, sessionMetadata.round, value);
+              }
+            }}
             style={{
               padding: '6px 12px',
               fontSize: '0.75rem',
@@ -937,6 +1004,9 @@ export const TrackVisualization3D: React.FC = () => {
         onToggleWeatherPanel={() => setShowWeatherPanel(!showWeatherPanel)}
         temperatureUnit={temperatureUnit}
         onToggleTemperatureUnit={() => setTemperatureUnit(temperatureUnit === 'C' ? 'F' : 'C')}
+        // NEW: hook this up in MapSettingsPanel to a switch called e.g. "Weather FX"
+        enableWeatherFx={enableWeatherFx}
+        onToggleWeatherFx={() => setEnableWeatherFx((prev) => !prev)}
       />
     </div>
   );
