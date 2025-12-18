@@ -12,8 +12,8 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const os = require('os');
 
-const ROOT_DIR = __dirname;
-const SCRIPTS_DIR = path.join(ROOT_DIR, 'scripts');
+const ROOT_DIR = path.dirname(__dirname);
+const SCRIPTS_DIR = __dirname;
 
 const colors = {
   reset: '\x1b[0m',
