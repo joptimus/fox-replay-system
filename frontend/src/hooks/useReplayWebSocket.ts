@@ -87,8 +87,14 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         }
 
         console.log("[WS Client] Decoding msgpack, data length:", data.length);
+        console.log("[WS Client] Raw data first 50 bytes:", data.slice(0, 50));
+
         const decoder = new Unpackr();
         const decoded = decoder.unpack(data) as FrameData;
+
+        console.log("[WS Client] Decoded object type:", typeof decoded);
+        console.log("[WS Client] Decoded object keys:", Object.keys(decoded || {}));
+        console.log("[WS Client] Decoded object:", decoded);
         console.log("[WS Client] Decoded frame:", {
           frame_index: decoded.frame_index,
           t: decoded.t,
