@@ -125,7 +125,7 @@ export const Leaderboard: React.FC = () => {
 
             return (
               <React.Fragment key={code}>
-                {isFirstOutDriver && (
+                {isFirstOutDriver && currentLap > 1 && (
                   <div
                     style={{
                       padding: '8px 0',
