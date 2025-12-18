@@ -8,6 +8,7 @@ import { useReplayWebSocket } from "./hooks/useReplayWebSocket";
 import { TrackVisualization3D } from "./components/TrackVisualization3D";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { Leaderboard } from "./components/Leaderboard";
+import { FP1Dashboard } from "./components/FP1Dashboard";
 import { TelemetryChart } from "./components/TelemetryChart";
 import { SidebarMenu } from "./components/SidebarMenu";
 import { LoadingModal } from "./components/LoadingModal";
@@ -210,7 +211,11 @@ const ReplayView = ({ onSessionSelect, onRefreshData, onSessionTypeChange }: { o
         </header>
 
         <aside className="sidebar-scroll">
-          <Leaderboard />
+          {year && round && (session.metadata?.session_type === 'FP1' || session.metadata?.session_type === 'FP2' || session.metadata?.session_type === 'FP3') ? (
+            <FP1Dashboard />
+          ) : (
+            <Leaderboard />
+          )}
         </aside>
 
         <main style={{ position: 'relative', background: 'var(--f1-carbon)', border: '1px solid var(--f1-border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
