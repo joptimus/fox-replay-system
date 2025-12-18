@@ -46,6 +46,7 @@ export interface TrackGeometry {
   x_max: number;
   y_min: number;
   y_max: number;
+  sector?: number[];
 }
 
 export interface SessionMetadata {

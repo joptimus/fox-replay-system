@@ -146,24 +146,36 @@ export const TrackVisualization3D: React.FC = () => {
         console.log("Creating track surface mesh");
         const trackGeom = new THREE.BufferGeometry();
         const positions: number[] = [];
+        const colors: number[] = [];
 
-        // Build positions for inner and outer edges
         const innerPoints = geometry.inner_x.map((x, i) => ({ x, y: geometry.inner_y[i] }));
         const outerPoints = geometry.outer_x.map((x, i) => ({ x, y: geometry.outer_y[i] }));
 
-        // Ensure same length
         const numPoints = Math.min(innerPoints.length, outerPoints.length);
 
+        const sectorColors: Record<number, { r: number; g: number; b: number }> = {
+          1: { r: 0.0, g: 0.898, b: 1.0 },
+          2: { r: 0.718, g: 0.0, b: 1.0 },
+          3: { r: 1.0, g: 0.831, b: 0.0 },
+        };
+
         for (let i = 0; i < numPoints; i++) {
-          // Inner edge point
           positions.push(innerPoints[i].x, 0, innerPoints[i].y);
-          // Outer edge point
           positions.push(outerPoints[i].x, 0, outerPoints[i].y);
+
+          let sectorColor = sectorColors[3];
+          if (geometry.sector && geometry.sector[i]) {
+            const sectorIndex = geometry.sector[i];
+            sectorColor = sectorColors[sectorIndex] || sectorColors[3];
+          }
+
+          colors.push(sectorColor.r, sectorColor.g, sectorColor.b);
+          colors.push(sectorColor.r, sectorColor.g, sectorColor.b);
         }
 
         trackGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+        trackGeom.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
 
-        // Create indices for strip
         const indices: number[] = [];
         for (let i = 0; i < numPoints - 1; i++) {
           const a = i * 2;
@@ -178,11 +190,8 @@ export const TrackVisualization3D: React.FC = () => {
         trackGeom.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
         trackGeom.computeVertexNormals();
 
-        const trackMaterial = new THREE.MeshPhongMaterial({
-          color: 0x1a1a1a,
-          emissive: 0x0a0a0a,
-          specular: 0x222222,
-          shininess: 80,
+        const trackMaterial = new THREE.MeshBasicMaterial({
+          vertexColors: true,
           side: THREE.DoubleSide,
           wireframe: false,
         });
@@ -213,15 +222,6 @@ export const TrackVisualization3D: React.FC = () => {
         trackGroup.add(innerTube);
       }
 
-      // Draw centerline as a bright line
-      if (geometry.centerline_x.length > 1) {
-        console.log("Creating centerline with", geometry.centerline_x.length, "points");
-        const centerlinePoints = geometry.centerline_x.map((x, i) => new THREE.Vector3(x, 0, geometry.centerline_y[i]));
-        const centerlineGeom = new THREE.BufferGeometry().setFromPoints(centerlinePoints);
-        const centerlineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 4 });
-        const centerlineLine = new THREE.Line(centerlineGeom, centerlineMaterial);
-        trackGroup.add(centerlineLine);
-      }
 
       // Calculate bounds for camera positioning
       const boundsX = geometry.x_max - geometry.x_min;
