@@ -10,6 +10,7 @@ import { Leaderboard } from "./components/Leaderboard";
 import { TelemetryChart } from "./components/TelemetryChart";
 import { SidebarMenu } from "./components/SidebarMenu";
 import { SessionModal } from "./components/SessionModal";
+import { LoadingModal } from "./components/LoadingModal";
 import { motion } from "framer-motion";
 
 const DRIVER_NUMBERS: Record<string, string> = {
@@ -94,7 +95,9 @@ const DriverHero = () => {
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
-  const { session, setSession, setSessionLoading } = useReplayStore();
+  const [loadingSessionYear, setLoadingSessionYear] = useState(0);
+  const [loadingSessionRound, setLoadingSessionRound] = useState(0);
+  const { session, setSession, setSessionLoading, pause } = useReplayStore();
   const currentFrame = useCurrentFrame();
   const { isConnected } = useReplayWebSocket(session.sessionId);
 
@@ -109,14 +112,51 @@ function App() {
         });
         const data = await response.json();
         setSession(data.session_id, data.metadata);
+        pollSessionStatus(data.session_id);
       } catch (err) { console.error(err); }
     };
     loadDefaultSession();
   }, [setSession, setSessionLoading]);
 
+  // Poll for session status until data is loaded
+  const pollSessionStatus = async (sessionId: string) => {
+    const maxAttempts = 120; // 2 minutes max
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`);
+        const data = await response.json();
+
+        setSession(data.session_id, data.metadata);
+
+        if (!data.loading) {
+          setSessionLoading(false);
+          return;
+        }
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 1000); // Poll every second
+        } else {
+          setSessionLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to poll session status:", err);
+        setSessionLoading(false);
+      }
+    };
+
+    poll();
+  };
+
   const handleSessionSelect = async (year: number, round: number) => {
     try {
+      pause(); // Pause playback
+      setLoadingSessionYear(year);
+      setLoadingSessionRound(round);
       setSessionLoading(true);
+
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,9 +164,9 @@ function App() {
       });
       const data = await response.json();
       setSession(data.session_id, data.metadata);
+      pollSessionStatus(data.session_id);
     } catch (err) {
       console.error("Failed to load session:", err);
-    } finally {
       setSessionLoading(false);
     }
   };
@@ -212,6 +252,12 @@ function App() {
         currentYear={year}
         currentRound={round}
         isLoading={session.isLoading}
+      />
+
+      <LoadingModal
+        isOpen={session.isLoading}
+        year={loadingSessionYear || year}
+        round={loadingSessionRound || round}
       />
     </div>
   );
