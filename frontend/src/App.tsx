@@ -320,6 +320,12 @@ function AppRoutes() {
   };
 
   const handleRefreshData = async () => {
+    try {
+      await fetch("/api/sessions/cache", { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to clear cache:", err);
+    }
+
     if (session.metadata?.year && session.metadata?.round) {
       handleSessionSelect(session.metadata.year, session.metadata.round, true);
     }

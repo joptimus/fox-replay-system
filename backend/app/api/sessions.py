@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 import sys
+import shutil
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from backend.models.session import SessionRequest
 from backend.app.services.replay_service import F1ReplaySession
+from backend.app.cache.session_cache import clear_cache
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -54,3 +56,24 @@ async def get_session_status(session_id: str):
 
 def get_active_sessions():
     return active_sessions
+
+
+@router.delete("/cache")
+async def clear_all_cache():
+    """Clear all caches (in-memory telemetry cache and FastF1 API cache)"""
+    try:
+        clear_cache()
+
+        fastf1_cache_dir = Path(".fastf1-cache")
+        if fastf1_cache_dir.exists():
+            shutil.rmtree(fastf1_cache_dir)
+            print("[CACHE] Cleared FastF1 cache directory")
+
+        telemetry_cache_dir = Path(__file__).parent.parent.parent.parent / "cache" / "telemetry"
+        if telemetry_cache_dir.exists():
+            shutil.rmtree(telemetry_cache_dir)
+            print("[CACHE] Cleared telemetry cache directory")
+
+        return {"status": "success", "message": "All caches cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
