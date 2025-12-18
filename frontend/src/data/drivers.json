@@ -130,7 +130,7 @@
     {"First":"Max","Last":"Verstappen","Code":"VER","Country":"Netherlands","Team":"Red Bull Racing","CarNumber":"1"},
     {"First":"Sergio","Last":"Pérez","Code":"PER","Country":"Mexico","Team":"Red Bull Racing","CarNumber":"11"},
     {"First":"Charles","Last":"Leclerc","Code":"LEC","Country":"Monaco","Team":"Ferrari","CarNumber":"16"},
-    {"First":"Lewis","Last":"Hamilton","Code":"HAM","Country":"United Kingdom","Team":"Ferrari","CarNumber":"44"},
+    {"First":"Lewis","Last":"Hamilton","Code":"HAM","Country":"United Kingdom","Team":"Mercedes","CarNumber":"44"},
     {"First":"George","Last":"Russell","Code":"RUS","Country":"United Kingdom","Team":"Mercedes","CarNumber":"63"},
     {"First":"Lando","Last":"Norris","Code":"NOR","Country":"United Kingdom","Team":"McLaren","CarNumber":"4"},
     {"First":"Oscar","Last":"Piastri","Code":"PIA","Country":"Australia","Team":"McLaren","CarNumber":"81"},
@@ -147,7 +147,8 @@
     {"First":"Kevin","Last":"Magnussen","Code":"MAG","Country":"Denmark","Team":"Haas","CarNumber":"20"},
     {"First":"Nico","Last":"Hülkenberg","Code":"HUL","Country":"Germany","Team":"Haas","CarNumber":"27"},
     {"First":"Alexander","Last":"Albon","Code":"ALB","Country":"United Kingdom","Team":"Williams","CarNumber":"23"},
-    {"First":"Logan","Last":"Sargeant","Code":"SAR","Country":"United States","Team":"Williams","CarNumber":"2"}
+    {"First":"Logan","Last":"Sargeant","Code":"SAR","Country":"United States","Team":"Williams","CarNumber":"2"},
+    {"First":"Carlos","Last":"Sainz","Code":"SAI","Country":"Spain","Team":"Ferrari","CarNumber":"55"}
   ],
   "2025": [
     {"First":"Max","Last":"Verstappen","Code":"VER","Country":"Netherlands","Team":"Red Bull Racing","CarNumber":"1"},

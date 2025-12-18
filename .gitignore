@@ -1,13 +1,53 @@
-
+# Virtual environments
 venv/
+backend/venv/
+env/
 
-output_animation.mp4
-.fastf1-cache
-still_frame.png
+# Generated data
+data/
+.fastf1-cache/
+computed_data/
+backend/data/
+legacy/data/
 
+# Build and cache
+dist/
+build/
+*.egg-info/
 .mypy_cache/
 __pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+node_modules/
 
-computed_data/
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
 
+# IDE and OS
 .DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+output_animation.mp4
+still_frame.png
+*.backup
+*.tmp
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+backend.log
+backend_fresh.log
+
+# Windows
+nul

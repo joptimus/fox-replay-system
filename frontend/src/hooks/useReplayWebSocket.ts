@@ -92,6 +92,11 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     }
   }, [playback.isPlaying, playback.speed, sendCommand]);
 
+  // Sync frame index (seeking) to WebSocket
+  useEffect(() => {
+    sendCommand({ action: "seek", frame: playback.frameIndex });
+  }, [playback.frameIndex, sendCommand]);
+
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     currentFrame,

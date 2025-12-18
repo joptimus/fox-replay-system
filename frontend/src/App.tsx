@@ -23,6 +23,18 @@ const DRIVER_NUMBERS: Record<string, string> = {
   "DOO": "7", "OCA": "81"
 };
 
+const getImageExtension = (year: number, imageType: 'driver' | 'number' = 'driver'): string => {
+  if (imageType === 'number') {
+    if (year >= 2025) return "avif";
+    if (year >= 2022) return "png";
+    return "png";
+  }
+
+  if (year >= 2025) return "avif";
+  if (year >= 2022) return "png";
+  return "jpg";
+};
+
 const DriverHero = ({ year }: { year?: number }) => {
   const selected = useSelectedDriver();
 
@@ -40,6 +52,8 @@ const DriverHero = ({ year }: { year?: number }) => {
   const driverNum = DRIVER_NUMBERS[code] || "0";
   const fullName = year ? dataService.getDriverFullName(year, code) : code;
   const displayYear = year || 2025;
+  const driverImgExt = getImageExtension(displayYear, 'driver');
+  const numberImgExt = getImageExtension(displayYear, 'number');
 
   return (
     <motion.div
@@ -66,7 +80,7 @@ const DriverHero = ({ year }: { year?: number }) => {
 
         {/* Number Image */}
         <img
-          src={`/images/numbers/${displayYear}/${driverNum}.avif`}
+          src={`/images/numbers/${displayYear}/${driverNum}.${numberImgExt}`}
           alt={`Driver ${driverNum}`}
           style={{
             height: '60px',
@@ -85,7 +99,7 @@ const DriverHero = ({ year }: { year?: number }) => {
       <div className="f1-card-photo-wrapper">
         <div className="f1-card-photo-inner">
           <img
-            src={`/images/drivers/${displayYear}/${code.toUpperCase()}.avif`}
+            src={`/images/drivers/${displayYear}/${code.toUpperCase()}.${driverImgExt}`}
             alt={code}
             onError={(e) => (e.currentTarget.style.display = 'none')}
           />

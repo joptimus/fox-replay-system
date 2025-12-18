@@ -21,7 +21,10 @@
       "Bash(npx tsc:*)",
       "Bash(git commit:*)",
       "Bash(git add:*)",
-      "Bash(timeout 300 python:*)"
+      "Bash(timeout 300 python:*)",
+      "Bash(tasklist:*)",
+      "Bash(xargs:*)",
+      "Bash(timeout 8 node dev.js:*)"
     ]
   }
 }

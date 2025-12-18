@@ -42,6 +42,9 @@ export const Leaderboard: React.FC = () => {
         <div className="f1-monospace" style={{ fontSize: '0.85rem', color: '#e10600', fontWeight: 900, marginBottom: '4px' }}>
           LAP: <span style={{ fontSize: '1rem' }}>{currentLap}/{totalLaps}</span>
         </div>
+        <div className="f1-monospace" style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+          TIME: {currentFrame?.t ? (currentFrame.t / 60).toFixed(2) : '0.00'}m | FRAME: {currentFrame?.t !== undefined ? Math.round(currentFrame.t * 25) : 0}
+        </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--f1-border)' }}>
         <h3 style={{ fontWeight: 900, textTransform: 'uppercase', color: '#e10600', fontSize: '0.75rem', margin: 0 }}>STANDINGS</h3>

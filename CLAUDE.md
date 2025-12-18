@@ -4,40 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-F1 Race Replay is a Python application for visualizing Formula 1 race telemetry and replaying race events with interactive controls. It uses FastF1 for telemetry data and Arcade for graphical rendering.
+F1 Race Replay is a full-stack application for visualizing Formula 1 race telemetry and replaying race events with interactive controls. It consists of:
+- **Backend:** FastAPI server providing telemetry data via REST/WebSocket APIs
+- **Frontend:** React/TypeScript web application with 3D visualization using Three.js
+- **Data Processing:** Python-based telemetry extraction and caching via FastF1
 
 ## RULES
 
-**FOLLOW RULES IN .claude/rules/RULES.MD***
+**FOLLOW RULES IN .claude/rules/RULES.MD**
 
 ## Common Commands
 
-### Running the Application
+### Running the Application (Full Stack)
+
+**Development mode (runs both frontend and backend):**
+```bash
+node dev.js
+```
+
+**Or separately:**
+- **Backend:** `python backend/main.py` (runs on http://localhost:8000)
+- **Frontend:** `cd frontend && npm run dev` (runs on http://localhost:5173)
+
+### Legacy Arcade Interface (Standalone Desktop)
 
 **Race replay (default):**
 ```bash
-python main.py --year 2025 --round 12
+python legacy/main.py --year 2025 --round 12
 ```
 
 **Sprint race:**
 ```bash
-python main.py --year 2025 --round 12 --sprint
+python legacy/main.py --year 2025 --round 12 --sprint
 ```
 
 **Qualifying session:**
 ```bash
-python main.py --year 2025 --round 12 --qualifying
-```
-
-**Sprint qualifying:**
-```bash
-python main.py --year 2025 --round 12 --sprint-qualifying
+python legacy/main.py --year 2025 --round 12 --qualifying
 ```
 
 **Force data recomputation (bypass cache):**
 ```bash
-python main.py --year 2025 --round 12 --refresh-data
+python legacy/main.py --year 2025 --round 12 --refresh-data
 ```
+
+See `legacy/README.md` for more information about the legacy application.
 
 ### Utility Commands
 
@@ -53,25 +64,67 @@ python main.py --year 2025 --list-sprints
 
 ### Installing Dependencies
 
+**Backend dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
+**Frontend dependencies:**
+```bash
+cd frontend && npm install
+```
+
+### Building for Production
+
+**Build frontend:**
+```bash
+cd frontend && npm run build
+```
+
 ## Architecture Overview
+
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│ Frontend (React/TypeScript/Three.js)            │
+│ - 3D race visualization                         │
+│ - Interactive leaderboard                       │
+│ - Playback controls                             │
+│ - WebSocket connection to backend               │
+└──────────────────┬──────────────────────────────┘
+                   │ WebSocket/HTTP
+┌──────────────────▼──────────────────────────────┐
+│ Backend (FastAPI)                               │
+│ - Session management                            │
+│ - Frame streaming via WebSocket                 │
+│ - Track geometry calculation                    │
+│ - REST API endpoints                            │
+└──────────────────┬──────────────────────────────┘
+                   │ Imports
+┌──────────────────▼──────────────────────────────┐
+│ Data Processing (Python/src/)                   │
+│ - FastF1 telemetry loading                      │
+│ - Multiprocessing-based frame generation        │
+│ - Caching system                                │
+└─────────────────────────────────────────────────┘
+```
 
 ### Data Flow
 
-1. **Session Loading** (`src/f1_data.py`): Loads F1 session data via FastF1 API
-2. **Telemetry Processing**: Extracts and resamples driver telemetry at 25 FPS using multiprocessing
-3. **Frame Generation**: Creates timeline of driver positions, speeds, gears, DRS status, etc.
-4. **Caching**: Saves computed telemetry to `computed_data/` using pickle for fast reload
-5. **Visualization**: Arcade window renders track, cars, leaderboard, and telemetry
+1. **Backend Request:** Frontend requests replay session (year, round, session type)
+2. **Data Loading** (`backend/app/main.py`, `shared/telemetry/f1_data.py`): Loads F1 session data via FastF1 API
+3. **Telemetry Processing**: Extracts and resamples driver telemetry at 25 FPS using multiprocessing
+4. **Frame Generation**: Creates timeline of driver positions, speeds, gears, DRS status, etc.
+5. **Caching**: Saves computed telemetry to `data/` using pickle for fast reload
+6. **WebSocket Streaming:** Backend streams frames to frontend on-demand
+7. **Visualization**: React component renders track, cars, leaderboard using Three.js
 
-### Key Architecture Patterns
+### Shared Components
 
 **Multiprocessing for Performance:**
 - Driver telemetry processing uses `multiprocessing.Pool` to parallelize extraction
-- Top-level functions `_process_single_driver` and `_process_quali_driver` are required for pickling
+- Top-level functions `_process_single_driver` and `_process_quali_driver` required for pickling
 - Utilizes all CPU cores for faster data processing
 
 **Frame-based Animation:**
@@ -79,29 +132,42 @@ pip install -r requirements.txt
 - Timeline starts at `global_t_min` shifted to zero for consistent playback
 - Frame index uses float for smooth playback speed control
 
-**Component-based UI:**
-- UI elements inherit from `BaseComponent` with lifecycle methods:
-  - `on_resize(window)`: Handle window resizing
-  - `draw(window)`: Render the component
-  - `on_mouse_press(window, x, y, button, modifiers)`: Handle mouse input
-- Components: `LeaderboardComponent`, `WeatherComponent`, `LegendComponent`, `DriverInfoComponent`, `RaceProgressBarComponent`, `LapTimeLeaderboardComponent`, `QualifyingSegmentSelectorComponent`
-
-**Two Interface Types:**
-1. **Race Replay** (`src/interfaces/race_replay.py`): Multi-driver race visualization with live leaderboard
-2. **Qualifying** (`src/interfaces/qualifying.py`): Single-driver telemetry analysis with segment selection
-
 ### File Structure
 
-- **`main.py`**: Entry point, argument parsing, session type routing
-- **`src/f1_data.py`**: All telemetry loading, processing, and caching logic
-- **`src/arcade_replay.py`**: Minimal wrapper to launch race replay window
-- **`src/interfaces/race_replay.py`**: Race replay window with track rendering and multi-driver support
-- **`src/interfaces/qualifying.py`**: Qualifying telemetry window with chart visualization
-- **`src/ui_components.py`**: All reusable UI components and track geometry functions
-- **`src/lib/tyres.py`**: Tyre compound mapping (string ↔ int)
-- **`src/lib/time.py`**: Time formatting utilities
+**Backend (Modern FastAPI):**
+- **`backend/main.py`**: Entry point, imports app from backend/app/main.py
+- **`backend/app/main.py`**: FastAPI application setup, middleware, routes
+- **`backend/app/api/`**: API route handlers (rounds.py, sessions.py)
+- **`backend/app/services/replay_service.py`**: F1ReplaySession class, data loading logic
+- **`backend/app/websocket.py`**: WebSocket frame streaming handler
+- **`backend/models/`**: Pydantic data models
+- **`backend/core/`**: Configuration and constants
+- **`backend/utils/`**: Helper utilities
+
+**Frontend (Modern React):**
+- **`frontend/src/App.tsx`**: Main React component, routing
+- **`frontend/src/components/`**: React components (Leaderboard, PlaybackControls, etc.)
+- **`frontend/src/hooks/useReplayWebSocket.ts`**: WebSocket connection hook
+- **`frontend/src/index.css`**: Styling and Tailwind configuration
+
+**Shared Code (Used by Backend & Legacy):**
+- **`shared/telemetry/f1_data.py`**: Telemetry loading, processing, and caching logic
+- **`shared/telemetry/cache.py`**: Cache management utilities (future)
+- **`shared/lib/tyres.py`**: Tyre compound mapping
+- **`shared/lib/time.py`**: Time formatting utilities
+- **`shared/utils/track_geometry.py`**: Track boundary calculation from telemetry
+
+**Legacy (Arcade Desktop App - Reference Only):**
+- **`legacy/main.py`**: Entry point, argument parsing, session type routing
+- **`legacy/src/arcade_replay.py`**: Arcade window wrapper
+- **`legacy/src/interfaces/race_replay.py`**: Race replay visualization
+- **`legacy/src/interfaces/qualifying.py`**: Qualifying telemetry analysis
+- **`legacy/src/ui_components.py`**: Arcade UI components
+- See **`legacy/README.md`** for more details
+
+**Generated Data & Caching:**
 - **`.fastf1-cache/`**: FastF1 API cache (auto-created)
-- **`computed_data/`**: Preprocessed telemetry pickle files (auto-created)
+- **`data/`**: Preprocessed telemetry pickle files (auto-created)
 
 ### Important Data Structures
 
@@ -173,6 +239,31 @@ pip install -r requirements.txt
 - Track statuses (flags, safety car periods)
 - Total laps, speed ranges (qualifying)
 
+### Backend API
+
+**REST Endpoints:**
+- `GET /api/rounds?year=2025`: List all rounds for a year
+- `GET /api/sprints?year=2025`: List sprint rounds
+- `GET /api/session-types?year={year}&round={round}`: Available session types
+
+**WebSocket Endpoint:**
+- `ws://localhost:8000/ws/replay`: Connect to receive frame stream
+  - Send `{"action": "init", "year": 2025, "round": 12, "session_type": "R", "refresh": false}`
+  - Receive frames as JSON objects with position, lap, tyre, and telemetry data
+
+### Frontend Development
+
+**When adding new UI components:**
+- Use React hooks for state management (consider Zustand stores for shared state)
+- Components should be responsive using Tailwind CSS
+- WebSocket data comes from `useReplayWebSocket` hook
+- Three.js rendering should be isolated in `Canvas` components
+
+**When modifying replay visualization:**
+- Track geometry is loaded from backend and stored in component state
+- Frame data updates trigger re-renders via state updates
+- Use requestAnimationFrame for smooth animation
+
 ### Known Issues
 
 **Leaderboard Accuracy:**
@@ -188,10 +279,20 @@ pip install -r requirements.txt
 
 ## Development Guidelines
 
-**When modifying telemetry processing:**
+### Backend Development
+
+**When modifying telemetry processing (`src/f1_data.py`):**
 - Changes to `get_race_telemetry` or `get_quali_telemetry` require `--refresh-data` to see effects
 - Multiprocessing worker functions must be top-level (not nested) for pickle compatibility
 - Maintain 25 FPS resampling for consistent playback
+- Frame structure must include "position" field for correct leaderboard ordering
+
+**When modifying WebSocket streaming (`backend/main.py`):**
+- Frame data is serialized to JSON before sending
+- Ensure all numeric types are compatible with JSON (use float/int, not numpy types)
+- Test WebSocket connection at `ws://localhost:8000/ws/replay`
+
+### Frontend Development (Legacy Arcade Desktop App)
 
 **When adding UI components:**
 - Inherit from `BaseComponent` in `src/ui_components.py`
@@ -201,8 +302,8 @@ pip install -r requirements.txt
 
 **When working with track rendering:**
 - World coordinates are in meters (FastF1 telemetry)
-- Apply rotation first, then scale and translate to screen space
-- Use `_world_to_screen(x, y)` helper methods in window classes
+- Use `_project_to_reference()` to convert (x,y) to along-track distance
+- Leaderboard ordering should use pre-calculated "position" field, not recalculated projections
 
 **Testing different sessions:**
 - Use `--list-rounds` to find valid round numbers
