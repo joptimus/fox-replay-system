@@ -9,7 +9,6 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-  ComposedChart,
 } from "recharts";
 import { useComparisonStore } from "../../store/comparisonStore";
 import { LapTelemetryPoint } from "../../types";
@@ -22,13 +21,13 @@ interface ChartProps {
 }
 
 interface TooltipPayload {
-  dataKey: string;
+  dataKey?: string | number;
   value: number;
   color: string;
   name: string;
 }
 
-const CustomTooltip: React.FC<{ active?: boolean; payload?: TooltipPayload[]; label?: string; unit?: string; dataKey?: string }> = ({ active, payload, label, unit, dataKey }) => {
+const CustomTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: string; unit?: string; dataKey?: string }> = ({ active, payload, label, unit, dataKey }) => {
   if (!active || !payload || payload.length === 0) return null;
 
   const formatValue = (value: number) => {
