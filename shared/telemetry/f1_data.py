@@ -558,7 +558,6 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         # OPTIMIZATION: Build data for all drivers in one pass (no intermediate snapshot list)
         frame_data_raw = {}
-        distances = {}
 
         for code in driver_codes:
             d = driver_arrays[code]
@@ -585,7 +584,6 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                 "sector3": float(d["sector3"][i]) if not np.isnan(d["sector3"][i]) else None,
                 "status": driver_statuses.get(code, "Finished"),
             }
-            distances[code] = frame_data_raw[code]["dist"]
 
             # Track retirement: update zero-speed duration
             if speed == 0:
@@ -595,10 +593,16 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             else:
                 driver_zero_speed_time[code] = 0  # Reset if driver has any speed
 
-        # Determine sorting order based on race state
-        # (Use precomputed frame_data_raw for state checks)
-        min_dist = min(distances.values()) if distances else 0
-        is_race_start = min_dist < 500  # Less than 500m into the race
+        # RACE START DETECTION - Priority: Use official track status timestamp
+        if current_leader:
+            if race_start_time is not None:
+                # Use authoritative race start time from track status
+                is_race_start = 0 <= (t - race_start_time) <= 10.0
+            else:
+                # Fallback: Leader on lap 1 and near start line
+                is_race_start = (leader_lap <= 1) and (leader_rel < 0.05)
+        else:
+            is_race_start = False
 
         # IDENTIFY ACTIVE AND RETIRED DRIVERS (single source of truth)
         # A driver is OUT if: (1) confirmed retired (speed=0 for 10s+) OR (2) marked retired by FastF1 (status field)
