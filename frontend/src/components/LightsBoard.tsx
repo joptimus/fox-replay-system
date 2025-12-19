@@ -1,4 +1,4 @@
-import { useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { useLightsBoard } from '../hooks/useLightsBoard';
 
 interface LightsBoardProps {
@@ -20,12 +20,12 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
     },
   }));
 
-  // Notify parent when sequence completes
+  // Notify parent when sequence completes - only when transitioning to complete state
   useEffect(() => {
     if (!isVisible && currentPhase === 'idle') {
       onSequenceComplete();
     }
-  }, [isVisible, currentPhase, onSequenceComplete]);
+  }, [isVisible, currentPhase]);
 
   if (!isVisible) return null;
 
