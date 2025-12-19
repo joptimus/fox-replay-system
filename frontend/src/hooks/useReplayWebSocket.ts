@@ -38,12 +38,14 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   // Initialize WebSocket connection
   useEffect(() => {
     if (!sessionId) {
+      console.log("[WS Client] No sessionId, skipping connection");
       if (wsRef.current) {
         wsRef.current.close();
       }
       return;
     }
 
+    console.log("[WS Client] Initiating connection for session:", sessionId);
     const protocol =
       window.location.protocol === "https:" ? "wss:" : "ws:";
     // In development, connect directly to backend WebSocket
@@ -53,6 +55,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onopen = () => {
+      console.log("[WS Client] Connection opened, requesting initial frame");
       // Request initial frame when connection opens
       sendCommand({ action: "seek", frame: 0 });
     };
@@ -117,6 +120,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     };
 
     return () => {
+      console.log("[WS Client] Cleanup: closing connection for session:", sessionId);
       if (wsRef.current) {
         wsRef.current.close();
       }
