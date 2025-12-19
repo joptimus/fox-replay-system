@@ -539,7 +539,16 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     for code in driver_codes:
         d = driver_arrays[code]
         lap = np.maximum(np.round(d["lap"]), 1)  # Round to nearest lap, ensure >= 1
-        rel = np.clip(d["rel_dist"], 0.0, 1.0)  # Clamp rel_dist to [0,1]
+        rel = d["rel_dist"].copy()  # Get rel_dist
+        # Handle NaN values: replace with previous valid value or 0
+        if np.isnan(rel).any():
+            for j in range(len(rel)):
+                if np.isnan(rel[j]):
+                    if j > 0 and not np.isnan(rel[j-1]):
+                        rel[j] = rel[j-1]  # Use previous value
+                    else:
+                        rel[j] = 0.0  # Or default to 0
+        rel = np.clip(rel, 0.0, 1.0)  # Clamp rel_dist to [0,1]
         race_progress_all[code] = (lap - 1) * circuit_length + rel * circuit_length
 
     # Track retirement confirmation: driver must have speed=0 for at least 10 seconds
