@@ -643,6 +643,12 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         # Calculate gaps for this frame
         current_gaps = _calculate_gaps(sorted_codes, frame_data)
 
+        # Debug: Log gaps for frame 157 (where VER overtakes)
+        if i == 157:
+            print(f"DEBUG frame 157 - sorted order: {sorted_codes}")
+            for code in sorted_codes[:5]:
+                print(f"  {code}: race_progress={frame_data_raw[code]['race_progress']:.1f}, position={frame_data[code]['position']}, gap_prev={current_gaps[code]['gap_to_previous']:.3f}, gap_leader={current_gaps[code]['gap_to_leader']:.3f}")
+
         for code in sorted_codes:
             # Add gap data (always - every driver should have gap values)
             gap_data = current_gaps.get(code, {"gap_to_previous": 0.0, "gap_to_leader": 0.0})
