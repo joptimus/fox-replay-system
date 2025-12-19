@@ -76,6 +76,7 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
                   position: 'absolute',
                   bottom: '24px',
                   right: '24px',
+                  marginTop: '32px',
                   background: '#e10600',
                   color: 'white',
                   border: 'none',
