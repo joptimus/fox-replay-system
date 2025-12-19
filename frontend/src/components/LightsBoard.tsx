@@ -72,7 +72,28 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
             {canSkip && (
               <button
                 onClick={skipSequence}
-                className="absolute top-4 right-4 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: '#e10600',
+                  color: 'white',
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#c70000';
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#e10600';
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
+                }}
               >
                 Skip
               </button>

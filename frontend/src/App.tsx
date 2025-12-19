@@ -140,16 +140,24 @@ const DriverHero = ({ year }: { year?: number }) => {
 const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [lightsSequenceActive, setLightsSequenceActive] = useState(false);
+  const [hasPlayedLights, setHasPlayedLights] = useState(false);
   const lightsBoardRef = useRef<LightsBoardHandle>(null);
-  const { session, setTotalFrames, play } = useReplayStore();
+  const { session, setTotalFrames, play, playback } = useReplayStore();
   const { isConnected, resumePlayback } = useReplayWebSocket(session.sessionId, lightsSequenceActive);
   const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
 
   const handlePlayWithLights = () => {
     console.log('handlePlayWithLights called, ref:', lightsBoardRef.current);
-    setLightsSequenceActive(true);
-    play();
-    lightsBoardRef.current?.startSequence();
+    // Only show lights board if this is the first play (not a resume)
+    if (!hasPlayedLights && playback.currentFrame === 0) {
+      setLightsSequenceActive(true);
+      setHasPlayedLights(true);
+      play();
+      lightsBoardRef.current?.startSequence();
+    } else {
+      // Just resume playback without lights
+      play();
+    }
   };
 
   const handleLightsSequenceComplete = () => {
@@ -157,12 +165,14 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
     resumePlayback();
   };
 
-  // Update total frames when session metadata changes
+  // Update total frames when session metadata changes and reset lights flag on new session
   useEffect(() => {
     if (session.metadata?.total_frames) {
       setTotalFrames(session.metadata.total_frames);
     }
-  }, [session.metadata?.total_frames, setTotalFrames]);
+    // Reset lights played flag when new session is loaded
+    setHasPlayedLights(false);
+  }, [session.metadata?.total_frames, session.sessionId, setTotalFrames]);
 
   const year = session.metadata?.year;
   const round = session.metadata?.round;
