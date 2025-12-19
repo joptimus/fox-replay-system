@@ -611,6 +611,18 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         else:
             is_race_start = False
 
+        # DEBUG frame 0
+        if i == 0:
+            print(f"DEBUG frame 0: t={t:.2f}, race_start_time={race_start_time}, current_leader={current_leader}")
+            if current_leader:
+                print(f"  leader_lap={leader_lap}, leader_rel={leader_rel}")
+                if race_start_time is not None:
+                    time_delta = t - race_start_time
+                    print(f"  time_delta={time_delta:.2f}, is_race_start={is_race_start}")
+                else:
+                    print(f"  Using fallback: leader_lap <= 1 = {leader_lap <= 1}, leader_rel < 0.05 = {leader_rel < 0.05}")
+                    print(f"  is_race_start={is_race_start}")
+
         # RACE FINISH DETECTION - Only triggers once
         if not race_finished and current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
             race_finished = True
