@@ -26,6 +26,7 @@ export function useLightsBoard() {
   }, []);
 
   const startSequence = () => {
+    console.log('useLightsBoard: startSequence called');
     setIsVisible(true);
     setCurrentPhase('lights');
     setLightsOn([false, false, false, false, false]);
@@ -34,10 +35,12 @@ export function useLightsBoard() {
   };
 
   const playLights = () => {
+    console.log('useLightsBoard: playLights called');
     timeoutsRef.current.push(
       setTimeout(() => {
+        console.log('Light 1 on');
         setLightsOn(prev => [true, prev[1], prev[2], prev[3], prev[4]]);
-        beepAudioRef.current?.play();
+        beepAudioRef.current?.play().catch(e => console.error('Beep play error:', e));
       }, 0)
     );
 
@@ -79,11 +82,13 @@ export function useLightsBoard() {
   };
 
   const handleAudioEnd = () => {
+    console.log('useLightsBoard: audio ended');
     setCurrentPhase('fadeout');
     setCanSkip(false);
 
     timeoutsRef.current.push(
       setTimeout(() => {
+        console.log('useLightsBoard: completing sequence');
         completeSequence();
       }, 650)
     );
