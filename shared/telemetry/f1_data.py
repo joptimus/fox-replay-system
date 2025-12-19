@@ -661,14 +661,6 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         sorted_codes = active_codes + out_codes
 
-        # DEBUG: Log all drivers at frame 50 and 51 (grid phase transition)
-        if i in [50, 51]:
-            _debug_log(f"\nDEBUG frame {i}: is_race_start={is_race_start}, sorted_codes={sorted_codes}")
-            for idx, code in enumerate(sorted_codes):
-                prog = frame_data_raw[code]["race_progress"]
-                grid = grid_positions.get(code, "?")
-                _debug_log(f"  Position {idx + 1}: {code} - race_progress={prog:.2f}, grid_pos={grid}")
-
         # Calculate positions and gaps for this frame
         frame_data = {}
         for code in sorted_codes:
@@ -681,9 +673,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                 frame_data[code]["position"] = len(active_codes) + out_codes.index(code) + 1
 
         # DEBUG: Log all driver data at key frames
-        if i in [0, 100, 200, 300, 400, 500, 600, 700]:
+        if i in [0, 50, 100, 200, 300, 400, 500, 600, 700]:
             _debug_log(f"\nDEBUG frame {i} (t={t:.2f}s):")
-            for idx, code in enumerate(sorted_codes):  # All drivers
+            for code in sorted_codes:  # All drivers
                 prog = frame_data[code]["race_progress"]
                 pos = frame_data[code]["position"]
                 grid = grid_positions.get(code, "?")
