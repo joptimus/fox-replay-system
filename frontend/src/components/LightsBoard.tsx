@@ -1,4 +1,5 @@
 import { useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useLightsBoard } from '../hooks/useLightsBoard';
 
 interface LightsBoardProps {
@@ -32,7 +33,7 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
 
   const fadeOutClass = currentPhase === 'fadeout' ? 'opacity-0' : 'opacity-100';
 
-  return (
+  const modalContent = (
     <>
       {/* Dark overlay with blur */}
       <div
@@ -77,6 +78,8 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
       <audio ref={mainAudioRef} preload="auto" crossOrigin="anonymous" />
     </>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export const LightsBoard = forwardRef<LightsBoardHandle, LightsBoardProps>(LightsBoardComponent);
