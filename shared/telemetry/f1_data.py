@@ -8,6 +8,7 @@ import numpy as np
 import json
 import pickle
 from datetime import timedelta
+from pathlib import Path
 
 from shared.lib.tyres import get_tyre_compound_int
 from shared.lib.time import parse_time_string, format_time
@@ -24,6 +25,9 @@ def enable_cache():
 
 FPS = 25
 DT = 1 / FPS
+
+POSITION_UPDATE_INTERVAL = 3  # seconds between position recalculations
+GAP_UPDATE_INTERVAL = 3       # seconds between gap recalculations
 
 def _process_single_driver(args):
     """Process telemetry data for a single driver - must be top-level for multiprocessing"""
@@ -54,15 +58,20 @@ def _process_single_driver(args):
     sector1_all = []
     sector2_all = []
     sector3_all = []
+    lap_positions = []  # Store lap end position for each lap
 
     total_dist_so_far = 0.0
 
     # iterate laps in order
-    for _, lap in laps_driver.iterlaps():
+    for lap_idx, (_, lap) in enumerate(laps_driver.iterlaps()):
         # get telemetry for THIS lap only
         lap_tel = lap.get_telemetry()
         lap_number = lap.LapNumber
         tyre_compund_as_int = get_tyre_compound_int(lap.Compound)
+
+        # Extract position from this lap (position at end of lap)
+        lap_position = int(lap.Position) if pd.notna(lap.Position) else None
+        lap_positions.append(lap_position)
 
         if lap_tel.empty:
             continue
@@ -70,7 +79,7 @@ def _process_single_driver(args):
         t_lap = lap_tel["SessionTime"].dt.total_seconds().to_numpy()
         x_lap = lap_tel["X"].to_numpy()
         y_lap = lap_tel["Y"].to_numpy()
-        d_lap = lap_tel["Distance"].to_numpy()          
+        d_lap = lap_tel["Distance"].to_numpy()
         rd_lap = lap_tel["RelativeDistance"].to_numpy()
         speed_kph_lap = lap_tel["Speed"].to_numpy()
         gear_lap = lap_tel["nGear"].to_numpy()
@@ -85,8 +94,20 @@ def _process_single_driver(args):
         sector2 = lap.Sector2Time.total_seconds() if pd.notna(lap.Sector2Time) else None
         sector3 = lap.Sector3Time.total_seconds() if pd.notna(lap.Sector3Time) else None
 
+        # Filter out NaN values for robustness
+        d_valid = d_lap[~np.isnan(d_lap)]
+
+        # FIRST LAP VALIDATION: Ensure telemetry starts near 0
+        if lap_idx == 0 and len(d_valid) > 0:
+            if d_valid[0] > 100:
+                print(f"WARNING: {driver_code} first lap telemetry starts at {d_valid[0]:.1f}m (expected ~0m)")
+
         # race distance = distance before this lap + distance within this lap
         race_d_lap = total_dist_so_far + d_lap
+
+        # FIX: Update cumulative distance (only with valid data)
+        if len(d_valid) > 1:
+            total_dist_so_far += (d_valid[-1] - d_valid[0])
 
         t_all.append(t_lap)
         x_all.append(x_lap)
@@ -188,8 +209,57 @@ def _process_single_driver(args):
         },
         "t_min": t_all.min(),
         "t_max": t_all.max(),
-        "max_lap": driver_max_lap
+        "max_lap": driver_max_lap,
+        "lap_positions": lap_positions  # List of positions at end of each lap
     }
+
+def _calculate_gaps(sorted_codes, frame_data):
+    """Calculate gap to car ahead and gap to leader for all drivers.
+
+    Returns: dict mapping driver_code -> {"gap_to_previous": float, "gap_to_leader": float}
+    """
+    gaps = {}
+
+    def distance_to_time_gap(distance_diff, speed_ms):
+        """Convert distance gap to time gap in seconds"""
+        if speed_ms <= 0 or distance_diff <= 0:
+            return 0.0
+        return distance_diff / speed_ms
+
+    for idx, code in enumerate(sorted_codes):
+        data = frame_data[code]
+        gap_to_previous = 0.0
+        gap_to_leader = 0.0
+
+        # Use current driver's speed for gap calculations
+        current_speed_ms = (data["speed"] * 1000) / 3600
+
+        # Gap to car ahead (time it would take current driver to catch up at current speed)
+        if idx > 0:
+            prev_code = sorted_codes[idx - 1]
+            prev_data = frame_data[prev_code]
+            dist_diff = prev_data["dist"] - data["dist"]
+
+            # If current driver is moving and there's a gap, calculate time to catch up
+            if dist_diff > 0 and current_speed_ms > 0:
+                gap_to_previous = distance_to_time_gap(dist_diff, current_speed_ms)
+
+        # Gap to leader (time it would take current driver to catch up at current speed)
+        if idx > 0:
+            leader_code = sorted_codes[0]
+            leader_data = frame_data[leader_code]
+            dist_diff = leader_data["dist"] - data["dist"]
+
+            # If current driver is moving and there's a gap, calculate time to catch up
+            if dist_diff > 0 and current_speed_ms > 0:
+                gap_to_leader = distance_to_time_gap(dist_diff, current_speed_ms)
+
+        gaps[code] = {
+            "gap_to_previous": gap_to_previous,
+            "gap_to_leader": gap_to_leader,
+        }
+
+    return gaps
 
 def load_session(year, round_number, session_type='R'):
     # session_type: 'R' (Race), 'S' (Sprint) etc.
@@ -219,11 +289,15 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     event_name = str(session).replace(' ', '_')
     cache_suffix = session_type.lower()
 
+    # Use absolute path for caching (backend runs from different cwd)
+    cache_dir = Path(__file__).parent.parent.parent / "computed_data"
+    cache_file = cache_dir / f"{event_name}_{cache_suffix}_telemetry.pkl"
+
     # Check if this data has already been computed
 
     try:
         if not refresh and "--refresh-data" not in sys.argv:
-            with open(f"computed_data/{event_name}_{cache_suffix}_telemetry.pkl", "rb") as f:
+            with open(cache_file, "rb") as f:
                 frames = pickle.load(f)
                 print(f"Loaded precomputed {cache_suffix} telemetry data.")
                 print("The replay should begin in a new window shortly!")
@@ -257,10 +331,11 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         print(f"Warning: Could not get grid/final positions: {e}")
 
     driver_data = {}
+    driver_lap_positions = {}  # Maps driver_code -> list of positions per lap
 
     global_t_min = None
     global_t_max = None
-    
+
     max_lap_number = 0
 
     # 1. Get all of the drivers telemetry data using multiprocessing
@@ -285,6 +360,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
             code = result["code"]
             driver_data[code] = result["data"]
+            driver_lap_positions[code] = result.get("lap_positions", [])
 
             t_min = result["t_min"]
             t_max = result["t_max"]
@@ -464,6 +540,13 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     driver_zero_speed_time = defaultdict(float)  # Track continuous zero-speed duration per driver
     driver_retired = defaultdict(bool)  # Track confirmed retirement status
 
+    # Position and gap update tracking
+    last_position_update_time = -POSITION_UPDATE_INTERVAL  # Force update on first frame
+    last_gap_update_time = -GAP_UPDATE_INTERVAL  # Force update on first frame
+    current_positions = {}  # Cached positions from last update
+    current_gaps = {}  # Cached gaps from last update
+    gaps_initialized = False  # Track if gaps have been calculated at least once
+
     for i in range(num_frames):
         t = timeline[i]
 
@@ -518,9 +601,10 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             race_finished = True
 
         # Separate active drivers from OUT drivers
-        # A driver is OUT if: (1) confirmed retired (speed=0 for 10s+) OR (2) rel_dist >= 0.99 (completed/finished)
-        active_codes = [code for code in driver_codes if not driver_retired[code] and frame_data_raw[code].get("rel_dist", 0.0) < 0.99]
-        out_codes = [code for code in driver_codes if driver_retired[code] or frame_data_raw[code].get("rel_dist", 0.0) >= 0.99]
+        # A driver is OUT if: (1) confirmed retired (speed=0 for 10s+) OR (2) marked retired by FastF1 (status field)
+        # Use FastF1's official status field to avoid false positives from rel_dist crossing during intermediate laps
+        active_codes = [code for code in driver_codes if not driver_retired[code] and driver_statuses.get(code, "Finished") == "Finished"]
+        out_codes = [code for code in driver_codes if driver_retired[code] or driver_statuses.get(code, "Finished") != "Finished"]
 
         # Determine ordering and assign positions
         if is_race_start and grid_positions:
@@ -540,7 +624,11 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         # Active drivers get positions 1..N, OUT drivers go after
         sorted_codes = active_codes + out_codes
 
-        # Assign positions and check monotonicity
+        # Check if we should update positions and gaps
+        should_update_positions = (t - last_position_update_time) >= POSITION_UPDATE_INTERVAL
+        should_update_gaps = (t - last_gap_update_time) >= GAP_UPDATE_INTERVAL
+
+        # Calculate positions for this frame
         frame_data = {}
         for code in sorted_codes:
             frame_data[code] = frame_data_raw[code].copy()
@@ -560,6 +648,30 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                     flush=True,
                 )
             last_dist[code] = progress
+
+        # Update positions cache if due
+        if should_update_positions:
+            current_positions = {code: frame_data[code]["position"] for code in sorted_codes}
+            last_position_update_time = t
+
+        # Update gaps cache if due
+        if should_update_gaps:
+            current_gaps = _calculate_gaps(sorted_codes, frame_data)
+            last_gap_update_time = t
+
+        # Apply cached positions and gaps to frame data
+        # Initialize gaps on first frame if not yet calculated
+        if not gaps_initialized:
+            current_gaps = _calculate_gaps(sorted_codes, frame_data)
+            gaps_initialized = True
+
+        for code in sorted_codes:
+            # Use cached position if available, otherwise use current frame position
+            frame_data[code]["position"] = current_positions.get(code, frame_data[code]["position"])
+            # Add gap data (always - every driver should have gap values)
+            gap_data = current_gaps.get(code, {"gap_to_previous": 0.0, "gap_to_leader": 0.0})
+            frame_data[code]["gap_to_previous"] = gap_data["gap_to_previous"]
+            frame_data[code]["gap_to_leader"] = gap_data["gap_to_leader"]
 
         # Get leader info for frame payload
         leader_code = sorted_codes[0] if sorted_codes else None
@@ -593,11 +705,10 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     print("completed telemetry extraction...")
     print("Saving to cache file...")
     # If computed_data/ directory doesn't exist, create it
-    if not os.path.exists("computed_data"):
-        os.makedirs("computed_data")
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Save using pickle (10-100x faster than JSON)
-    with open(f"computed_data/{event_name}_{cache_suffix}_telemetry.pkl", "wb") as f:
+    with open(cache_file, "wb") as f:
         pickle.dump({
             "frames": frames,
             "driver_colors": get_driver_colors(session),
@@ -952,10 +1063,14 @@ def get_quali_telemetry(session, session_type='Q', refresh=False):
     event_name = str(session).replace(' ', '_')
     cache_suffix = 'sprintquali' if session_type == 'SQ' else 'quali'
 
+    # Use absolute path for caching (backend runs from different cwd)
+    cache_dir = Path(__file__).parent.parent.parent / "computed_data"
+    cache_file = cache_dir / f"{event_name}_{cache_suffix}_telemetry.pkl"
+
     # Check if this data has already been computed
     try:
         if not refresh and "--refresh-data" not in sys.argv:
-            with open(f"computed_data/{event_name}_{cache_suffix}_telemetry.pkl", "rb") as f:
+            with open(cache_file, "rb") as f:
                 data = pickle.load(f)
                 print(f"Loaded precomputed {cache_suffix} telemetry data.")
                 print("The replay should begin in a new window shortly!")
@@ -1002,11 +1117,9 @@ def get_quali_telemetry(session, session_type='Q', refresh=False):
                 min_speed = result["min_speed"]
 
     # Save to the compute_data directory
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.exists("computed_data"):
-        os.makedirs("computed_data")
-
-    with open(f"computed_data/{event_name}_{cache_suffix}_telemetry.pkl", "wb") as f:
+    with open(cache_file, "wb") as f:
         pickle.dump({
             "results": qualifying_results,
             "telemetry": telemetry_data,
