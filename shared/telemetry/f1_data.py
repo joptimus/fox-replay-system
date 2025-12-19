@@ -620,9 +620,10 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                 # Use authoritative race start time from track status
                 is_race_start = 0 <= (t - race_start_time) <= 10.0
             else:
-                # Fallback: Show grid order during first 10 seconds if leader is on lap 1
+                # Fallback: Show grid order during first 5 seconds if leader is on lap 1
                 # This handles formation laps where track status is delayed
-                is_race_start = (leader_lap <= 1) and (t <= 10.0)
+                # 5 seconds is short enough that drivers don't start passing before switching to race_progress sorting
+                is_race_start = (leader_lap <= 1) and (t <= 5.0)
         else:
             is_race_start = False
 
