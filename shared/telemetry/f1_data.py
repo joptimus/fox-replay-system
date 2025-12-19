@@ -221,38 +221,31 @@ def _calculate_gaps(sorted_codes, frame_data):
     gaps = {}
 
     def distance_to_time_gap(distance_diff, speed_ms):
-        """Convert distance gap to time gap in seconds"""
         if speed_ms <= 0 or distance_diff <= 0:
             return 0.0
         return distance_diff / speed_ms
+
+    leader_code = sorted_codes[0] if sorted_codes else None
+    leader_data = frame_data.get(leader_code) if leader_code else None
 
     for idx, code in enumerate(sorted_codes):
         data = frame_data[code]
         gap_to_previous = 0.0
         gap_to_leader = 0.0
 
-        # Use current driver's speed for gap calculations
         current_speed_ms = (data["speed"] * 1000) / 3600
 
-        # Gap to car ahead (time it would take current driver to catch up at current speed)
         if idx > 0:
             prev_code = sorted_codes[idx - 1]
             prev_data = frame_data[prev_code]
-            dist_diff = prev_data["dist"] - data["dist"]
-
-            # If current driver is moving and there's a gap, calculate time to catch up
+            dist_diff = prev_data["race_progress"] - data["race_progress"]
             if dist_diff > 0 and current_speed_ms > 0:
                 gap_to_previous = distance_to_time_gap(dist_diff, current_speed_ms)
 
-        # Gap to leader (time it would take current driver to catch up at current speed)
-        if idx > 0:
-            leader_code = sorted_codes[0]
-            leader_data = frame_data[leader_code]
-            dist_diff = leader_data["dist"] - data["dist"]
-
-            # If current driver is moving and there's a gap, calculate time to catch up
-            if dist_diff > 0 and current_speed_ms > 0:
-                gap_to_leader = distance_to_time_gap(dist_diff, current_speed_ms)
+            if leader_data:
+                dist_diff = leader_data["race_progress"] - data["race_progress"]
+                if dist_diff > 0 and current_speed_ms > 0:
+                    gap_to_leader = distance_to_time_gap(dist_diff, current_speed_ms)
 
         gaps[code] = {
             "gap_to_previous": gap_to_previous,
