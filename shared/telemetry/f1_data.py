@@ -593,35 +593,24 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             current_leader = max(active_codes, key=lambda c: frame_data_raw[c]["race_progress"])
             leader_progress = frame_data_raw[current_leader]["race_progress"]
             leader_lap = frame_data_raw[current_leader]["lap"]
-            leader_rel = frame_data_raw[current_leader]["rel_dist"]
         else:
             current_leader = None
             leader_progress = 0.0
             leader_lap = 1
-            leader_rel = 0.0
 
         # RACE START DETECTION - Priority: Use official track status timestamp
+        # But if race hasn't started yet in the data (race_start_time > current time), use fallback
         if current_leader:
-            if race_start_time is not None:
+            use_track_status = race_start_time is not None and t >= race_start_time
+            if use_track_status:
                 # Use authoritative race start time from track status
                 is_race_start = 0 <= (t - race_start_time) <= 10.0
             else:
-                # Fallback: Leader on lap 1 and near start line
-                is_race_start = (leader_lap <= 1) and (leader_rel < 0.05)
+                # Fallback: Show grid order during first 30 seconds if leader is on lap 1
+                # This handles formation laps where track status is delayed
+                is_race_start = (leader_lap <= 1) and (t <= 30.0)
         else:
             is_race_start = False
-
-        # DEBUG frame 0
-        if i == 0:
-            print(f"DEBUG frame 0: t={t:.2f}, race_start_time={race_start_time}, current_leader={current_leader}")
-            if current_leader:
-                print(f"  leader_lap={leader_lap}, leader_rel={leader_rel}")
-                if race_start_time is not None:
-                    time_delta = t - race_start_time
-                    print(f"  time_delta={time_delta:.2f}, is_race_start={is_race_start}")
-                else:
-                    print(f"  Using fallback: leader_lap <= 1 = {leader_lap <= 1}, leader_rel < 0.05 = {leader_rel < 0.05}")
-                    print(f"  is_race_start={is_race_start}")
 
         # RACE FINISH DETECTION - Only triggers once
         if not race_finished and current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
