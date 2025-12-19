@@ -1,11 +1,11 @@
 /**
  * Main App component for F1 Race Replay
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useReplayStore, useSelectedDriver, useSectorColors } from "./store/replayStore";
 import { useReplayWebSocket } from "./hooks/useReplayWebSocket";
-import { LightsBoard } from "./components/LightsBoard";
+import { LightsBoard, LightsBoardHandle } from "./components/LightsBoard";
 import { TrackVisualization3D } from "./components/TrackVisualization3D";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { Leaderboard } from "./components/Leaderboard";
@@ -137,13 +137,23 @@ const DriverHero = ({ year }: { year?: number }) => {
   );
 };
 
-const ReplayView = ({ onSessionSelect, onRefreshData, onSessionTypeChange }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void; onSessionTypeChange: (year: number, round: number, sessionType: string) => void }) => {
+const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { session, setTotalFrames } = useReplayStore();
-  const { isConnected } = useReplayWebSocket(session.sessionId);
+  const [lightsSequenceActive, setLightsSequenceActive] = useState(false);
+  const lightsBoardRef = useRef<LightsBoardHandle>(null);
+  const { session, setTotalFrames, play } = useReplayStore();
+  const { isConnected, resumePlayback } = useReplayWebSocket(session.sessionId, lightsSequenceActive);
   const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
 
+  const handlePlayWithLights = () => {
+    setLightsSequenceActive(true);
+    play();
+    lightsBoardRef.current?.startSequence();
+  };
+
   const handleLightsSequenceComplete = () => {
+    setLightsSequenceActive(false);
+    resumePlayback();
   };
 
   // Update total frames when session metadata changes
@@ -163,7 +173,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData, onSessionTypeChange }: { o
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <LightsBoard onSequenceComplete={handleLightsSequenceComplete} />
+      <LightsBoard ref={lightsBoardRef} onSequenceComplete={handleLightsSequenceComplete} />
       <VerticalNavMenu />
       <div className="app-container">
         <header className="app-header">
@@ -225,10 +235,10 @@ const ReplayView = ({ onSessionSelect, onRefreshData, onSessionTypeChange }: { o
 
         <main style={{ position: 'relative', background: 'var(--f1-carbon)', border: '1px solid var(--f1-border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <TrackVisualization3D onSessionTypeChange={onSessionTypeChange} />
+            <TrackVisualization3D />
           </div>
           <div style={{ borderTop: '1px solid var(--f1-border)' }}>
-            <PlaybackControls />
+            <PlaybackControls onPlayWithLights={handlePlayWithLights} />
           </div>
         </main>
 
@@ -361,7 +371,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage onSessionSelect={handleSessionSelect} isLoading={session.isLoading} />} />
-      <Route path="/replay" element={<ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} onSessionTypeChange={handleSessionTypeChange} />} />
+      <Route path="/replay" element={<ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} />} />
       <Route path="/comparison" element={<ComparisonPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

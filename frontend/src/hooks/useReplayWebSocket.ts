@@ -14,12 +14,13 @@ interface WebSocketMessage {
   frame?: number;
 }
 
-export const useReplayWebSocket = (sessionId: string | null) => {
+export const useReplayWebSocket = (sessionId: string | null, delayPlayback: boolean = false) => {
   const wsRef = useRef<WebSocket | null>(null);
   const setCurrentFrame = useReplayStore((state) => state.setCurrentFrame);
   const playback = useReplayStore((state) => state.playback);
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
   const sendCommandRef = useRef<(message: WebSocketMessage) => void>();
+  const pendingPlaybackRef = useRef<boolean>(false);
 
   // Create sendCommand function (store in ref to avoid dependency issues)
   const sendCommand = useCallback((message: WebSocketMessage) => {
@@ -142,6 +143,12 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       return;
     }
 
+    // If delaying playback (lights board sequence), defer the play command
+    if (playback.isPlaying && delayPlayback && !pendingPlaybackRef.current) {
+      pendingPlaybackRef.current = true;
+      return;
+    }
+
     if (playback.isPlaying) {
       sendCommandRef.current?.({
         action: "play",
@@ -150,7 +157,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     } else {
       sendCommandRef.current?.({ action: "pause" });
     }
-  }, [playback.isPlaying, playback.speed]);
+  }, [playback.isPlaying, playback.speed, delayPlayback]);
 
   // Sync frame index (seeking) to WebSocket
   useEffect(() => {
@@ -162,6 +169,16 @@ export const useReplayWebSocket = (sessionId: string | null) => {
     sendCommandRef.current?.({ action: "seek", frame: playback.frameIndex });
   }, [playback.frameIndex]);
 
+  const resumePlayback = () => {
+    if (playback.isPlaying && pendingPlaybackRef.current) {
+      pendingPlaybackRef.current = false;
+      sendCommandRef.current?.({
+        action: "play",
+        speed: playback.speed,
+      });
+    }
+  };
+
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     sendSeek: (frameIndex: number) => {
@@ -169,5 +186,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         sendCommandRef.current({ action: "seek", frame: frameIndex });
       }
     },
+    resumePlayback,
   };
 };

@@ -14,7 +14,11 @@ import { motion } from "framer-motion";
 
 const SPEEDS = [0.25, 0.5, 1.0, 2.0, 4.0];
 
-export const PlaybackControls: React.FC = () => {
+interface PlaybackControlsProps {
+  onPlayWithLights?: () => void;
+}
+
+export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLights }) => {
   const {
     playback,
     play,
@@ -26,6 +30,8 @@ export const PlaybackControls: React.FC = () => {
   const handlePlayPause = () => {
     if (playback.isPlaying) {
       pause();
+    } else if (onPlayWithLights) {
+      onPlayWithLights();
     } else {
       play();
     }

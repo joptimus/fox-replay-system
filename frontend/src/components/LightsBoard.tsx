@@ -1,12 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useLightsBoard } from '../hooks/useLightsBoard';
 
 interface LightsBoardProps {
   onSequenceComplete: () => void;
 }
 
-export function LightsBoard({ onSequenceComplete }: LightsBoardProps) {
-  const { isVisible, lightsOn, currentPhase, canSkip, skipSequence, mainAudioRef } = useLightsBoard();
+export interface LightsBoardHandle {
+  startSequence: () => void;
+}
+
+export const LightsBoard = forwardRef<LightsBoardHandle, LightsBoardProps>(({ onSequenceComplete }, ref) => {
+  const { isVisible, lightsOn, currentPhase, canSkip, skipSequence, startSequence, mainAudioRef } = useLightsBoard();
+
+  useImperativeHandle(ref, () => ({
+    startSequence,
+  }));
 
   // Notify parent when sequence completes
   useEffect(() => {
@@ -64,4 +72,4 @@ export function LightsBoard({ onSequenceComplete }: LightsBoardProps) {
       <audio ref={mainAudioRef} preload="auto" crossOrigin="anonymous" />
     </>
   );
-}
+});
