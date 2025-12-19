@@ -56,11 +56,17 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
 
           {/* Modal box */}
           <div
-            className={`relative bg-white rounded-lg p-12 shadow-2xl transition-opacity duration-700 ease-out ${fadeOutClass}`}
             style={{
               position: 'relative',
               zIndex: 10000,
+              background: '#1f1f27',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '48px 64px',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8)',
+              minWidth: '400px',
             }}
+            className={`transition-opacity duration-700 ease-out ${fadeOutClass}`}
           >
             {/* Skip button */}
             {canSkip && (
@@ -73,7 +79,7 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
             )}
 
             {/* Lights container */}
-            <div className="flex gap-4 justify-center">
+            <div style={{ display: 'flex', gap: '24px', justifyContent: 'center' }}>
               {lightsOn.map((isLit, idx) => (
                 <div
                   key={idx}
