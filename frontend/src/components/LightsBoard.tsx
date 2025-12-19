@@ -37,13 +37,13 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
       {/* Dark overlay with blur */}
       <div
         className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-700 ease-out ${fadeOutClass}`}
-        style={{ pointerEvents: isVisible ? 'auto' : 'none' }}
+        style={{ pointerEvents: isVisible ? 'auto' : 'none', zIndex: 9999 }}
       />
 
       {/* Modal container */}
       <div
         className={`fixed inset-0 flex items-center justify-center transition-opacity duration-700 ease-out ${fadeOutClass}`}
-        style={{ pointerEvents: isVisible ? 'auto' : 'none' }}
+        style={{ pointerEvents: isVisible ? 'auto' : 'none', zIndex: 10000 }}
       >
         {/* Modal box */}
         <div className="relative bg-white rounded-lg p-12 shadow-2xl">
