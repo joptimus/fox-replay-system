@@ -1,9 +1,13 @@
 import json
 import sys
+import logging
+import time
 from pathlib import Path
 import msgpack
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
+logger = logging.getLogger("backend.services.replay")
 
 from shared.telemetry.f1_data import (
     get_race_telemetry,
@@ -34,12 +38,18 @@ class F1ReplaySession:
         self.loading_status = "Initializing..."
 
     async def load_data(self):
+        load_start_time = time.time()
+        session_id = f"{self.year}_{self.round_num}_{self.session_type}"
+
         try:
+            logger.info(f"[SESSION] Starting load for {session_id} (refresh={self.refresh})")
             self.loading_status = f"Loading session {self.year} R{self.round_num}..."
-            print(f"[REPLAY] {self.loading_status}")
+
             session = load_session(self.year, self.round_num, self.session_type)
+            logger.info(f"[SESSION] FastF1 session loaded for {session_id}")
+
             self.loading_status = "Session loaded, fetching telemetry..."
-            print(f"[REPLAY] {self.loading_status}")
+            telemetry_start = time.time()
 
             if self.session_type in ["Q", "SQ"]:
                 data = get_quali_telemetry(session, session_type=self.session_type, refresh=self.refresh)
@@ -53,16 +63,22 @@ class F1ReplaySession:
                 self.total_laps = data.get("total_laps", 0)
                 self.race_start_time = data.get("race_start_time", None)
 
+            telemetry_time = time.time() - telemetry_start
+            logger.info(f"[SESSION] Generated {len(self.frames)} frames in {telemetry_time:.1f}s for {session_id}")
+
             self.driver_numbers = self._extract_driver_numbers(session)
             self.driver_teams = self._extract_driver_teams(session)
+            logger.info(f"[SESSION] Extracted {len(self.driver_numbers)} drivers for {session_id}")
 
             self.loading_status = f"Loaded {len(self.frames)} frames, building track geometry..."
-            print(f"[REPLAY] {self.loading_status}")
 
             try:
+                geometry_start = time.time()
                 fastest_lap_obj = session.laps.pick_fastest()
                 fastest_lap_telem = fastest_lap_obj.get_telemetry()
                 track_data = build_track_from_example_lap(fastest_lap_telem, lap_obj=fastest_lap_obj)
+                geometry_time = time.time() - geometry_start
+
                 self.track_geometry = {
                     "centerline_x": [float(x) for x in track_data[0]],
                     "centerline_y": [float(y) for y in track_data[1]],
@@ -77,49 +93,55 @@ class F1ReplaySession:
                 }
                 if track_data[10] is not None:
                     self.track_geometry["sector"] = [int(s) for s in track_data[10]]
-                self.loading_status = "Track geometry built successfully"
-                print(f"[REPLAY] {self.loading_status}")
+
+                logger.info(f"[SESSION] Track geometry built in {geometry_time:.2f}s for {session_id}")
             except Exception as e:
-                print(f"[REPLAY] Warning: Could not build track geometry: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.warning(f"[SESSION] Could not build track geometry for {session_id}: {e}")
                 self.track_geometry = None
 
             self.loading_status = f"Pre-serializing {len(self.frames)} frames..."
-            print(f"[REPLAY] {self.loading_status}")
+            serialize_start = time.time()
             self._pre_serialize_frames()
-            self.loading_status = "Ready"
-            print(f"[REPLAY] Session fully loaded and ready")
+            serialize_time = time.time() - serialize_start
+
+            total_time = time.time() - load_start_time
+            logger.info(f"[SESSION] Session {session_id} fully loaded in {total_time:.1f}s (serialize: {serialize_time:.1f}s)")
             self.is_loaded = True
+
         except Exception as e:
+            load_time = time.time() - load_start_time
+            logger.error(f"[SESSION] Failed to load {session_id} after {load_time:.1f}s: {e}", exc_info=True)
             self.load_error = str(e)
             self.is_loaded = True
 
     def _pre_serialize_frames(self) -> None:
         if not self.frames:
+            logger.debug(f"[SERIALIZE] No frames to serialize")
             self._serialized_frames = []
             self._msgpack_frames = []
             return
 
-        # For large frame counts, don't pre-serialize everything upfront
-        # Instead, serialize on-demand for better responsiveness
-        # Large races (>100k frames) can take minutes to serialize
         frame_count = len(self.frames)
         if frame_count > 50000:
-            # Only pre-serialize every Nth frame for quick lookup
-            # This reduces startup time from minutes to seconds
-            print(f"[REPLAY] Large session ({frame_count} frames), using lazy serialization")
+            logger.info(f"[SERIALIZE] Large session ({frame_count} frames), using lazy serialization")
             self._serialized_frames = None
             self._msgpack_frames = None
         else:
-            # Small sessions: pre-serialize everything for speed
-            print(f"[REPLAY] Small session ({frame_count} frames), pre-serializing all frames")
+            logger.info(f"[SERIALIZE] Pre-serializing all {frame_count} frames...")
+            serialize_start = time.time()
+
             self._serialized_frames = [
                 self._build_frame_payload_json(i) for i in range(frame_count)
             ]
             self._msgpack_frames = [
                 self._build_frame_payload_msgpack(i) for i in range(frame_count)
             ]
+
+            serialize_time = time.time() - serialize_start
+            total_size = sum(len(f) for f in self._msgpack_frames)
+            avg_size = total_size / frame_count if frame_count > 0 else 0
+
+            logger.info(f"[SERIALIZE] Pre-serialized {frame_count} frames in {serialize_time:.1f}s (avg {avg_size:.0f} bytes/frame, total {total_size/1024/1024:.1f}MB)")
 
     def _build_frame_payload_json(self, frame_index: int) -> str:
         def safe_float(value, default=0.0):
