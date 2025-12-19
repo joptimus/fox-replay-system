@@ -610,7 +610,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         # STATE-AWARE SORTING
         if is_race_start and grid_positions:
-            active_codes.sort(key=lambda code: (grid_positions.get(code, 999), -frame_data_raw[code]["race_progress"]))
+            active_codes.sort(key=lambda code: grid_positions.get(code, 999))
         elif race_finished and final_positions:
             active_codes.sort(key=lambda code: final_positions.get(code, 999))
         else:
