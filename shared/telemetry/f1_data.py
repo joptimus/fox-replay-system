@@ -618,11 +618,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             leader_lap = 1
             leader_rel = 0.0
 
-        # RACE FINISH DETECTION - Uses leader progress and epsilon
-        if current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
+        # RACE FINISH DETECTION - Only triggers once
+        if not race_finished and current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
             race_finished = True
-        else:
-            race_finished = False
 
         # Determine ordering and assign positions
         if is_race_start and grid_positions:
