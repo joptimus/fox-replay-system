@@ -590,8 +590,14 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     # Frame 50 shows correct grid order before drivers start passing each other
     GRID_PHASE_END_FRAME = 50
 
+    # Pass detection: track previous order to avoid full re-sorts
+    # Only allow position changes when a driver actually passes the one ahead (by PASS_MARGIN meters)
+    prev_sorted_codes = None
+    PASS_MARGIN = 10.0  # meters - ignore small jitter
+
     for i in range(num_frames):
         t = timeline[i]
+        t_abs = t + global_t_min  # Convert to absolute session seconds for race-start comparison
 
         # OPTIMIZATION: Build data for all drivers in one pass (no intermediate snapshot list)
         frame_data_raw = {}
@@ -657,13 +663,13 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             leader_progress = 0.0
             leader_lap = 1
 
-        # RACE START DETECTION - Priority: Use official track status timestamp
-        # But if race hasn't started yet in the data (race_start_time > current time), use fallback
+        # RACE START DETECTION - Priority: Use official track status timestamp with absolute time
+        # race_start_time is in absolute session seconds; t_abs is absolute, so compare them directly
         if current_leader:
-            use_track_status = race_start_time is not None and t >= race_start_time
+            use_track_status = race_start_time is not None and t_abs >= race_start_time
             if use_track_status:
                 # Use authoritative race start time from track status
-                is_race_start = 0 <= (t - race_start_time) <= 10.0
+                is_race_start = 0 <= (t_abs - race_start_time) <= 10.0
             else:
                 # Fallback: Show grid order until GRID_PHASE_END_FRAME
                 # This handles formation laps where track status is delayed
@@ -676,15 +682,54 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         if not race_finished and current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
             race_finished = True
 
-        # STATE-AWARE SORTING
-        if is_race_start and grid_positions:
-            active_codes.sort(key=lambda code: grid_positions.get(code, 999))
-        elif race_finished and final_positions:
-            active_codes.sort(key=lambda code: final_positions.get(code, 999))
-        else:
-            active_codes.sort(key=lambda code: -frame_data_raw[code]["race_progress"])
+        # STATE-AWARE SORTING WITH PASS DETECTION
+        # Instead of re-sorting the entire field every frame, we:
+        # 1. Use grid order at race start
+        # 2. Use final positions at race finish
+        # 3. Otherwise, allow only local passes (bubble sort with race_progress constraints)
 
-        sorted_codes = active_codes + out_codes
+        if i == 0 or not prev_sorted_codes:
+            # Frame 0 or first frame: use grid order for active drivers
+            if is_race_start and grid_positions:
+                sorted_codes = sorted(active_codes, key=lambda c: grid_positions.get(c, 999)) + out_codes
+            elif race_finished and final_positions:
+                sorted_codes = sorted(active_codes, key=lambda c: final_positions.get(c, 999)) + out_codes
+            else:
+                # Fallback: sort by race_progress for first frame
+                sorted_codes = sorted(active_codes, key=lambda c: -frame_data_raw[c]["race_progress"]) + out_codes
+        else:
+            # Subsequent frames: start from previous order, allow only local passes
+            if is_race_start and grid_positions:
+                # During race start: use grid order
+                sorted_codes = sorted(active_codes, key=lambda c: grid_positions.get(c, 999)) + out_codes
+            elif race_finished and final_positions:
+                # At race finish: snap to official result
+                sorted_codes = sorted(active_codes, key=lambda c: final_positions.get(c, 999)) + out_codes
+            else:
+                # Normal race: use pass-detection bubble sort
+                # Start from previous active order, keep retired drivers at bottom
+                sorted_codes = [c for c in prev_sorted_codes if c in active_codes] + out_codes
+
+                # Bubble pass detection: allow a car to move up only if it clearly passed the one ahead
+                swapped = True
+                while swapped:
+                    swapped = False
+                    for idx in range(len(active_codes) - 1):
+                        if idx < len(sorted_codes) - 1:
+                            a = sorted_codes[idx]
+                            b = sorted_codes[idx + 1]
+
+                            # Skip if either is in out_codes (retired)
+                            if a not in active_codes or b not in active_codes:
+                                continue
+
+                            pa = frame_data_raw[a]["race_progress"]
+                            pb = frame_data_raw[b]["race_progress"]
+
+                            # If b is clearly ahead of a (by more than PASS_MARGIN), swap (overtake detected)
+                            if pb > pa + PASS_MARGIN:
+                                sorted_codes[idx], sorted_codes[idx + 1] = b, a
+                                swapped = True
 
         # Calculate positions and gaps for this frame
         frame_data = {}
@@ -762,6 +807,10 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             frame_payload["weather"] = weather_snapshot
 
         frames.append(frame_payload)
+
+        # Save current sorted order for next frame's pass detection
+        prev_sorted_codes = sorted_codes
+
     print("completed telemetry extraction...")
     print("Saving to cache file...")
     # If computed_data/ directory doesn't exist, create it
