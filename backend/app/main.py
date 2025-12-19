@@ -6,18 +6,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from backend.core.logging import setup_logging, get_logger
 from shared.telemetry.f1_data import enable_cache
 from backend.app.api import rounds, sessions, telemetry
 from backend.app.websocket import handle_replay_websocket
 
 enable_cache()
 
+setup_logging()
+logger = get_logger("backend.main")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("F1 Race Replay API starting...")
+    logger.info("F1 Race Replay API starting...")
     yield
-    print("F1 Race Replay API shutting down...")
+    logger.info("F1 Race Replay API shutting down...")
 
 
 app = FastAPI(title="F1 Race Replay API", version="1.0.0", lifespan=lifespan)
