@@ -645,7 +645,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         # Debug: Log state for early frames
         if i in [0, 50, 100, 150, 155, 160]:
-            print(f"DEBUG frame {i} - t={t:.2f}s is_race_start={is_race_start} sorted_order: {sorted_codes[:5]}")
+            print(f"DEBUG frame {i} - t={t:.2f}s race_start_time={race_start_time} is_race_start={is_race_start} sorted_order: {sorted_codes[:5]}")
             for code in sorted_codes[:3]:
                 print(f"  {code}: race_progress={frame_data_raw[code]['race_progress']:.1f}, lap={frame_data_raw[code]['lap']}, position={frame_data[code]['position']}")
 
