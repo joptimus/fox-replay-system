@@ -802,6 +802,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
     formatted_track_statuses = []
     race_start_time = None
+    race_start_time_absolute = None
 
     for status in track_status.to_dict('records'):
         seconds = timedelta.total_seconds(status['Time'])
@@ -823,8 +824,8 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         })
 
         # Record race start as first "All Clear" status (status code "1")
-        if race_start_time is None and status['Status'] == "1":
-            race_start_time = start_time
+        if race_start_time_absolute is None and status['Status'] == "1":
+            race_start_time_absolute = start_time
 
     # 4.1. Resample weather data onto the same timeline for playback
     weather_resampled = None
@@ -888,11 +889,11 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     # --- Use cumulative race distance + normalize at race start ---
 
     # Figure out which frame index corresponds to *race start* in the shared timeline
-    # race_start_time is in "session seconds" (from track_status)
+    # race_start_time_absolute is in "session seconds" (from track_status)
     # timeline is "session seconds - global_t_min"
-    if race_start_time is not None:
+    if race_start_time_absolute is not None:
         abs_timeline = timeline + global_t_min  # convert back to absolute session time
-        race_start_idx = int(np.argmin(np.abs(abs_timeline - race_start_time)))
+        race_start_idx = int(np.argmin(np.abs(abs_timeline - race_start_time_absolute)))
     else:
         race_start_idx = 0  # fallback: start of telemetry
 
@@ -1190,6 +1191,8 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     print("Saving to cache file...")
     # If computed_data/ directory doesn't exist, create it
     cache_dir.mkdir(parents=True, exist_ok=True)
+
+    race_start_time = race_start_time_absolute - global_t_min if race_start_time_absolute is not None else None
 
     # Save using pickle (10-100x faster than JSON)
     with open(cache_file, "wb") as f:
