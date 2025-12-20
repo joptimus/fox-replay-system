@@ -9,6 +9,7 @@ import json
 import pickle
 from datetime import timedelta
 from pathlib import Path
+from scipy.signal import savgol_filter
 
 from shared.lib.tyres import get_tyre_compound_int
 from shared.lib.time import parse_time_string, format_time
@@ -265,6 +266,59 @@ def _calculate_gaps(sorted_codes, frame_data):
         }
 
     return gaps
+
+def _smooth_interval_data(stream_data, window_length=7, polyorder=2):
+    """
+    Smooth IntervalToPositionAhead using Savitzky-Golay filter.
+
+    IMPORTANT DISTINCTION:
+    - GapToLeader: Spikes on leader change (unreliable for smoothing)
+    - IntervalToPositionAhead: Gap to car ahead (stable, safe to smooth)
+
+    Args:
+        stream_data: DataFrame from get_stream_timing()
+                    with columns: Time, Driver, Position, Interval_s
+        window_length: Filter window (must be odd, >= polyorder + 1). Default: 7
+        polyorder: Polynomial order (2 is typical, 1 is linear)
+
+    Returns:
+        DataFrame with new column 'Interval_smooth' (smoothed seconds)
+    """
+    if stream_data is None or stream_data.empty:
+        return stream_data
+
+    smoothed = stream_data.copy()
+
+    if "Interval_s" not in smoothed.columns:
+        print("Warning: Interval_s column not found in stream_data")
+        return smoothed
+
+    intervals_s = smoothed["Interval_s"].values
+
+    for driver_code, driver_indices in smoothed.groupby("Driver").groups.items():
+        driver_intervals = intervals_s[driver_indices]
+        valid_mask = ~np.isnan(driver_intervals)
+
+        if valid_mask.sum() > polyorder:
+            try:
+                smoothed_intervals = driver_intervals.copy()
+                valid_count = valid_mask.sum()
+                safe_window = min(window_length, max(3, valid_count // 2 * 2 - 1))
+                if safe_window >= 3:
+                    smoothed_intervals[valid_mask] = savgol_filter(
+                        driver_intervals[valid_mask],
+                        window_length=safe_window,
+                        polyorder=polyorder
+                    )
+                smoothed.loc[driver_indices, "Interval_smooth"] = smoothed_intervals
+            except Exception as e:
+                print(f"Warning: Could not smooth interval data for {driver_code}: {e}")
+                smoothed.loc[driver_indices, "Interval_smooth"] = driver_intervals
+        else:
+            smoothed.loc[driver_indices, "Interval_smooth"] = driver_intervals
+
+    return smoothed
+
 
 def load_session(year, round_number, session_type='R'):
     # session_type: 'R' (Race), 'S' (Sprint) etc.
