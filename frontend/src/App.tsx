@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useReplayStore, useSelectedDriver, useSectorColors } from "./store/replayStore";
 import { useReplayWebSocket } from "./hooks/useReplayWebSocket";
+import { usePlaybackAnimation } from "./hooks/usePlaybackAnimation";
 import { LightsBoard, LightsBoardHandle } from "./components/LightsBoard";
 import { TrackVisualization3D } from "./components/TrackVisualization3D";
 import { PlaybackControls } from "./components/PlaybackControls";
@@ -174,9 +175,12 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   const [lightsSequenceActive, setLightsSequenceActive] = useState(false);
   const [hasPlayedLights, setHasPlayedLights] = useState(false);
   const lightsBoardRef = useRef<LightsBoardHandle>(null);
-  const { session, setTotalFrames, play, playback } = useReplayStore();
+  const { session, setTotalFrames, play } = useReplayStore();
   const { isConnected, resumePlayback } = useReplayWebSocket(session.sessionId, lightsSequenceActive);
   const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
+
+  // Animate playback - advances frameIndex during playback
+  usePlaybackAnimation();
 
   const handlePlayWithLights = () => {
     console.log('handlePlayWithLights called, hasPlayedLights:', hasPlayedLights, 'ref:', lightsBoardRef.current);
