@@ -40,67 +40,84 @@ A full-stack web application for exploring Formula 1 race telemetry with interac
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 16+
-- npm or yarn
+- **Python 3.8+** – [Download](https://www.python.org/)
+- **Node.js 16+** – [Download](https://nodejs.org/)
 
-### Installation
+### Installation (One Command)
 
-1. **Clone the repository:**
+**macOS/Linux:**
 ```bash
-git clone https://github.com/jamesadams90/f1-race-replay.git
-cd f1-race-replay
+bash scripts/install.sh
 ```
 
-2. **Install dependencies:**
+**Windows:**
 ```bash
-# Backend
-pip install -r requirements.txt
-
-# Frontend
-cd frontend && npm install
+scripts\install.bat
 ```
 
-3. **Run the full stack:**
+This will automatically:
+- ✅ Verify Python and Node.js are installed
+- ✅ Create Python virtual environment
+- ✅ Install all backend dependencies
+- ✅ Install all frontend dependencies
+
+### Running the Application
+
 ```bash
-node dev.js
+npm start
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and select a season/round to start replaying.
+Or equivalently:
+```bash
+npm run dev
+```
+
+Both commands will:
+- 🗑️ Clear cached telemetry data (fresh API calls)
+- 🔌 Free up ports 8000, 5173, and 3000
+- 🚀 Start backend (FastAPI) on http://localhost:8000
+- 🚀 Start frontend (React) on http://localhost:5173
+- 🌐 Automatically open browser to http://localhost:5173
 
 ### Running Components Separately
 
 **Backend only:**
 ```bash
-python backend/main.py
-# Available at http://localhost:8000
+cd backend
+source venv/bin/activate  # macOS/Linux
+# or: call venv\Scripts\activate.bat  # Windows
+python main.py
 ```
+Available at http://localhost:8000
 
 **Frontend only:**
 ```bash
-cd frontend && npm run dev
-# Available at http://localhost:5173
+cd frontend
+npm run dev
 ```
+Available at http://localhost:5173
 
-### Utility Commands
+### Development Commands
 
-**List available rounds:**
-```bash
-python backend/main.py --list-rounds 2025
-python backend/main.py --list-sprints 2025
-```
-
-**Build for production:**
+**Build frontend for production:**
 ```bash
 cd frontend && npm run build
 ```
 
+**Run without opening browser:**
+```bash
+npm run dev -- --no-open
+```
+
+**Manual cache clearing (if needed):**
+- Computed telemetry cache: `rm -rf data/` (or `rmdir /s data` on Windows)
+- FastF1 API cache: `rm -rf .fastf1-cache/` (or `rmdir /s .fastf1-cache` on Windows)
+
 ## 📚 Documentation
 
-- **[CLAUDE.md](./CLAUDE.md)** – Comprehensive development guide with architecture details, data structures, and API documentation
-- **[PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)** – Detailed directory structure and philosophy
+- **[CLAUDE.md](./CLAUDE.md)** – Comprehensive development guide with architecture, data structures, and API details
 - **[roadmap.md](./roadmap.md)** – Planned features and development roadmap
-- **[legacy/README.md](./legacy/README.md)** – Legacy Arcade desktop app documentation
+- **[docs/](./docs/)** – Additional documentation and troubleshooting guides
 
 ## 🏗 Architecture
 

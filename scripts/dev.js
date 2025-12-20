@@ -5,9 +5,10 @@
  * One-command startup for both backend (FastAPI) and frontend (React)
  *
  * Usage:
- *   npm start             - Run kill_all.bat cleanup, then start servers
- *   node scripts/dev.js           - Install dependencies and start both servers
- *   node scripts/dev.js --no-open - Start servers without opening browser
+ *   npm run dev           - Start dev servers (clears cache and ports)
+ *   npm start             - Alias for npm run dev
+ *   node scripts/dev.js   - Same as npm run dev
+ *   npm run dev -- --no-open - Start without opening browser
  */
 
 const { spawn, execSync } = require('child_process');
@@ -19,6 +20,8 @@ const ROOT_DIR = path.dirname(__dirname);
 const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
 const FRONTEND_DIR = path.join(ROOT_DIR, 'frontend');
 const SCRIPTS_DIR = path.join(ROOT_DIR, 'scripts');
+const DATA_DIR = path.join(ROOT_DIR, 'data');
+const CACHE_DIR = path.join(ROOT_DIR, '.fastf1-cache');
 const NO_OPEN = process.argv.includes('--no-open');
 
 const colors = {
@@ -35,6 +38,58 @@ function log(color, label, message) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function clearCache() {
+  log(colors.cyan, 'CACHE', 'Clearing caches...');
+
+  const dirsToClean = [
+    { path: DATA_DIR, name: 'computed telemetry' },
+    { path: CACHE_DIR, name: 'FastF1 API' },
+  ];
+
+  dirsToClean.forEach(({ path: dirPath, name }) => {
+    if (fs.existsSync(dirPath)) {
+      try {
+        fs.rmSync(dirPath, { recursive: true });
+        log(colors.green, 'CACHE', `Cleared ${name} cache`);
+      } catch (error) {
+        log(colors.yellow, 'CACHE', `Could not clear ${name} cache: ${error.message}`);
+      }
+    }
+  });
+}
+
+function clearPorts() {
+  log(colors.cyan, 'PORTS', 'Clearing ports...');
+
+  const ports = [8000, 5173, 3000];
+
+  try {
+    if (os.platform() === 'win32') {
+      ports.forEach(port => {
+        try {
+          execSync(`netstat -ano | findstr :${port}`, { stdio: 'pipe' });
+          execSync(`for /f "tokens=5" %a in ('netstat -ano ^| findstr :${port}') do taskkill /PID %a /F`, {
+            stdio: 'ignore',
+            shell: true,
+          });
+          log(colors.green, 'PORTS', `Cleared port ${port}`);
+        } catch (error) {
+          // Port not in use, ignore
+        }
+      });
+    } else {
+      const cmd = ports.map(port => `lsof -ti :${port} | xargs kill -9 2>/dev/null`).join('; ');
+      execSync(`${cmd}; true`, {
+        stdio: 'ignore',
+        shell: '/bin/bash',
+      });
+      log(colors.green, 'PORTS', `Cleared ports: ${ports.join(', ')}`);
+    }
+  } catch (error) {
+    log(colors.yellow, 'PORTS', 'Port cleanup encountered an issue (likely ports already free)');
+  }
 }
 
 async function checkDependencies() {
@@ -156,6 +211,10 @@ ${colors.green}╔════════════════════�
 ${colors.green}║           F1 Race Replay - Development Server              ║${colors.reset}
 ${colors.green}╚═══════════════════════════════════════════════════════════╝${colors.reset}
   `);
+
+  clearCache();
+  clearPorts();
+  console.log('');
 
   await checkDependencies();
   await installBackendDependencies();

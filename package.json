@@ -3,9 +3,8 @@
   "version": "1.0.0",
   "description": "F1 Race Replay - Interactive Formula 1 race visualization and analysis",
   "scripts": {
-    "start": "node scripts/start.js",
     "dev": "node scripts/dev.js",
-    "dev:no-open": "node scripts/dev.js --no-open"
+    "start": "node scripts/dev.js"
   },
   "keywords": [
     "formula1",
