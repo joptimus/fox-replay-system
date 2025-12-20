@@ -83,15 +83,15 @@ def test_sort_key_hybrid_none_interval_smooth():
 
 
 def test_sort_key_hybrid_nan_race_progress():
-    """Test handling of NaN race_progress (treated as -9999)"""
+    """Test handling of NaN race_progress (treated as 0.0)"""
     frame_data_raw = {
         'HAM': {'pos_raw': 1, 'interval_smooth': 0.5, 'race_progress': 1000.0},
         'VER': {'pos_raw': 2, 'interval_smooth': 1.2, 'race_progress': np.nan},
     }
 
     ver_key = sort_key_hybrid('VER', frame_data_raw)
-    assert ver_key[2] == -(-9999)
-    assert ver_key == (2, 1.2, -(-9999))
+    assert ver_key[2] == 0.0
+    assert ver_key == (2, 1.2, 0.0)
 
 
 def test_sort_key_hybrid_retired_driver():

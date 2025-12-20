@@ -354,7 +354,7 @@ def sort_key_hybrid(code: str, frame_data_raw: dict) -> tuple:
     interval_val = interval_smooth if interval_smooth is not None else 9999
 
     race_progress = data.get('race_progress', 0.0)
-    race_progress_val = race_progress if not np.isnan(race_progress) else -9999
+    race_progress_val = race_progress if not np.isnan(race_progress) else 0.0
 
     return (pos_val, interval_val, -race_progress_val)
 
