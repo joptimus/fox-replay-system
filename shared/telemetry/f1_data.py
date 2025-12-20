@@ -1170,7 +1170,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         # Save current sorted order for next frame's pass detection
         prev_sorted_codes = sorted_codes
 
-    print(f"\n[TELEMETRY] ✓ Frame generation complete: {len(frames)} frames", flush=True)
+    print(f"\n[TELEMETRY] Frame generation complete: {len(frames)} frames", flush=True)
     print("completed telemetry extraction...")
     print("Saving to cache file...")
     # If computed_data/ directory doesn't exist, create it
