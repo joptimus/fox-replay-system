@@ -927,6 +927,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         print(f"[COVERAGE] WARNING: Timing data coverage only {coverage:.1%}. Fallback to distance-based ordering for sparse frames.")
 
     for i in range(num_frames):
+        if i % 250 == 0:
+            print(f"[FRAMES] Processing frame {i}/{num_frames} ({100*i/num_frames:.1f}%)", flush=True)
+
         t = timeline[i]
         t_abs = t + global_t_min  # Convert to absolute session seconds for race-start comparison
 
