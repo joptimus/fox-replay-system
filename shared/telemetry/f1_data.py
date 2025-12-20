@@ -451,19 +451,23 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         timing = stream_data.reset_index()
         timing_gap_df = timing.pivot(index="Date", columns="Driver", values="GapToLeader_s")
         timing_pos_df = timing.pivot(index="Date", columns="Driver", values="Position")
+        timing_interval_smooth_df = timing.pivot(index="Date", columns="Driver", values="Interval_smooth")
 
         base_time = timing_gap_df.index[0]
         timing_gap_df.index = (timing_gap_df.index - base_time).total_seconds()
         timing_pos_df.index = timing_gap_df.index
+        timing_interval_smooth_df.index = timing_gap_df.index
 
         timing_gap_df = timing_gap_df.ffill().bfill()
         timing_pos_df = timing_pos_df.ffill().bfill()
+        timing_interval_smooth_df = timing_interval_smooth_df.ffill().bfill()
 
         print(f"Loaded FIA timing data with {len(timing_gap_df)} samples")
     except Exception as e:
         print(f"Warning: Could not load FIA timing data: {e}")
         timing_gap_df = None
         timing_pos_df = None
+        timing_interval_smooth_df = None
 
     driver_data = {}
     driver_lap_positions = {}  # Maps driver_code -> list of positions per lap
@@ -520,11 +524,17 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
             timing_pos_df = timing_pos_df.reindex(abs_timeline, method="nearest", tolerance=0.25)
             timing_pos_df = timing_pos_df.ffill().bfill()
+
+            if timing_interval_smooth_df is not None:
+                timing_interval_smooth_df = timing_interval_smooth_df.reindex(abs_timeline, method="nearest", tolerance=0.25)
+                timing_interval_smooth_df = timing_interval_smooth_df.ffill().bfill()
+
             print(f"Aligned timing data to {len(abs_timeline)} animation frames")
         except Exception as e:
             print(f"Warning: Could not align timing data to timeline: {e}")
             timing_gap_df = None
             timing_pos_df = None
+            timing_interval_smooth_df = None
 
     # 3. Resample each driver's telemetry (x, y, gap) onto the common timeline
     resampled_data = {}
@@ -767,12 +777,20 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                     pos = timing_pos_df.at[t_abs, code]
                     frame_data_raw[code]["gap"] = float(gap) if not pd.isna(gap) else None
                     frame_data_raw[code]["pos_raw"] = int(pos) if not pd.isna(pos) else 0
+
+                    if timing_interval_smooth_df is not None:
+                        interval_smooth = timing_interval_smooth_df.at[t_abs, code]
+                        frame_data_raw[code]["interval_smooth"] = float(interval_smooth) if not pd.isna(interval_smooth) else None
+                    else:
+                        frame_data_raw[code]["interval_smooth"] = None
                 except (KeyError, TypeError):
                     frame_data_raw[code]["gap"] = None
                     frame_data_raw[code]["pos_raw"] = 0
+                    frame_data_raw[code]["interval_smooth"] = None
             else:
                 frame_data_raw[code]["gap"] = None
                 frame_data_raw[code]["pos_raw"] = 0
+                frame_data_raw[code]["interval_smooth"] = None
 
             # Track retirement: update zero-speed duration
             if speed == 0:
@@ -814,18 +832,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         if not race_finished and current_leader and leader_progress >= (total_race_distance - FINISH_EPSILON) and final_positions:
             race_finished = True
 
-        # STEP 4: TIMING-BASED SORTING
-        # Use official FIA position data, with fallbacks to gap and distance
-        def sort_key(code):
-            c = frame_data_raw[code]
-
-            pos_val = c["pos_raw"] if c["pos_raw"] > 0 else 9999
-            gap_val = c["gap"] if c["gap"] is not None else 9999
-            dist_val = c["dist"] if not np.isnan(c["dist"]) else -9999
-
-            return (pos_val, gap_val, -dist_val)
-
-        sorted_codes = sorted(active_codes, key=sort_key) + out_codes
+        # STEP 4: HYBRID SORTING (Phase 2, Task 2.2)
+        # Use 3-tier sorting: pos_raw (Tier 1), interval_smooth (Tier 1.5), race_progress (Tier 2)
+        sorted_codes = sorted(active_codes, key=lambda code: sort_key_hybrid(code, frame_data_raw)) + out_codes
 
         # STEP 7: Debug print to confirm FIA timing-based sorting
         if i in [0, 50, 200]:
