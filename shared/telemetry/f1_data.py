@@ -980,14 +980,20 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             if stream_data is not None and not stream_data.empty and code in stream_data['Driver'].values:
                 driver_stream = stream_data[stream_data['Driver'] == code]
                 if not driver_stream.empty:
-                    closest_idx = (driver_stream.index - t_abs).abs().argmin()
-                    stream_pos = driver_stream.iloc[closest_idx].get('Position')
+                    # Convert index to timedelta total_seconds for comparison
+                    try:
+                        index_seconds = driver_stream.index.to_series().dt.total_seconds().values
+                        time_diffs = np.abs(index_seconds - t_abs)
+                        closest_idx_loc = np.argmin(time_diffs)
+                        stream_pos = driver_stream.iloc[closest_idx_loc].get('Position')
+                    except (AttributeError, TypeError):
+                        # Index might already be numeric or have different format
+                        stream_pos = driver_stream.iloc[-1].get('Position') if len(driver_stream) > 0 else None
 
                     if pd.notna(stream_pos):
                         frame_data_raw[code]["pos_raw"] = int(stream_pos)
                     else:
                         frame_data_raw[code]["pos_raw"] = None
-                        print(f"Frame {i}: {code} missing stream position, using distance-based fallback")
                 else:
                     frame_data_raw[code]["pos_raw"] = None
             else:
