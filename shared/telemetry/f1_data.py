@@ -324,6 +324,41 @@ def _smooth_interval_data(stream_data: pd.DataFrame, window_length: int = 7, pol
     return smoothed
 
 
+def sort_key_hybrid(code: str, frame_data_raw: dict) -> tuple:
+    """
+    Hybrid sort key using 3-tier reliability hierarchy.
+
+    Implements 3-tier sorting priority using smoothed interval data:
+    Tier 1 (Primary): pos_raw from FIA stream (stream position if > 0, else 9999 for retired)
+    Tier 1.5 (Refined): interval_smooth (smoothed gap to car ahead, from Phase 1)
+    Tier 2 (Fallback): race_progress (distance-based physics backup)
+
+    Args:
+        code: Driver code (e.g., 'HAM', 'VER')
+        frame_data_raw: Dict mapping code -> driver_data dict
+                       Must contain keys: pos_raw, interval_smooth, race_progress
+
+    Returns:
+        Tuple of (pos_val, interval_val, -race_progress_val) for sorting
+        Lower tuple values sort first (better positions)
+    """
+    if code not in frame_data_raw:
+        return (9999, 9999, 0.0)
+
+    data = frame_data_raw[code]
+
+    pos_raw = data.get('pos_raw', 0)
+    pos_val = pos_raw if pos_raw > 0 else 9999
+
+    interval_smooth = data.get('interval_smooth')
+    interval_val = interval_smooth if interval_smooth is not None else 9999
+
+    race_progress = data.get('race_progress', 0.0)
+    race_progress_val = race_progress if not np.isnan(race_progress) else -9999
+
+    return (pos_val, interval_val, -race_progress_val)
+
+
 def load_session(year, round_number, session_type='R'):
     # session_type: 'R' (Race), 'S' (Sprint) etc.
     session = fastf1.get_session(year, round_number, session_type)
