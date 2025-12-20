@@ -1,3 +1,22 @@
+## ⚠️ CRITICAL: Code Review Rule for f1_data.py
+
+**ANY logic changes to `shared/telemetry/f1_data.py` REQUIRE independent code review by an expert agent BEFORE committing.**
+
+This rule exists because f1_data.py is the core telemetry processing hub - a single logic error can cause silent data corruption affecting all race replays.
+
+👉 **See:** [`docs/DEVELOPMENT/f1-data-review-rule.md`](../../docs/DEVELOPMENT/f1-data-review-rule.md)
+
+**Before modifying f1_data.py logic:**
+1. Make the change
+2. Invoke specialized code review agent
+3. Get APPROVED status from review agent
+4. Create risk assessment document
+5. Reference review document in commit message
+
+This is not optional. Do not bypass this rule.
+
+---
+
 ## Core Development Rules
 
 1. **Documentation Minimalism** - Only write critical documentation. No unnecessary docs.
