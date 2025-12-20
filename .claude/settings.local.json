@@ -60,7 +60,8 @@
       "Bash(grep:*)",
       "Bash(pytest:*)",
       "Bash(ls:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(python -m pytest:*)"
     ]
   }
 }

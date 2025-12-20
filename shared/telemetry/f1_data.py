@@ -1020,20 +1020,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             # Set status based on current retirement state (not final race result)
             frame_data_raw[code]["status"] = "Retired" if driver_retired[code] else "Finished"
 
-        # IDENTIFY ACTIVE AND RETIRED DRIVERS (single source of truth)
-        # During race playback, only use driver_retired tracking (speed=0 for 10s+)
-        # Don't use final race status because it's not known during playback - show all on-track drivers
-        active_codes = [code for code in driver_codes if not driver_retired[code]]
-        out_codes = [code for code in driver_codes if driver_retired[code]]
-
-        # DEBUG frame 0-1: Show HAD retirement status
-        if i in [0, 1]:
-            had_retired = driver_retired.get("HAD", False)
-            had_zero_speed_time = driver_zero_speed_time.get("HAD", 0.0)
-            had_speed = frame_data_raw.get("HAD", {}).get("speed", 0)
-            had_progress = frame_data_raw.get("HAD", {}).get("race_progress", 0)
-            had_grid_pos = grid_positions.get("HAD", "?")
-            _debug_log(f"DEBUG frame {i} HAD: retired={had_retired}, zero_speed_time={had_zero_speed_time:.2f}s, speed={had_speed:.1f}, race_progress={had_progress:.2f}, grid_pos={had_grid_pos}, in_active_codes={'HAD' in active_codes}")
+        # Separate active from retired using consistent driver_retired tracking
+        active_codes = [c for c in driver_codes if not driver_retired[c]]
+        retired_codes = [c for c in driver_codes if driver_retired[c]]
 
         # IDENTIFY CURRENT LEADER (from active drivers only, using consolidated retirement tracking)
         if active_codes:
@@ -1064,13 +1053,7 @@ def get_race_telemetry(session, session_type='R', refresh=False):
             current_track_status = '1'
 
         # Phase 5: Use driver_retired dictionary as single source of truth (updated via zero-speed tracking)
-        # Don't re-check _detect_retirement() - it creates inconsistency with driver_retired state
-        for code in driver_codes:
-            frame_data_raw[code]["status"] = "Retired" if driver_retired[code] else "Finished"
-
-        # Separate active from retired using consistent driver_retired tracking
-        active_codes = [c for c in driver_codes if not driver_retired[c]]
-        retired_codes = [c for c in driver_codes if driver_retired[c]]
+        # active_codes and retired_codes already defined after inner driver loop
 
         # STEP 4: HYBRID SORTING (Phase 2, Task 2.2)
         # Use 3-tier sorting: pos_raw (Tier 1), interval_smooth (Tier 1.5), race_progress (Tier 2)
