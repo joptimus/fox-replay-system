@@ -937,6 +937,13 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     print(f"  Estimated time: {estimated_time_seconds:.0f}-{estimated_time_seconds*3:.0f}s (1-3ms per frame)")
     print(f"  Progress every 250 frames (~{estimated_time_seconds/num_frames*250:.1f}s)\n", flush=True)
 
+    # Precompute column indices for timing_pos_df for O(1) lookups
+    pos_col_idx = {}
+    if timing_pos_df is not None:
+        for code in driver_codes:
+            if code in timing_pos_df.columns:
+                pos_col_idx[code] = timing_pos_df.columns.get_loc(code)
+
     for i in range(num_frames):
         if i % 250 == 0:
             print(f"[FRAMES] Processing frame {i}/{num_frames} ({100*i/num_frames:.1f}%)", flush=True)
@@ -990,25 +997,14 @@ def get_race_telemetry(session, session_type='R', refresh=False):
                 frame_data_raw[code]["gap"] = None
                 frame_data_raw[code]["interval_smooth"] = None
 
-            # Phase 6: Extract stream position with per-frame fallback
-            if stream_data is not None and not stream_data.empty and code in stream_data['Driver'].values:
-                driver_stream = stream_data[stream_data['Driver'] == code]
-                if not driver_stream.empty:
-                    # Convert index to timedelta total_seconds for comparison
-                    try:
-                        index_seconds = driver_stream.index.to_series().dt.total_seconds().values
-                        time_diffs = np.abs(index_seconds - t_abs)
-                        closest_idx_loc = np.argmin(time_diffs)
-                        stream_pos = driver_stream.iloc[closest_idx_loc].get('Position')
-                    except (AttributeError, TypeError):
-                        # Index might already be numeric or have different format
-                        stream_pos = driver_stream.iloc[-1].get('Position') if len(driver_stream) > 0 else None
-
-                    if pd.notna(stream_pos):
-                        frame_data_raw[code]["pos_raw"] = int(stream_pos)
-                    else:
-                        frame_data_raw[code]["pos_raw"] = None
-                else:
+            # Phase 6: Extract stream position from pre-aligned timing_pos_df (optimized)
+            # Use precomputed column indices with .iat for O(1) lookups instead of O(D)
+            if timing_pos_df is not None and code in pos_col_idx:
+                try:
+                    col_idx = pos_col_idx[code]
+                    stream_pos = timing_pos_df.iat[i, col_idx]
+                    frame_data_raw[code]["pos_raw"] = int(stream_pos) if not pd.isna(stream_pos) else None
+                except (KeyError, IndexError):
                     frame_data_raw[code]["pos_raw"] = None
             else:
                 frame_data_raw[code]["pos_raw"] = None
