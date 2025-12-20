@@ -1002,9 +1002,18 @@ def get_race_telemetry(session, session_type='R', refresh=False):
         except Exception:
             current_track_status = '1'
 
+        # Phase 5: Detect retirements BEFORE sorting
+        for code in driver_codes:
+            if _detect_retirement(code, frame_data_raw):
+                frame_data_raw[code]["status"] = "Retired"
+
+        # Separate active from retired
+        active_codes = [c for c in driver_codes if frame_data_raw[c].get("status") != "Retired"]
+        retired_codes = [c for c in driver_codes if frame_data_raw[c].get("status") == "Retired"]
+
         # STEP 4: HYBRID SORTING (Phase 2, Task 2.2)
         # Use 3-tier sorting: pos_raw (Tier 1), interval_smooth (Tier 1.5), race_progress (Tier 2)
-        sorted_codes = sorted(active_codes, key=lambda code: sort_key_hybrid(code, frame_data_raw)) + out_codes
+        sorted_codes = sorted(active_codes, key=lambda code: sort_key_hybrid(code, frame_data_raw))
 
         # Apply hysteresis smoothing (Tier 3)
         sorted_codes = position_smoother.apply(
@@ -1016,6 +1025,9 @@ def get_race_telemetry(session, session_type='R', refresh=False):
 
         # Apply lap anchor validation (Tier 0)
         sorted_codes = _apply_lap_anchor(sorted_codes, frame_data_raw, lap_boundaries)
+
+        # Append retired drivers to end (they don't sort anymore)
+        sorted_codes = sorted_codes + retired_codes
 
         # STEP 7: Debug print to confirm FIA timing-based sorting
         if i in [0, 50, 200]:
