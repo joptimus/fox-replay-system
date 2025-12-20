@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { useCurrentFrame, useSelectedDriver, useSessionMetadata, useSectorColors } from "../store/replayStore";
+import { useCurrentFrame, useSelectedDriver, useSessionMetadata, useSectorColors, useReplayStore } from "../store/replayStore";
 import { getTeamLogoPath } from "../utils/teamLogoMap";
 import { MapSettingsPanel } from "./MapSettingsPanel";
 import { Settings } from "lucide-react";
@@ -91,11 +91,14 @@ export const TrackVisualization3D: React.FC = () => {
   const rainSegmentsRef = useRef<THREE.LineSegments | null>(null);
   const clockRef = useRef<THREE.Clock | null>(null);
   const noiseRenderTargetRef = useRef<THREE.WebGLRenderTarget | null>(null);
+  const raycasterRef = useRef<THREE.Raycaster | null>(null);
+  const mouseRef = useRef<THREE.Vector2 | null>(null);
   const initRef = useRef(false);
   const currentFrame = useCurrentFrame();
   const selectedDriver = useSelectedDriver();
   const sessionMetadata = useSessionMetadata();
   const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
+  const { setSelectedDriver } = useReplayStore();
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showWeatherPanel, setShowWeatherPanel] = useState(true);
   const [temperatureUnit, setTemperatureUnit] = useState<'C' | 'F'>('C');
@@ -151,6 +154,12 @@ try {
     canvasFound: !!renderer.domElement,
     containerHasCanvas: container.querySelector('canvas') !== null
   });
+
+  // Raycaster for driver click detection
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  raycasterRef.current = raycaster;
+  mouseRef.current = mouse;
 
   // Lighting
   const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
@@ -901,6 +910,55 @@ try {
       sceneRef.current.remove(rainSegmentsRef.current);
     }
   }, [currentFrame?.weather?.rain_state]);
+
+  // Handle driver click detection
+  useEffect(() => {
+    if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
+
+    const handleCanvasClick = (event: MouseEvent) => {
+      if (!raycasterRef.current || !mouseRef.current) return;
+
+      const rect = rendererRef.current!.domElement.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      mouseRef.current.x = (x / rect.width) * 2 - 1;
+      mouseRef.current.y = -(y / rect.height) * 2 + 1;
+
+      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current!);
+
+      const driverMeshesArray = Array.from(driverMeshesRef.current.values());
+      const intersects = raycasterRef.current.intersectObjects(driverMeshesArray, true);
+
+      if (intersects.length > 0) {
+        let clickedDriverCode: string | null = null;
+
+        for (const [code, mesh] of driverMeshesRef.current.entries()) {
+          if (intersects[0].object === mesh || (mesh instanceof THREE.Group && mesh.children.includes(intersects[0].object as THREE.Mesh))) {
+            clickedDriverCode = code;
+            break;
+          }
+        }
+
+        if (clickedDriverCode && currentFrame?.drivers?.[clickedDriverCode]) {
+          const driver = currentFrame.drivers[clickedDriverCode];
+          const teamColor = sessionMetadata?.driver_colors?.[clickedDriverCode] || [220, 38, 38];
+          setSelectedDriver({
+            code: clickedDriverCode,
+            data: driver,
+            color: teamColor
+          });
+        }
+      }
+    };
+
+    const canvas = rendererRef.current.domElement;
+    canvas.addEventListener('click', handleCanvasClick);
+
+    return () => {
+      canvas.removeEventListener('click', handleCanvasClick);
+    };
+  }, [currentFrame, sessionMetadata, setSelectedDriver]);
 
   const convertTemperature = (celsius: number): number => {
     if (temperatureUnit === 'F') {

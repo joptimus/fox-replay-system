@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { dataService } from "../services/dataService";
+import { getLocationFlagEmoji } from "../utils/countryFlags";
 import { motion } from "framer-motion";
 
 interface LandingPageProps {
@@ -117,7 +118,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 {currentRoundData.location && (
                   <div className="info-row">
                     <span className="info-label">Location:</span>
-                    <span className="info-value">{currentRoundData.location}</span>
+                    <span className="info-value">
+                      {getLocationFlagEmoji(currentRoundData.location)} {currentRoundData.location}
+                    </span>
                   </div>
                 )}
               </div>

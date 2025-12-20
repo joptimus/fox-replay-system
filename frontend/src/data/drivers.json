@@ -170,6 +170,7 @@
     {"First":"Pierre","Last":"Gasly","Code":"GAS","Country":"France","Team":"Alpine","CarNumber":"10"},
     {"First":"Franco","Last":"Colapinto","Code":"COL","Country":"Argentina","Team":"Alpine","CarNumber":"43"},
     {"First":"Alexander","Last":"Albon","Code":"ALB","Country":"United Kingdom","Team":"Williams","CarNumber":"23"},
-    {"First":"Carlos","Last":"Sainz","Code":"SAI","Country":"Spain","Team":"Williams","CarNumber":"55"}
+    {"First":"Carlos","Last":"Sainz","Code":"SAI","Country":"Spain","Team":"Williams","CarNumber":"55"},
+    {"First":"Jack","Last":"Doohan","Code":"DOO","Country":"Australia","Team":"Alpine","CarNumber":"7"}
   ]
 }

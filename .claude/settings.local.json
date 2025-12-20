@@ -56,7 +56,11 @@
       "Bash(python -m py_compile:*)",
       "Bash(timeout 30 npm run dev:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(grep:*)",
+      "Bash(pytest:*)",
+      "Bash(ls:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

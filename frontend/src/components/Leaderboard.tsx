@@ -44,7 +44,22 @@ export const Leaderboard: React.FC = () => {
     );
   }, [metadata?.track_statuses, currentFrame]);
 
-  if (!currentFrame || !metadata || !currentFrame.drivers) return <div className="p-4 f1-monospace">LOADING...</div>;
+  if (!currentFrame || !metadata || !currentFrame.drivers) return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      width: '100%',
+      color: '#6b7280',
+      fontSize: '0.875rem',
+      fontWeight: 600,
+      letterSpacing: '0.05em',
+      fontFamily: 'monospace',
+    }}>
+      SELECT A RACE
+    </div>
+  );
 
   const totalLaps = metadata?.total_laps || 0;
   const currentLap = currentFrame?.lap || 0;

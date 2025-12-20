@@ -18,6 +18,7 @@ import { ComparisonPage } from "./components/ComparisonPage";
 import { VerticalNavMenu } from "./components/VerticalNavMenu";
 import { motion } from "framer-motion";
 import { dataService } from "./services/dataService";
+import { preloadDriverImages, preloadTeamLogos, preloadTyreIcons, preloadCommonImages } from "./utils/imagePreloader";
 
 
 const getImageExtension = (year: number, imageType: 'driver' | 'number' = 'driver'): string => {
@@ -332,6 +333,17 @@ function AppRoutes() {
       }
       setSessionLoading(true);
 
+      // Preload images in the background while loading the session
+      const drivers = dataService.getAllDriversForYear(year);
+      const driverCodes = drivers.map(d => d.Code);
+
+      Promise.all([
+        preloadDriverImages(driverCodes, year),
+        preloadTeamLogos(),
+        preloadTyreIcons(),
+        preloadCommonImages(),
+      ]).catch(err => console.warn("Image preloading failed:", err));
+
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -366,6 +378,17 @@ function AppRoutes() {
       }
       setSessionLoading(true);
 
+      // Preload images in the background while loading the session
+      const drivers = dataService.getAllDriversForYear(year);
+      const driverCodes = drivers.map(d => d.Code);
+
+      Promise.all([
+        preloadDriverImages(driverCodes, year),
+        preloadTeamLogos(),
+        preloadTyreIcons(),
+        preloadCommonImages(),
+      ]).catch(err => console.warn("Image preloading failed:", err));
+
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -384,7 +407,10 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage onSessionSelect={handleSessionSelect} isLoading={session.isLoading} />} />
-      <Route path="/replay" element={<ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} />} />
+      <Route
+        path="/replay"
+        element={session.sessionId ? <ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} /> : <Navigate to="/" replace />}
+      />
       <Route path="/comparison" element={<ComparisonPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
