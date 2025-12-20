@@ -267,7 +267,7 @@ def _calculate_gaps(sorted_codes, frame_data):
 
     return gaps
 
-def _smooth_interval_data(stream_data, window_length=7, polyorder=2):
+def _smooth_interval_data(stream_data: pd.DataFrame, window_length: int = 7, polyorder: int = 2) -> pd.DataFrame:
     """
     Smooth IntervalToPositionAhead using Savitzky-Golay filter.
 
@@ -291,6 +291,10 @@ def _smooth_interval_data(stream_data, window_length=7, polyorder=2):
 
     if "Interval_s" not in smoothed.columns:
         print("Warning: Interval_s column not found in stream_data")
+        return smoothed
+
+    if "Driver" not in smoothed.columns:
+        print("Warning: Driver column not found in stream_data")
         return smoothed
 
     intervals_s = smoothed["Interval_s"].values

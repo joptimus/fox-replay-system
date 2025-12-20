@@ -41,3 +41,12 @@ def test_smooth_interval_data_empty():
     result = _smooth_interval_data(stream_data)
 
     assert result.empty
+
+
+def test_smooth_interval_data_missing_driver_column():
+    """Test that missing Driver column is handled gracefully"""
+    stream_data = pd.DataFrame({
+        'Interval_s': [0.5, 0.51, 0.52],
+    })
+    result = _smooth_interval_data(stream_data)
+    assert result is not None
