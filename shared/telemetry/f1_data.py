@@ -404,7 +404,16 @@ def get_race_telemetry(session, session_type='R', refresh=False):
     timing_gap_df = None
     timing_pos_df = None
     try:
-        timing = get_stream_timing(session).reset_index()
+        stream_data = get_stream_timing(session)
+
+        # Phase 1: Smooth continuous signals BEFORE sorting
+        if stream_data is not None and not stream_data.empty:
+            stream_data = _smooth_interval_data(stream_data)
+            print(f"Applied Savitzky-Golay smoothing to IntervalToPositionAhead data")
+        else:
+            print("No stream timing data available for smoothing")
+
+        timing = stream_data.reset_index()
         timing_gap_df = timing.pivot(index="Date", columns="Driver", values="GapToLeader_s")
         timing_pos_df = timing.pivot(index="Date", columns="Driver", values="Position")
 
