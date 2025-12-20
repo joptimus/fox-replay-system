@@ -395,7 +395,10 @@ class PositionSmoothing:
         track_status: str
     ) -> list[str]:
         """
-        Apply hysteresis smoothing to position order.
+        Apply hysteresis smoothing to prevent position flicker.
+
+        Prevents rapid oscillations by requiring a minimum time threshold before accepting
+        position changes, but ALWAYS returns all drivers in sorted_codes (never drops drivers).
 
         Args:
             sorted_codes: Current driver order from sort_key_hybrid
@@ -404,28 +407,57 @@ class PositionSmoothing:
             track_status: Track status code ('1'=Green, '4'=SC, '6'/'7'=VSC, etc.)
 
         Returns:
-            Smoothed driver order with hysteresis applied
+            Smoothed driver order (all drivers preserved, reordered for hysteresis)
         """
         if not self.previous_order:
             self.previous_order = sorted_codes.copy()
             return sorted_codes
 
         hysteresis_threshold = self._get_threshold(track_status)
-        smoothed_order: list[str] = []
 
-        for position_idx, current_driver in enumerate(sorted_codes):
-            previous_driver = self.previous_order[position_idx] if position_idx < len(self.previous_order) else None
+        # Map each driver to its position in current and previous orders
+        current_pos = {code: idx for idx, code in enumerate(sorted_codes)}
+        previous_pos = {code: idx for idx, code in enumerate(self.previous_order)}
 
-            if current_driver != previous_driver:
-                time_since_last_change = current_time - self.last_change_time.get(position_idx, 0.0)
+        # Track drivers that have "accepted" position changes
+        accepted_changes: dict[str, bool] = {}
 
-                if time_since_last_change >= hysteresis_threshold:
-                    smoothed_order.append(current_driver)
-                    self.last_change_time[position_idx] = current_time
-                else:
-                    smoothed_order.append(previous_driver)
+        for code in sorted_codes:
+            prev_idx = previous_pos.get(code, -1)
+            curr_idx = current_pos[code]
+
+            if prev_idx == -1 or prev_idx == curr_idx:
+                # New driver or same position: always accept
+                accepted_changes[code] = True
             else:
-                smoothed_order.append(current_driver)
+                # Position changed: check if enough time has passed
+                time_since_last_change = current_time - self.last_change_time.get(code, 0.0)
+                if time_since_last_change >= hysteresis_threshold:
+                    accepted_changes[code] = True
+                    self.last_change_time[code] = current_time
+                else:
+                    # Not enough time: keep driver in previous position
+                    accepted_changes[code] = False
+
+        # Build smoothed order: keep drivers that haven't been accepted in their previous positions
+        smoothed_order: list[str] = []
+        remaining_drivers = set(sorted_codes)
+
+        for prev_idx, prev_code in enumerate(self.previous_order):
+            if prev_code not in remaining_drivers:
+                continue  # Driver was retired/removed
+
+            curr_accepted = accepted_changes.get(prev_code, True)
+            if not curr_accepted:
+                # Driver not accepted position change, keep in previous position
+                smoothed_order.append(prev_code)
+                remaining_drivers.remove(prev_code)
+
+        # Add all remaining drivers (those with accepted changes) in their new order
+        for code in sorted_codes:
+            if code in remaining_drivers:
+                smoothed_order.append(code)
+                remaining_drivers.remove(code)
 
         self.previous_order = smoothed_order.copy()
         return smoothed_order
