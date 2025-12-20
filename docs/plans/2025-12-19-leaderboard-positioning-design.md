@@ -840,23 +840,41 @@ else:
 
 ## 5. Implementation Checklist (Phase by Phase)
 
+### Phase 0: API Isolation Layer (Foundation)
+- [ ] Create `shared/telemetry/fastf1_adapter.py` file
+- [ ] Implement `get_stream_timing()` adapter
+- [ ] Implement `get_track_status()` adapter
+- [ ] Implement `get_lap_timing()` adapter
+- [ ] Implement `get_position_data()` adapter
+- [ ] Convert all Timedelta columns to seconds in adapters
+- [ ] Replace all `fastf1.api.*` calls in f1_data.py with adapter functions
+- [ ] Test adapter isolation (ensure no direct API calls remain)
+
 ### Phase 1: Continuous Signal Smoothing
-- [ ] Add `_smooth_gap_data()` function (Savitzky-Golay on gaps)
+- [ ] Add `_smooth_interval_data()` function (Savitzky-Goyal filter on IntervalToPositionAhead)
 - [ ] Import scipy.signal.savgol_filter
-- [ ] Apply smoothing to `timing_gap_df` after resampling
-- [ ] Store smoothed gaps as `gap_smoothed` in frame_data_raw
+- [ ] Apply smoothing AFTER getting stream_data from adapter (phase 0)
+- [ ] Smooth on `IntervalToPositionAhead` (gap to car ahead), NOT `GapToLeader` (gap to leader changes with reference)
+- [ ] Store smoothed intervals as `interval_smooth` in stream_data DataFrame
+- [ ] Extract `interval_smooth` into frame_data_raw[code] for each driver during frame generation
+- [ ] Use `interval_smooth` in sorting key (Tier 0.5 tie-breaker)
 
 ### Phase 2: Improved Sorting with Continuous Signals
 - [ ] Replace `sort_key()` with `sort_key_hybrid()`
-- [ ] Update sort key to use `gap_smoothed` (Tier 1) and `race_progress` (Tier 2)
+- [ ] Tier 0.5 Primary: FIA stream position (stream_position field)
+- [ ] Tier 0.5 Tie-breaker: Smoothed IntervalToPositionAhead (`interval_smooth` field)
+- [ ] Tier 2 Fallback: Lap-aware race_progress (distance-based fallback)
 - [ ] Ensure sort operates on smoothed continuous data, not integer positions
-- [ ] Test early-race stability (frames 0-100)
+- [ ] Test early-race stability (frames 0-100): verify no random reshuffles
 
-### Phase 3: Hysteresis Layer (UI Noise Rejection)
-- [ ] Add `PositionSmoothing` class
-- [ ] Implement 5m hysteresis threshold
+### Phase 3: Hysteresis Layer (UI Noise Rejection) + Track Status Awareness
+- [ ] Add `PositionSmoothing` class with time-based threshold (NOT distance-based)
+- [ ] Implement 1.0 second time-based hysteresis threshold on `interval_smooth`
+- [ ] Add 2-frame confirmation via `swap_candidates` dict (confirm swap on 2nd consecutive frame)
+- [ ] Add track status awareness: `disable()` during SC/VSC/Red Flag, `enable()` otherwise
 - [ ] Instantiate `position_smoother` at frame loop start (line ~600)
 - [ ] Apply smoothing after sorting: `sorted_codes = position_smoother.apply(...)`
+- [ ] Check track status each frame: `if current_status in ['4','6','7']: position_smoother.disable()`
 
 ### Phase 4: Lap Anchor Validation (Tier 0)
 - [ ] Add `_apply_lap_anchor()` function
