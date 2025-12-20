@@ -1,81 +1,195 @@
 # F1 Race Replay
 
-A full-stack web application for exploring Formula 1 race telemetry with interactive race replay, live leaderboards, and detailed telemetry analysis.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status: Beta](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/jamesadams90/f1-race-replay)
 
-## Quick Start
+A full-stack web application for exploring Formula 1 race telemetry with interactive 3D race visualization, live leaderboards, and detailed telemetry analysis. Powered by [FastF1](https://docs.fastf1.dev/) for real race data.
 
+## 🚀 Features
+
+- **3D Race Replay** – Interactive track visualization with real-time driver positions using Three.js
+- **Live Leaderboard** – Current standings with tyre compounds, gaps, and multi-tier positioning
+- **Driver Telemetry** – Speed, throttle, brake, gear, and DRS status analysis with charts
+- **Multi-session Support** – Race, Sprint, Qualifying, and Sprint Qualifying replays
+- **Real-time Streaming** – WebSocket-based frame delivery for smooth playback
+- **Session Comparison** – Side-by-side driver/lap comparison tools (in development)
+- **Smart Caching** – Fast reruns with automatic FastF1 and computed telemetry caching
+- **Image Preloading** – Driver images, team logos, and tyre icons with fallback support
+
+## 🛠 Tech Stack
+
+**Backend:**
+- FastAPI (Python) with WebSocket support
+- FastF1 for F1 telemetry data
+- Multiprocessing for parallel frame generation (25 FPS)
+- Pandas & NumPy for data processing
+
+**Frontend:**
+- React 18 with TypeScript
+- Three.js for 3D visualization (via react-three-fiber)
+- Zustand for state management
+- Tailwind CSS for styling
+- Vite for fast build tooling
+
+**Data Processing:**
+- Python utilities for telemetry extraction
+- Pickle-based caching system
+- Track geometry calculation from telemetry
+
+## 📦 Quick Start
+
+### Prerequisites
+
+- Python 3.8+
+- Node.js 16+
+- npm or yarn
+
+### Installation
+
+1. **Clone the repository:**
 ```bash
-# Full stack (frontend + backend)
-node dev.js
-
-# Or separately
-python backend/main.py          # http://localhost:8000
-cd frontend && npm run dev      # http://localhost:5173
+git clone https://github.com/jamesadams90/f1-race-replay.git
+cd f1-race-replay
 ```
 
-## Features
-
-- **3D Race Replay:** Interactive track visualization with real-time driver positions
-- **Live Leaderboard:** Current standings with tyre compounds and gaps
-- **Driver Telemetry:** Speed, throttle, brake, gear, and DRS status for selected drivers
-- **Multi-session Support:** Race, Sprint, Qualifying, and Sprint Qualifying replays
-- **WebSocket Streaming:** Real-time frame data delivery for smooth playback
-- **Session Comparison:** Compare telemetry across multiple drivers and laps
-- **Smart Caching:** Fast reruns with automatic FastF1 and telemetry caching
-
-## Architecture
-
-```
-Frontend (React/TypeScript/Three.js) ←→ Backend (FastAPI/WebSocket)
-                ↓ Imports
-         Shared Code (Telemetry processing, caching)
-```
-
-## Setup
-
-**Backend dependencies:**
+2. **Install dependencies:**
 ```bash
+# Backend
 pip install -r requirements.txt
-```
 
-**Frontend dependencies:**
-```bash
+# Frontend
 cd frontend && npm install
 ```
 
-## Usage
+3. **Run the full stack:**
+```bash
+node dev.js
+```
 
-Visit `http://localhost:5173` and select a season/round to start replaying.
+Open [http://localhost:5173](http://localhost:5173) and select a season/round to start replaying.
 
-**To list available rounds:**
+### Running Components Separately
+
+**Backend only:**
+```bash
+python backend/main.py
+# Available at http://localhost:8000
+```
+
+**Frontend only:**
+```bash
+cd frontend && npm run dev
+# Available at http://localhost:5173
+```
+
+### Utility Commands
+
+**List available rounds:**
 ```bash
 python backend/main.py --list-rounds 2025
 python backend/main.py --list-sprints 2025
 ```
 
-## Project Structure
+**Build for production:**
+```bash
+cd frontend && npm run build
+```
 
-- **`backend/`** - FastAPI server with REST/WebSocket APIs
-- **`frontend/`** - React web UI with 3D visualization
-- **`shared/`** - Telemetry processing, caching, and utilities
-- **`legacy/`** - Legacy Arcade desktop app (reference)
+## 📚 Documentation
 
-See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for detailed architecture.
+- **[CLAUDE.md](./CLAUDE.md)** – Comprehensive development guide with architecture details, data structures, and API documentation
+- **[PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)** – Detailed directory structure and philosophy
+- **[roadmap.md](./roadmap.md)** – Planned features and development roadmap
+- **[legacy/README.md](./legacy/README.md)** – Legacy Arcade desktop app documentation
 
-## Known Issues
+## 🏗 Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│ Frontend (React/TypeScript/Three.js)            │
+│ - 3D race visualization                         │
+│ - Interactive leaderboard                       │
+│ - Playback controls & telemetry charts          │
+│ - WebSocket connection to backend               │
+└──────────────────┬──────────────────────────────┘
+                   │ WebSocket/HTTP
+┌──────────────────▼──────────────────────────────┐
+│ Backend (FastAPI)                               │
+│ - Session management                            │
+│ - Frame streaming via WebSocket                 │
+│ - Track geometry calculation                    │
+│ - REST API endpoints                            │
+└──────────────────┬──────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────┐
+│ Data Processing (Python/shared/)                │
+│ - FastF1 telemetry loading                      │
+│ - Multiprocessing frame generation (25 FPS)    │
+│ - Caching system (.fastf1-cache/, data/)       │
+└─────────────────────────────────────────────────┘
+```
+
+## 🐛 Known Issues
 
 - Leaderboard may be inaccurate in first few corners due to telemetry precision
 - Pit stops can temporarily affect position calculations
 - Final lap positions sometimes affected by final telemetry point locations
 
-## Contributing
+See [Issues](https://github.com/jamesadams90/f1-race-replay/issues) for the full list and to report new ones.
 
-Contributions welcome! Please check [roadmap.md](./roadmap.md) for planned features.
+## 🤝 Contributing
 
-## License
+We welcome contributions! Here's how to get started:
 
-MIT License - See LICENSE file for details.
+1. **Fork the repository** and create your feature branch (`git checkout -b feature/amazing-feature`)
+2. **Follow the development guidelines** in [CLAUDE.md](./CLAUDE.md)
+3. **Test your changes** thoroughly
+4. **Commit with clear messages** describing your changes
+5. **Push to your branch** and open a Pull Request
 
-## Disclaimer
+### Development Workflow
 
-Formula 1 and related trademarks are property of their respective owners. All data sourced from public APIs for educational and non-commercial use only.
+- **Code style:** Follow existing patterns in the codebase
+- **Testing:** Run tests before submitting PRs (if applicable)
+- **Documentation:** Update docs for new features
+- **No Claude attribution:** Keep commit messages focused on changes only
+
+See the [roadmap.md](./roadmap.md) for planned features and areas where help is needed.
+
+## 📊 Performance Notes
+
+- **First run:** Telemetry computation can take several minutes (depends on session length)
+- **Subsequent runs:** Loads from cache in seconds
+- **Multiprocessing:** Uses all available CPU cores for data processing
+
+## 📋 Project Status
+
+**Current Phase:** Beta (Phase 7 - Comprehensive Testing & Cleanup)
+
+**Recent Updates:**
+- ✅ Position smoothing for accurate driver tracking
+- ✅ Playback animation loop with frame advancement
+- ✅ Driver card display with country flags
+- ✅ Image preloading and optimization
+- 🚧 Session comparison tools (in development)
+- 🚧 Qualifying & practice replay (in development)
+- 📋 GUI menu system (planned)
+- 📋 Lap telemetry analysis (planned)
+
+## 📄 License
+
+This project is licensed under the MIT License – see [LICENSE](./LICENSE) file for details.
+
+## ⚖️ Disclaimer
+
+Formula 1 and related trademarks are property of their respective owners. This project uses publicly available data from FastF1 for educational and non-commercial purposes only. No official endorsement is implied.
+
+## 🙋 Support
+
+- **Questions?** Check out the [documentation](./CLAUDE.md) and [roadmap](./roadmap.md)
+- **Found a bug?** [Open an issue](https://github.com/jamesadams90/f1-race-replay/issues)
+- **Want to discuss?** Discussions welcome in the issues section
+
+---
+
+**Made with ❤️ by F1 fans, for F1 fans**

@@ -370,7 +370,7 @@ class PositionSmoothing:
     def __init__(self) -> None:
         """Initialize empty previous order and last change times."""
         self.previous_order: list[str] = []
-        self.last_change_time: dict[int, float] = {}
+        self.last_change_time: dict[str, float] = {}
 
     def _get_threshold(self, track_status: str) -> float:
         """

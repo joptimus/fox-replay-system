@@ -1,17 +1,27 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Comprehensive development guide for F1 Race Replay. This document covers architecture, data structures, APIs, and development guidelines for both Claude Code and human contributors.
 
 ## Project Overview
 
-F1 Race Replay is a full-stack application for visualizing Formula 1 race telemetry and replaying race events with interactive controls. It consists of:
+F1 Race Replay is a full-stack web application for exploring Formula 1 race telemetry with interactive 3D visualization, live leaderboards, and telemetry analysis. It consists of:
+
 - **Backend:** FastAPI server providing telemetry data via REST/WebSocket APIs
-- **Frontend:** React/TypeScript web application with 3D visualization using Three.js
+- **Frontend:** React/TypeScript web application with 3D visualization using Three.js and Zustand state management
 - **Data Processing:** Python-based telemetry extraction and caching via FastF1
+- **Shared Utilities:** Python telemetry processing and caching shared between backend and legacy systems
 
-## RULES
+## Development Standards
 
-**FOLLOW RULES IN .claude/rules/RULES.MD**
+**Code Quality & Contribution Guidelines:**
+1. No unnecessary documentation – only document critical items
+2. No comments in code – code should be self-explanatory
+3. Keep commit messages focused on changes only (no tool attribution)
+4. Only create documents if explicitly requested
+5. Follow existing code patterns in the codebase
+6. Test changes thoroughly before submitting PRs
+
+See [.claude/rules/RULES.md](./.claude/rules/RULES.md) for detailed rules.
 
 ## Common Commands
 

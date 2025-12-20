@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentFrame, useSelectedDriver, useReplayStore } from "../store/replayStore";
+import { leaderboardDebugger } from "../utils/leaderboardDebug";
 
 const TYRE_MAP: Record<number, string> = {
   0: '0.0.png', 1: '1.0.png', 2: '2.0.png', 3: '3.0.png', 4: '4.0.png'
@@ -12,6 +13,24 @@ export const Leaderboard: React.FC = () => {
   const { setSelectedDriver } = useReplayStore();
   const session = useReplayStore((state) => state.session);
   const metadata = session?.metadata;
+
+  // Log frame data for debugging (first 150 frames)
+  React.useEffect(() => {
+    if (!currentFrame || !currentFrame.drivers) return;
+
+    const frameIndex = Math.round((currentFrame.t || 0) * 25); // Convert time to frame index
+    if (frameIndex <= 150) {
+      leaderboardDebugger.logFrame(frameIndex, currentFrame.t || 0, currentFrame.drivers);
+    }
+
+    // Print report at frame 150
+    if (frameIndex === 150) {
+      console.log('\n=== Frame 150 Reached - Printing Debug Report ===\n');
+      leaderboardDebugger.printReport();
+      console.log('\n=== Export Report as JSON ===\n');
+      console.log(leaderboardDebugger.exportReport());
+    }
+  }, [currentFrame]);
 
   const raceStarted = React.useMemo(() => {
     if (!metadata?.race_start_time || !currentFrame) return false;

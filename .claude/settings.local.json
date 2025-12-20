@@ -61,7 +61,8 @@
       "Bash(pytest:*)",
       "Bash(ls:*)",
       "Bash(git reset:*)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(python3 -m pip install:*)"
     ]
   }
 }
