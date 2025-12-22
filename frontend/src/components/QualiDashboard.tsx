@@ -104,7 +104,7 @@ export const QualiDashboard: React.FC = () => {
           />
         </div>
 
-        <div className="flex-1 relative">
+        <div className="flex-1 relative h-full">
           <QualiGhostRace
             trackGeometry={trackGeometry ?? null}
             drivers={drivers}

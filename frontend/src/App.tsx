@@ -192,11 +192,36 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
   const year = session.metadata?.year;
   const round = session.metadata?.round;
+  const sessionType = session.metadata?.session_type;
   const raceName = year && round
     ? `${year} ${dataService.getRaceName(year, round).toUpperCase()}`
     : 'F1 RACE REPLAY';
   const trackName = year && round ? dataService.getTrackName(year, round) : '';
   const location = year && round ? dataService.getLocation(year, round) : '';
+
+  const isQualifying = sessionType === 'Q' || sessionType === 'SQ';
+  const isPractice = sessionType === 'FP1' || sessionType === 'FP2' || sessionType === 'FP3';
+
+  if (isQualifying) {
+    return (
+      <div className="flex h-screen overflow-hidden">
+        <VerticalNavMenu />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <QualiDashboard />
+        </div>
+        <SidebarMenu
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          currentYear={year}
+          currentRound={round}
+          onSessionSelect={onSessionSelect}
+          onRefreshData={onRefreshData}
+          showSectorColors={showSectorColors}
+          onToggleSectorColors={toggleSectorColors}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -242,10 +267,8 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
         </header>
 
         <aside className="sidebar-scroll">
-          {year && round && (session.metadata?.session_type === 'FP1' || session.metadata?.session_type === 'FP2' || session.metadata?.session_type === 'FP3') ? (
+          {isPractice ? (
             <FP1Dashboard />
-          ) : year && round && (session.metadata?.session_type === 'Q' || session.metadata?.session_type === 'SQ') ? (
-            <QualiDashboard />
           ) : (
             <Leaderboard />
           )}

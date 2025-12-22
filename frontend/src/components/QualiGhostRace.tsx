@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 
 interface Driver {
   code: string;
@@ -36,22 +36,40 @@ export const QualiGhostRace: React.FC<QualiGhostRaceProps> = ({
   onDriverClick,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasSize({ width, height });
+        }
+      }
+    });
+
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !trackGeometry) return;
+    if (canvasSize.width === 0 || canvasSize.height === 0) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = canvasSize.width * dpr;
+    canvas.height = canvasSize.height * dpr;
     ctx.scale(dpr, dpr);
 
-    const width = rect.width;
-    const height = rect.height;
+    const width = canvasSize.width;
+    const height = canvasSize.height;
     const padding = 40;
 
     const xRange = trackGeometry.x_max - trackGeometry.x_min;
@@ -135,7 +153,7 @@ export const QualiGhostRace: React.FC<QualiGhostRaceProps> = ({
     }
 
     ctx.globalAlpha = 1;
-  }, [trackGeometry, drivers, driverColors, selectedDriver, eliminatedDrivers]);
+  }, [trackGeometry, drivers, driverColors, selectedDriver, eliminatedDrivers, canvasSize]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
