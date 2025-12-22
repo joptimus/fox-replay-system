@@ -3,6 +3,28 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentFrame, useReplayStore } from "../store/replayStore";
 import { TYRE_NAMES, TYRE_COLORS } from "../types";
 
+const TYRE_MAP: Record<number, string> = {
+  0: '0.0.png', 1: '1.0.png', 2: '2.0.png', 3: '3.0.png', 4: '4.0.png'
+};
+
+const formatSectorTimePanel = (seconds: number | null): string => {
+  if (!seconds || seconds <= 0) return "-";
+  if (seconds < 60) {
+    return seconds.toFixed(3);
+  } else {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
+  }
+};
+
+const formatLapTimePanel = (seconds: number | null): string => {
+  if (!seconds || seconds <= 0) return "-";
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
+};
+
 const TelemetryPanel: React.FC<{
   driver: any;
   isOpen: boolean;
@@ -12,17 +34,6 @@ const TelemetryPanel: React.FC<{
   fastestS3: number;
   getSectorColor: (sectorTime: number | null | undefined, fastestTime: number, driverCode: string, sectorNum: 1 | 2 | 3) => string;
 }> = ({ driver, isOpen, onClose, fastestS1, fastestS2, fastestS3, getSectorColor }) => {
-  const formatTimeDisplay = (milliseconds: number | null): string => {
-    if (!milliseconds) return "-";
-    const seconds = milliseconds / 1000;
-    if (seconds < 60) {
-      return seconds.toFixed(3) + "s";
-    } else {
-      const minutes = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${minutes}:${secs.toFixed(3).padStart(7, '0')}`;
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -127,7 +138,7 @@ const TelemetryPanel: React.FC<{
                       fontSize: "0.85rem",
                       color: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1),
                       fontWeight: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1) !== "#9ca3af" ? 700 : 600,
-                    }}>{formatTimeDisplay(driver.data.sector1)}</span>
+                    }}>{formatSectorTimePanel(driver.data.sector1)}</span>
                   </div>
                 )}
                 {driver.data.sector2 && (
@@ -137,7 +148,7 @@ const TelemetryPanel: React.FC<{
                       fontSize: "0.85rem",
                       color: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2),
                       fontWeight: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2) !== "#9ca3af" ? 700 : 600,
-                    }}>{formatTimeDisplay(driver.data.sector2)}</span>
+                    }}>{formatSectorTimePanel(driver.data.sector2)}</span>
                   </div>
                 )}
                 {driver.data.sector3 && (
@@ -147,7 +158,7 @@ const TelemetryPanel: React.FC<{
                       fontSize: "0.85rem",
                       color: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3),
                       fontWeight: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3) !== "#9ca3af" ? 700 : 600,
-                    }}>{formatTimeDisplay(driver.data.sector3)}</span>
+                    }}>{formatSectorTimePanel(driver.data.sector3)}</span>
                   </div>
                 )}
               </div>
@@ -157,7 +168,7 @@ const TelemetryPanel: React.FC<{
           {driver.data.lap_time && driver.data.lap_time > 0 && (
             <div style={{ paddingTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.1)" }}>
               <div className="f1-monospace" style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "8px" }}>LAP TIME</div>
-              <div className="f1-monospace" style={{ fontSize: "1.75rem", fontWeight: 700 }}>{formatTimeDisplay(driver.data.lap_time)}</div>
+              <div className="f1-monospace" style={{ fontSize: "1.75rem", fontWeight: 700 }}>{formatLapTimePanel(driver.data.lap_time)}</div>
             </div>
           )}
         </motion.div>
@@ -172,16 +183,17 @@ export const FP1Dashboard: React.FC = () => {
   const metadata = session?.metadata;
   const [selectedDriverCode, setSelectedDriverCode] = useState<string | null>(null);
 
-  if (!currentFrame || !metadata || !currentFrame.drivers) {
+  if (!currentFrame || !metadata || !currentFrame.drivers || !metadata.driver_colors) {
     return <div className="p-4 f1-monospace">LOADING...</div>;
   }
 
+  const driverColors = metadata.driver_colors;
   const drivers = Object.entries(currentFrame.drivers)
     .map(([code, data]) => ({
       code,
       data,
       position: data.position,
-      color: metadata.driver_colors[code] || [255, 255, 255],
+      color: driverColors[code] || [255, 255, 255],
     }))
     .sort((a, b) => a.position - b.position);
 
@@ -227,16 +239,22 @@ export const FP1Dashboard: React.FC = () => {
     return "#9ca3af"; // Gray - normal
   };
 
-  const formatTimeDisplay = (milliseconds: number | null): string => {
-    if (!milliseconds) return "-";
-    const seconds = milliseconds / 1000;
+  const formatSectorTime = (seconds: number | null): string => {
+    if (!seconds || seconds <= 0) return "-";
     if (seconds < 60) {
-      return seconds.toFixed(1) + "s";
+      return seconds.toFixed(3);
     } else {
       const minutes = Math.floor(seconds / 60);
       const secs = seconds % 60;
-      return `${minutes}:${secs.toFixed(1).padStart(5, '0')}`;
+      return `${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
     }
+  };
+
+  const formatLapTime = (seconds: number | null): string => {
+    if (!seconds || seconds <= 0) return "-";
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
   };
 
   const selectedDriverData = selectedDriverCode ? drivers.find(d => d.code === selectedDriverCode) : null;
@@ -292,10 +310,10 @@ export const FP1Dashboard: React.FC = () => {
         }}>
           {/* Table Header */}
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "40px 40px 40px auto 80px 80px 80px 80px 80px",
-            gap: "0",
-            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "12px 24px",
             backgroundColor: "rgba(0, 0, 0, 0.5)",
             borderBottom: "2px solid var(--f1-border)",
             position: "sticky",
@@ -303,15 +321,15 @@ export const FP1Dashboard: React.FC = () => {
             zIndex: 10,
             flexShrink: 0,
           }}>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700 }}>POS</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700 }}>LAP</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700 }}>TYR</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700 }}>DRIVER</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, textAlign: "right" }}>S1</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, textAlign: "right" }}>S2</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, textAlign: "right" }}>S3</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, textAlign: "right" }}>LAP TIME</div>
-            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, textAlign: "right" }}>SPEED</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "40px" }}>POS</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "40px" }}>LAP</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "40px" }}>TYR</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 2, minWidth: "60px" }}>DRIVER</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "60px", textAlign: "right" }}>S1</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "60px", textAlign: "right" }}>S2</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "60px", textAlign: "right" }}>S3</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1.5, minWidth: "80px", textAlign: "right" }}>LAP TIME</div>
+            <div className="f1-monospace" style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: 700, flex: 1, minWidth: "50px", textAlign: "right" }}>SPEED</div>
           </div>
 
           {/* Table Rows */}
@@ -319,7 +337,6 @@ export const FP1Dashboard: React.FC = () => {
             {drivers.map((driver) => {
               const isSelected = selectedDriverCode === driver.code;
               const hexColor = `rgb(${driver.color[0]}, ${driver.color[1]}, ${driver.color[2]})`;
-              const tyreColor = TYRE_COLORS[driver.data.tyre as keyof typeof TYRE_COLORS];
 
               return (
                 <motion.div
@@ -333,11 +350,10 @@ export const FP1Dashboard: React.FC = () => {
                     }
                   }}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "40px 40px 40px auto 80px 80px 80px 80px 80px",
-                    gap: "0",
-                    padding: "12px 16px",
+                    display: "flex",
                     alignItems: "center",
+                    gap: "8px",
+                    padding: "12px 24px",
                     backgroundColor: isSelected ? "rgba(225, 6, 0, 0.2)" : "rgba(255, 255, 255, 0.02)",
                     borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
                     borderLeft: `4px solid ${hexColor}`,
@@ -348,66 +364,66 @@ export const FP1Dashboard: React.FC = () => {
                     backgroundColor: "rgba(255, 255, 255, 0.08)",
                   }}
                 >
-                  <div className="f1-monospace" style={{ fontSize: "0.85rem", fontWeight: 700, color: hexColor }}>
+                  <div className="f1-monospace" style={{ fontSize: "0.85rem", fontWeight: 700, color: hexColor, flex: 1, minWidth: "40px" }}>
                     {driver.position}
                   </div>
 
-                  <div className="f1-monospace" style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                  <div className="f1-monospace" style={{ fontSize: "0.85rem", fontWeight: 600, flex: 1, minWidth: "40px" }}>
                     {driver.data.lap}
                   </div>
 
-                  <div style={{
-                    width: "32px",
-                    height: "24px",
-                    backgroundColor: tyreColor,
-                    borderRadius: "3px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    color: driver.data.tyre === 1 ? "#000" : "#fff",
-                  }}>
-                    {TYRE_NAMES[driver.data.tyre as keyof typeof TYRE_NAMES].substring(0, 1)}
+                  <div style={{ flex: 1, minWidth: "40px" }}>
+                    <img
+                      src={`/images/tyres/${TYRE_MAP[driver.data.tyre] || '2.0.png'}`}
+                      alt="tyre"
+                      style={{ height: "20px", width: "auto" }}
+                      onError={(e) => (e.currentTarget.style.opacity = '0')}
+                    />
                   </div>
 
-                  <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                  <div style={{ fontSize: "0.9rem", fontWeight: 600, flex: 2, minWidth: "60px" }}>
                     {driver.code}
                   </div>
 
                   <div className="f1-monospace" style={{
                     fontSize: "0.75rem",
                     textAlign: "right",
+                    flex: 1,
+                    minWidth: "60px",
                     color: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1),
                     fontWeight: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1) !== "#9ca3af" ? 700 : 400,
                   }}>
-                    {formatTimeDisplay(driver.data.sector1 ?? null)}
+                    {formatSectorTime(driver.data.sector1 ?? null)}
                   </div>
 
                   <div className="f1-monospace" style={{
                     fontSize: "0.75rem",
                     textAlign: "right",
+                    flex: 1,
+                    minWidth: "60px",
                     color: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2),
                     fontWeight: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2) !== "#9ca3af" ? 700 : 400,
                   }}>
-                    {formatTimeDisplay(driver.data.sector2 ?? null)}
+                    {formatSectorTime(driver.data.sector2 ?? null)}
                   </div>
 
                   <div className="f1-monospace" style={{
                     fontSize: "0.75rem",
                     textAlign: "right",
+                    flex: 1,
+                    minWidth: "60px",
                     color: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3),
                     fontWeight: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3) !== "#9ca3af" ? 700 : 400,
                   }}>
-                    {formatTimeDisplay(driver.data.sector3 ?? null)}
+                    {formatSectorTime(driver.data.sector3 ?? null)}
                   </div>
 
-                  <div className="f1-monospace" style={{ fontSize: "0.75rem", textAlign: "right", fontWeight: 600 }}>
-                    {formatTimeDisplay(driver.data.lap_time ?? null)}
+                  <div className="f1-monospace" style={{ fontSize: "0.75rem", textAlign: "right", fontWeight: 600, flex: 1.5, minWidth: "80px" }}>
+                    {formatLapTime(driver.data.lap_time ?? null)}
                   </div>
 
-                  <div className="f1-monospace" style={{ fontSize: "0.75rem", textAlign: "right", color: "#9ca3af" }}>
-                    {driver.data.speed.toFixed(0)} km/h
+                  <div className="f1-monospace" style={{ fontSize: "0.75rem", textAlign: "right", color: "#9ca3af", flex: 1, minWidth: "50px" }}>
+                    {driver.data.speed.toFixed(0)}
                   </div>
                 </motion.div>
               );

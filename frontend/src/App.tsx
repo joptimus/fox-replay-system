@@ -223,6 +223,27 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
     );
   }
 
+  if (isPractice) {
+    return (
+      <div className="flex h-screen overflow-hidden">
+        <VerticalNavMenu />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <FP1Dashboard />
+        </div>
+        <SidebarMenu
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          currentYear={year}
+          currentRound={round}
+          onSessionSelect={onSessionSelect}
+          onRefreshData={onRefreshData}
+          showSectorColors={showSectorColors}
+          onToggleSectorColors={toggleSectorColors}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <LightsBoard ref={lightsBoardRef} onSequenceComplete={handleLightsSequenceComplete} />
