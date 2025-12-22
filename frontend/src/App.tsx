@@ -57,7 +57,7 @@ const DriverImage = ({ year, code, ext }: { year: number; code: string; ext: str
       src={imageSrc}
       alt={code}
       onError={handleError}
-      style={{ width: '100%', height: '100%' }}
+      className="w-full h-full"
     />
   );
 };
@@ -83,15 +83,7 @@ const DriverNumberImage = ({ year, number, ext }: { year: number; number: string
       src={imageSrc}
       alt={`Driver ${number}`}
       onError={handleError}
-      style={{
-        height: '60px',
-        width: '100%',
-        maxWidth: '200px',
-        marginTop: '12px',
-        display: 'block',
-        objectFit: 'contain',
-        objectPosition: 'left'
-      }}
+      className="h-[60px] w-full max-w-[200px] mt-3 block object-contain object-left"
     />
   );
 };
@@ -100,21 +92,8 @@ const DriverHero = ({ year }: { year?: number }) => {
   const selected = useSelectedDriver();
 
   if (!selected) return (
-    <div className="f1-driver-card" style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      border: '1px solid #374151',
-      background: 'var(--f1-black)',
-      borderRadius: '8px',
-      textAlign: 'center',
-    }}>
-      <p className="f1-monospace" style={{
-        color: '#6b7280',
-        fontSize: '0.875rem',
-        fontWeight: 600,
-        letterSpacing: '0.05em',
-      }}>NO DRIVER SELECTED</p>
+    <div className="f1-driver-card flex items-center justify-center border border-gray-700 bg-f1-black rounded-lg text-center">
+      <p className="f1-monospace text-gray-500 text-sm font-semibold tracking-wide">NO DRIVER SELECTED</p>
     </div>
   );
 
@@ -220,55 +199,44 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   const location = year && round ? dataService.getLocation(year, round) : '';
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="flex h-screen overflow-hidden">
       <LightsBoard ref={lightsBoardRef} onSequenceComplete={handleLightsSequenceComplete} />
       <VerticalNavMenu />
       <div className="app-container">
         <header className="app-header">
-          <div className="flex items-center" style={{ gap: '16px' }}>
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setMenuOpen(true)}
-              style={{
-                background: 'var(--f1-red)',
-                border: 'none',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                fontSize: '1.2rem',
-                color: 'white',
-                borderRadius: '4px',
-                transition: 'all 0.2s ease'
-              }}
+              className="bg-f1-red hover:bg-[#c70000] text-white px-3 py-1.5 rounded text-lg border-none cursor-pointer transition-all duration-200 hover:shadow-lg"
               title="Menu"
               onMouseEnter={(e) => {
-                (e.currentTarget as any).style.background = '#c70000';
                 (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as any).style.background = 'var(--f1-red)';
                 (e.currentTarget as any).style.boxShadow = 'none';
               }}
             >
               ☰
             </button>
-            <div style={{ background: 'var(--f1-red)', padding: '4px 12px', fontWeight: 900, fontSize: '0.75rem' }}>REPLAY</div>
+            <div className="bg-f1-red text-white px-3 py-1 font-black text-xs">REPLAY</div>
             <div>
-              <h1 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em', margin: 0 }}>{raceName}</h1>
+              <h1 className="text-base font-bold tracking-wide m-0">{raceName}</h1>
               {trackName && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--f1-silver)', margin: '4px 0 0 0', fontFamily: 'monospace' }}>
+                <p className="text-xs text-f1-silver m-0 mt-1 font-mono">
                   {trackName}
                 </p>
               )}
             </div>
           </div>
-          <div style={{ flex: 1 }}></div>
-          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="flex-1"></div>
+          <div className="text-right flex flex-col gap-2">
             {location && (
-              <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
+              <div className="f1-monospace text-xs text-f1-silver">
                 {location}
               </div>
             )}
-            <div className="f1-monospace" style={{ fontSize: '0.8rem', color: 'var(--f1-silver)' }}>
-              STATUS: <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+            <div className="f1-monospace text-xs text-f1-silver">
+              STATUS: <span className={isConnected ? 'text-green-500' : 'text-red-500'}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
             </div>
           </div>
         </header>
@@ -283,18 +251,18 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           )}
         </aside>
 
-        <main style={{ position: 'relative', background: 'var(--f1-carbon)', border: '1px solid var(--f1-border)', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <main className="relative bg-f1-carbon border border-f1-border rounded-lg overflow-hidden flex flex-col">
+          <div className="flex-1 relative overflow-hidden">
             <TrackVisualization3D />
           </div>
-          <div style={{ borderTop: '1px solid var(--f1-border)' }}>
+          <div className="border-t border-f1-border">
             <PlaybackControls onPlayWithLights={handlePlayWithLights} />
           </div>
         </main>
 
         <aside className="flex flex-col overflow-hidden h-full">
           <DriverHero year={year} />
-          <div className="sidebar-scroll" style={{ background: 'var(--f1-black)', padding: '16px', borderRadius: '8px', border: '1px solid var(--f1-border)', flex: 1 }}>
+          <div className="sidebar-scroll bg-f1-black p-4 rounded-lg border border-f1-border flex-1">
             <TelemetryChart />
           </div>
         </aside>
