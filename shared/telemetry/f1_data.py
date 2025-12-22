@@ -1477,17 +1477,14 @@ def get_driver_quali_telemetry(session, driver_code: str, quali_segment: str):
 
         frame_payload = {
             "t": round(t, 3),
-            "telemetry": {
-                "x": float(resampled_data["x"][i]),
-                "y": float(resampled_data["y"][i]),
-                "dist": float(resampled_data["dist"][i]),
-                "rel_dist": float(resampled_data["rel_dist"][i]),
-                "speed": float(resampled_data["speed"][i]),
-                "gear": int(resampled_data["gear"][i]),
-                "throttle": float(resampled_data["throttle"][i]),
-                "brake": float(resampled_data["brake"][i]),
-                "drs": int(resampled_data["drs"][i]),
-            }
+            "x": float(resampled_data["x"][i]),
+            "y": float(resampled_data["y"][i]),
+            "dist": float(resampled_data["dist"][i]),
+            "speed": float(resampled_data["speed"][i]),
+            "gear": int(resampled_data["gear"][i]),
+            "throttle": float(resampled_data["throttle"][i]),
+            "brake": float(resampled_data["brake"][i]),
+            "drs": int(resampled_data["drs"][i]),
         }
         if weather_snapshot:
             frame_payload["weather"] = weather_snapshot

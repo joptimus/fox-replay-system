@@ -20,9 +20,7 @@ export const QualiDashboard: React.FC = () => {
 
   const currentSegmentData: QualiSegment | null = useMemo(() => {
     if (!qualiSegments) return null;
-    if (activeSegment === "Progressive") {
-      return qualiSegments.Q1;
-    }
+    if (activeSegment === "Progressive") return null;
     return qualiSegments[activeSegment] || null;
   }, [qualiSegments, activeSegment]);
 

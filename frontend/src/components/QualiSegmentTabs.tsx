@@ -20,7 +20,6 @@ export const QualiSegmentTabs: React.FC<QualiSegmentTabsProps> = ({
     { name: "Q1", label: "Q1", available: hasQ1 },
     { name: "Q2", label: "Q2", available: hasQ2 },
     { name: "Q3", label: "Q3", available: hasQ3 },
-    { name: "Progressive", label: "FULL", available: hasQ1 },
   ];
 
   return (
