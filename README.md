@@ -5,6 +5,8 @@
 
 A full-stack web application for exploring Formula 1 race telemetry with interactive 3D race visualization, live leaderboards, and detailed telemetry analysis. Powered by [FastF1](https://docs.fastf1.dev/) for real race data.
 
+![Race Replay](docs/SCREENSHOTS/race-replay-track-view.png)
+
 ## 🚀 Features
 
 - **3D Race Replay** – Interactive track visualization with real-time driver positions using Three.js
@@ -15,6 +17,28 @@ A full-stack web application for exploring Formula 1 race telemetry with interac
 - **Session Comparison** – Side-by-side driver/lap comparison tools (in development)
 - **Smart Caching** – Fast reruns with automatic FastF1 and computed telemetry caching
 - **Image Preloading** – Driver images, team logos, and tyre icons with fallback support
+
+### Screenshots
+
+<details>
+<summary>View more screenshots</summary>
+
+**Race Selection**
+![Home](docs/SCREENSHOTS/home-race-selection.png)
+
+**Qualifying Session**
+![Qualifying](docs/SCREENSHOTS/qualifying-q3.png)
+
+**Telemetry Comparison**
+![Telemetry](docs/SCREENSHOTS/telemetry-comparison-charts.png)
+
+**Sector Times Analysis**
+![Sectors](docs/SCREENSHOTS/telemetry-comparison-sectors.png)
+
+**Practice Session**
+![Practice](docs/SCREENSHOTS/practice-session-telemetry.png)
+
+</details>
 
 ## 🛠 Tech Stack
 
@@ -188,10 +212,11 @@ See [docs/ROADMAP.md](./docs/ROADMAP.md) for planned features and areas where he
 - ✅ Playback animation loop with frame advancement
 - ✅ Driver card display with country flags
 - ✅ Image preloading and optimization
+- ✅ Qualifying session replay with Q1/Q2/Q3 segments
+- ✅ Practice session timing and telemetry views
+- ✅ Telemetry comparison with sector times analysis
 - 🚧 Session comparison tools (in development)
-- 🚧 Qualifying & practice replay (in development)
 - 📋 GUI menu system (planned)
-- 📋 Lap telemetry analysis (planned)
 
 ## 📄 License
 

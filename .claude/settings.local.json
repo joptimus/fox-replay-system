@@ -40,7 +40,7 @@
       "Skill(superpowers:subagent-driven-development)",
       "Skill(superpowers:subagent-driven-development:*)",
       "Bash(timeout 5 python:*)",
-      "Bash(ls -la \"c:\\\\Users\\\\James\\\\Dev\\\\f1-race-replay\\\\.claude\\\\plans\"\" 2>/dev/null || echo \"Directory not found \")",
+     "Bash(ls -la \"c:\\\\Users\\\\James\\\\Dev\\\\f1-race-replay\\\\claude\\\\plans\" 2>/dev/null || echo \"Directory not found\")",
       "Bash(find:*)",
       "Bash(powershell.exe -Command \"Stop-Process -Id 113896 -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; ''Done''\")",
       "Bash(pkill:*)",
