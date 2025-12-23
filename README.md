@@ -64,8 +64,8 @@ A full-stack web application for exploring Formula 1 race telemetry with interac
 
 ### Prerequisites
 
-- **Python 3.8+** – [Download](https://www.python.org/)
-- **Node.js 16+** – [Download](https://nodejs.org/)
+- **Python 3.10+** – [Download](https://www.python.org/)
+- **Node.js 18+** (LTS recommended) – [Download](https://nodejs.org/)
 
 ### Installation (One Command)
 
