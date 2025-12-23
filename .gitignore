@@ -52,11 +52,8 @@ backend_fresh.log
 # Windows
 nul
 
-#Claude
+# Claude Code
 .claude/
-!.claude/rules/
-!.claude/rules/*.md
-!.claude/AGENT_CHECKLIST.md
 CLAUDE.md
 .playwright-mcp/
 # Git worktrees
