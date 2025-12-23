@@ -1,5 +1,5 @@
 /**
- * Main App component for F1 Race Replay
+ * Main App component for FOX Replay System
  */
 import { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
@@ -195,7 +195,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   const sessionType = session.metadata?.session_type;
   const raceName = year && round
     ? `${year} ${dataService.getRaceName(year, round).toUpperCase()}`
-    : 'F1 RACE REPLAY';
+    : 'FOX REPLAY';
   const trackName = year && round ? dataService.getTrackName(year, round) : '';
   const location = year && round ? dataService.getLocation(year, round) : '';
 

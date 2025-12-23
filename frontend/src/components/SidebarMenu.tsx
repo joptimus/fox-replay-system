@@ -433,7 +433,7 @@ export const SidebarMenu: React.FC<SidebarMenuProps> = ({
                 color: "#6b7280",
               }}
             >
-              <div style={{ marginBottom: "4px" }}>F1 Race Replay</div>
+              <div style={{ marginBottom: "4px" }}>FOX Replay System</div>
               <div>v1.0.0</div>
             </div>
           </motion.div>

@@ -46,7 +46,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           transition={{ duration: 0.6 }}
           className="landing-header"
         >
-          <h1 className="landing-title">F1 RACE REPLAY</h1>
+          <img
+            src="/fox-logo.png"
+            alt="FOX Replay System"
+            className="landing-logo"
+            style={{ maxWidth: '280px', height: 'auto', marginBottom: '1rem' }}
+          />
           <p className="landing-subtitle">Select a race to replay</p>
         </motion.div>
 

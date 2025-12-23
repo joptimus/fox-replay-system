@@ -1,5 +1,5 @@
 /**
- * Type definitions for F1 Race Replay
+ * Type definitions for FOX Replay System
  */
 
 export interface DriverData {

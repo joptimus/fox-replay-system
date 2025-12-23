@@ -1,7 +1,14 @@
-# F1 Race Replay
+<p align="center">
+  <img src="docs/SCREENSHOTS/fox_transparent.png" alt="FOX Logo" width="300">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Beta](https://img.shields.io/badge/Status-Beta-blue)](https://github.com/jamesadams90/f1-race-replay)
+<h1 align="center">FOX Replay System</h1>
+<h3 align="center">Formula One eXperience // Replay System</h3>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Status-Beta-blue" alt="Status: Beta"></a>
+</p>
 
 A full-stack web application for exploring Formula 1 race telemetry with interactive 3D race visualization, live leaderboards, and detailed telemetry analysis. Powered by [FastF1](https://docs.fastf1.dev/) for real race data.
 
@@ -221,6 +228,10 @@ See [docs/ROADMAP.md](./docs/ROADMAP.md) for planned features and areas where he
 
 This project is licensed under the MIT License – see [LICENSE](./LICENSE) file for details.
 
+## 🙏 Acknowledgments
+
+This project was inspired by [f1-race-replay](https://github.com/IAmTomShaw/f1-race-replay) by Tom Shaw. The original project provided the foundation and inspiration for FOX Replay System.
+
 ## ⚖️ Disclaimer
 
 Formula 1 and related trademarks are property of their respective owners. This project uses publicly available data from FastF1 for educational and non-commercial purposes only. No official endorsement is implied.
@@ -233,4 +244,4 @@ Formula 1 and related trademarks are property of their respective owners. This p
 
 ---
 
-**Made with ❤️ by F1 fans, for F1 fans**
+<p align="center"><strong>FOX Replay System</strong> — Made with ❤️ by F1 fans, for F1 fans</p>
