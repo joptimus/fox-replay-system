@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/SCREENSHOTS/fox_transparent.png" alt="FOX Logo" width="300">
+  <img src="docs/SCREENSHOTS/fox.jpg" alt="FOX Logo" width="300">
 </p>
 
 <h1 align="center">FOX Replay System</h1>
