@@ -141,7 +141,6 @@ npm run dev -- --no-open
 
 - **[docs/ROADMAP.md](./docs/ROADMAP.md)** – Planned features and development roadmap
 - **[docs/](./docs/)** – Architecture guides, troubleshooting, and additional documentation
-- **CLAUDE.md** – Internal development guide (for contributors)
 
 ## 🏗 Architecture
 
