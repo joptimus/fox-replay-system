@@ -118,7 +118,10 @@ class F1ReplaySession:
             self.loading_status = f"Loading session {self.year} R{self.round_num}..."
             await self.emit_progress(LoadingState.LOADING, 0, self.loading_status)
 
-            session = load_session(self.year, self.round_num, self.session_type)
+            session = await loop.run_in_executor(
+                None,
+                lambda: load_session(self.year, self.round_num, self.session_type)
+            )
             logger.info(f"[SESSION] FastF1 session loaded for {session_id}")
 
             self.loading_status = "Session loaded, fetching telemetry..."
