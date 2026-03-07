@@ -187,5 +187,32 @@
     {"round": 22, "raceName": "Las Vegas Grand Prix", "track": "Las Vegas Strip Circuit", "location": "Las Vegas, USA"},
     {"round": 23, "raceName": "Qatar Grand Prix", "track": "Lusail International Circuit", "location": "Lusail, Qatar"},
     {"round": 24, "raceName": "Abu Dhabi Grand Prix", "track": "Yas Marina Circuit", "location": "Abu Dhabi, UAE"}
-  ]
+  ],
+  "2026": [
+  {"round": 1, "raceName": "Australian Grand Prix", "track": "Albert Park Circuit", "location": "Melbourne, Australia"},
+  {"round": 2, "raceName": "Chinese Grand Prix", "track": "Shanghai International Circuit", "location": "Shanghai, China"},
+  {"round": 3, "raceName": "Japanese Grand Prix", "track": "Suzuka Circuit", "location": "Suzuka, Japan"},
+  {"round": 4, "raceName": "Bahrain Grand Prix", "track": "Bahrain International Circuit", "location": "Sakhir, Bahrain"},
+  {"round": 5, "raceName": "Saudi Arabian Grand Prix", "track": "Jeddah Corniche Circuit", "location": "Jeddah, Saudi Arabia"},
+  {"round": 6, "raceName": "Miami Grand Prix", "track": "Miami International Autodrome", "location": "Miami, USA"},
+  {"round": 7, "raceName": "Canadian Grand Prix", "track": "Circuit Gilles Villeneuve", "location": "Montreal, Canada"},
+  {"round": 8, "raceName": "Monaco Grand Prix", "track": "Circuit de Monaco", "location": "Monte Carlo, Monaco"},
+  {"round": 9, "raceName": "Spanish Grand Prix", "track": "Circuit de Barcelona-Catalunya", "location": "Barcelona, Spain"},
+  {"round": 10, "raceName": "Austrian Grand Prix", "track": "Red Bull Ring", "location": "Spielberg, Austria"},
+  {"round": 11, "raceName": "British Grand Prix", "track": "Silverstone Circuit", "location": "Silverstone, United Kingdom"},
+  {"round": 12, "raceName": "Belgian Grand Prix", "track": "Circuit de Spa-Francorchamps", "location": "Stavelot, Belgium"},
+  {"round": 13, "raceName": "Hungarian Grand Prix", "track": "Hungaroring", "location": "Mogyoród, Hungary"},
+  {"round": 14, "raceName": "Dutch Grand Prix", "track": "Circuit Zandvoort", "location": "Zandvoort, Netherlands"},
+  {"round": 15, "raceName": "Italian Grand Prix", "track": "Autodromo Nazionale di Monza", "location": "Monza, Italy"},
+  {"round": 16, "raceName": "Spanish Grand Prix", "track": "Madring Street Circuit", "location": "Madrid, Spain"},
+  {"round": 17, "raceName": "Azerbaijan Grand Prix", "track": "Baku City Circuit", "location": "Baku, Azerbaijan"},
+  {"round": 18, "raceName": "Singapore Grand Prix", "track": "Marina Bay Street Circuit", "location": "Singapore"},
+  {"round": 19, "raceName": "United States Grand Prix", "track": "Circuit of the Americas", "location": "Austin, USA"},
+  {"round": 20, "raceName": "Mexico City Grand Prix", "track": "Autódromo Hermanos Rodríguez", "location": "Mexico City, Mexico"},
+  {"round": 21, "raceName": "Brazilian Grand Prix", "track": "Autódromo José Carlos Pace", "location": "São Paulo, Brazil"},
+  {"round": 22, "raceName": "Las Vegas Grand Prix", "track": "Las Vegas Strip Circuit", "location": "Las Vegas, USA"},
+  {"round": 23, "raceName": "Qatar Grand Prix", "track": "Lusail International Circuit", "location": "Lusail, Qatar"},
+  {"round": 24, "raceName": "Abu Dhabi Grand Prix", "track": "Yas Marina Circuit", "location": "Abu Dhabi, UAE"}
+]
 }
+

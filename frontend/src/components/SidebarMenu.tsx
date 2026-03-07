@@ -16,7 +16,8 @@ interface SidebarMenuProps {
   onToggleSectorColors?: () => void;
   currentYear?: number;
   currentRound?: number;
-  onSessionSelect?: (year: number, round: number) => void;
+  currentSessionType?: string;
+  onSessionSelect?: (year: number, round: number, sessionType: string) => void;
 }
 
 export const SidebarMenu: React.FC<SidebarMenuProps> = ({
@@ -27,6 +28,7 @@ export const SidebarMenu: React.FC<SidebarMenuProps> = ({
   onToggleSectorColors,
   currentYear,
   currentRound,
+  currentSessionType,
   onSessionSelect,
 }) => {
   const navigate = useNavigate();
@@ -47,7 +49,7 @@ export const SidebarMenu: React.FC<SidebarMenuProps> = ({
 
   const handleSelectRace = () => {
     if (onSessionSelect) {
-      onSessionSelect(selectedYear, selectedRound);
+      onSessionSelect(selectedYear, selectedRound, currentSessionType || "R");
       onClose();
     }
   };

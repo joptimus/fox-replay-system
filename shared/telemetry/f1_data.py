@@ -45,10 +45,16 @@ DT = 1 / FPS
 def _process_single_driver(args):
     """Process telemetry data for a single driver - must be top-level for multiprocessing"""
     driver_no, session, driver_code = args
-    
+
     print(f"Getting telemetry for driver: {driver_code}")
 
-    laps_driver = session.laps.pick_drivers(driver_no)
+    try:
+        laps_driver = session.laps.pick_drivers(driver_no)
+    except fastf1.core.DataNotLoadedError:
+        # Session data not loaded (may have been lost during pickling to worker process)
+        print(f"WARNING: Session data not loaded for {driver_code}, skipping")
+        return None
+
     if laps_driver.empty:
         return None
 
@@ -553,8 +559,13 @@ def load_session(year, round_number, session_type='R'):
 # The following functions require a loaded session object
 
 def get_driver_colors(session):
-    color_mapping = fastf1.plotting.get_driver_color_mapping(session)
-    
+    try:
+        color_mapping = fastf1.plotting.get_driver_color_mapping(session)
+    except KeyError:
+        # FastF1 doesn't have constants for this season yet (e.g., 2026)
+        # Return default gray color for all drivers
+        color_mapping = {driver: '#808080' for driver in session.drivers}
+
     # Convert hex colors to RGB tuples
     rgb_colors = {}
     for driver, hex_color in color_mapping.items():
@@ -1236,6 +1247,11 @@ def get_qualifying_results(session):
 
     for _, row in results.iterrows():
         driver_code = row["Abbreviation"]
+
+        # Skip drivers with no position (didn't participate or were eliminated)
+        if pd.isna(row["Position"]):
+            continue
+
         position = int(row["Position"])
         q1_time = row["Q1"]
         q2_time = row["Q2"]
@@ -1245,7 +1261,7 @@ def get_qualifying_results(session):
         def convert_time_to_seconds(time_val) -> str:
             if pd.isna(time_val):
                 return None
-            return str(time_val.total_seconds())    
+            return str(time_val.total_seconds())
 
         qualifying_data.append({
             "code": driver_code,
@@ -1526,7 +1542,7 @@ def _process_quali_driver(args):
             if segment_telemetry["min_speed"] < min_speed or min_speed == 0.0:
                 min_speed = segment_telemetry["min_speed"]
 
-        except ValueError:
+        except (ValueError, fastf1.core.DataNotLoadedError):
             driver_telemetry_data[segment] = {"frames": [], "track_statuses": []}
 
     print(f"Finished processing qualifying telemetry for driver: {driver_code}")

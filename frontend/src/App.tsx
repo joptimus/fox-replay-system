@@ -150,7 +150,7 @@ const DriverHero = ({ year }: { year?: number }) => {
   );
 };
 
-const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year: number, round: number, refresh?: boolean) => void; onRefreshData: () => void }) => {
+const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year: number, round: number, sessionType: string, refresh?: boolean) => void; onRefreshData: () => void }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hasPlayedLights, setHasPlayedLights] = useState(false);
   const lightsBoardRef = useRef<LightsBoardHandle>(null);
@@ -214,6 +214,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           onClose={() => setMenuOpen(false)}
           currentYear={year}
           currentRound={round}
+          currentSessionType={sessionType}
           onSessionSelect={onSessionSelect}
           onRefreshData={onRefreshData}
           showSectorColors={showSectorColors}
@@ -235,6 +236,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           onClose={() => setMenuOpen(false)}
           currentYear={year}
           currentRound={round}
+          currentSessionType={sessionType}
           onSessionSelect={onSessionSelect}
           onRefreshData={onRefreshData}
           showSectorColors={showSectorColors}
@@ -253,7 +255,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMenuOpen(true)}
-              className="bg-f1-red hover:bg-[#c70000] text-white px-3 py-1.5 rounded text-lg border-none cursor-pointer transition-all duration-200 hover:shadow-lg"
+              className="bg-f1-red hover:bg-[#c70000] text-white w-8 h-8 rounded text-lg border-none cursor-pointer transition-all duration-200 hover:shadow-lg flex items-center justify-center"
               title="Menu"
               onMouseEnter={(e) => {
                 (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
@@ -316,6 +318,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           onClose={() => setMenuOpen(false)}
           currentYear={year}
           currentRound={round}
+          currentSessionType={sessionType}
           onSessionSelect={onSessionSelect}
           onRefreshData={onRefreshData}
           showSectorColors={showSectorColors}
@@ -341,7 +344,7 @@ function AppRoutes() {
     return () => window.removeEventListener('sessionTypeChange', handleSessionTypeChangeEvent);
   }, []);
 
-  const handleSessionSelect = async (year: number, round: number, refresh: boolean = false) => {
+  const handleSessionSelect = async (year: number, round: number, sessionType: string = "R", refresh: boolean = false) => {
     try {
       if (session.sessionId) {
         pause();
@@ -367,14 +370,14 @@ function AppRoutes() {
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, round_num: round, session_type: "R", refresh })
+        body: JSON.stringify({ year, round_num: round, session_type: sessionType, refresh })
       });
       const data = await response.json();
 
       setSession(data.session_id, {
         year,
         round,
-        session_type: "R",
+        session_type: sessionType,
       } as any);
       setSessionLoading(true);  // NOW open modal - WebSocket will close it when done
       navigate("/replay");
@@ -392,7 +395,7 @@ function AppRoutes() {
     }
 
     if (session.metadata?.year && session.metadata?.round) {
-      handleSessionSelect(session.metadata.year, session.metadata.round, true);
+      handleSessionSelect(session.metadata.year, session.metadata.round, session.metadata.session_type || "R", true);
     }
   };
 

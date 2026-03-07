@@ -4,7 +4,7 @@ import { getLocationFlagEmoji } from "../utils/countryFlags";
 import { motion } from "framer-motion";
 
 interface LandingPageProps {
-  onSessionSelect: (year: number, round: number) => void;
+  onSessionSelect: (year: number, round: number, sessionType: string) => void;
   isLoading: boolean;
 }
 
@@ -14,8 +14,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(2025);
   const [selectedRound, setSelectedRound] = useState<number>(1);
+  const [selectedSessionType, setSelectedSessionType] = useState<string>("R");
   const [availableRounds, setAvailableRounds] = useState<any[]>([]);
   const years = dataService.getAvailableYears();
+
+  const sessionTypes = [
+    { value: "R", label: "Race" },
+    { value: "Q", label: "Qualifying" },
+    { value: "SQ", label: "Sprint Qualifying" },
+    { value: "S", label: "Sprint" },
+    { value: "FP1", label: "Free Practice 1" },
+    { value: "FP2", label: "Free Practice 2" },
+    { value: "FP3", label: "Free Practice 3" },
+  ];
 
   useEffect(() => {
     const rounds = dataService.getRoundsForYear(selectedYear);
@@ -34,7 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   const handleLoad = () => {
-    onSessionSelect(selectedYear, selectedRound);
+    onSessionSelect(selectedYear, selectedRound, selectedSessionType);
   };
 
   return (
@@ -47,12 +58,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           className="landing-header"
         >
           <img
-            src="/fox-logo.png"
+            src="/fox_replay_logo.png"
             alt="FOX Replay System"
             className="landing-logo"
             style={{ maxWidth: '280px', height: 'auto', marginBottom: '1rem' }}
           />
-          <p className="landing-subtitle">Select a race to replay</p>
+          <p className="landing-subtitle">Select a session to replay</p>
         </motion.div>
 
         <motion.div
@@ -88,6 +99,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               {availableRounds.map((roundData) => (
                 <option key={roundData.round} value={roundData.round}>
                   R{roundData.round} - {roundData.raceName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="selector-group">
+            <label className="selector-label">Session</label>
+            <select
+              value={selectedSessionType}
+              onChange={(e) => setSelectedSessionType(e.target.value)}
+              disabled={isLoading}
+              className="selector-input"
+            >
+              {sessionTypes.map((session) => (
+                <option key={session.value} value={session.value}>
+                  {session.label}
                 </option>
               ))}
             </select>

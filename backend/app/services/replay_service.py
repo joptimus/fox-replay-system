@@ -7,6 +7,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 import msgpack
+import fastf1
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
@@ -166,7 +167,14 @@ class F1ReplaySession:
 
             try:
                 geometry_start = time.time()
-                fastest_lap_obj = session.laps.pick_fastest()
+                # Reload session data if lost during multiprocessing
+                try:
+                    fastest_lap_obj = session.laps.pick_fastest()
+                except fastf1.core.DataNotLoadedError:
+                    logger.info(f"[SESSION] Reloading session data for track geometry (lost during multiprocessing)")
+                    session.load(telemetry=True, weather=True)
+                    fastest_lap_obj = session.laps.pick_fastest()
+
                 fastest_lap_telem = fastest_lap_obj.get_telemetry()
                 track_data = build_track_from_example_lap(fastest_lap_telem, lap_obj=fastest_lap_obj)
                 geometry_time = time.time() - geometry_start

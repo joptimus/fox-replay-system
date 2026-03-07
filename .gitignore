@@ -58,3 +58,6 @@ CLAUDE.md
 .playwright-mcp/
 # Git worktrees
 .worktrees/
+CODE_REVIEW_REACT_IMPLEMENTATION.md
+docs/ARCHITECTURE/current-system.md
+docs/ARCHITECTURE/go-rewrite-plan.md
