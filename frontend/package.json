@@ -1,12 +1,13 @@
 {
-  "name": "fox-replay-system",
+  "name": "f1-race-replay-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "echo 'Frontend tests not yet configured'"
   },
   "dependencies": {
     "@react-three/drei": "^9.56.24",

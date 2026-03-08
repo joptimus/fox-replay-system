@@ -1,0 +1,191 @@
+package telemetry
+
+import (
+	"fmt"
+
+	"f1-replay-go/bridge"
+	"f1-replay-go/models"
+)
+
+// FrameGenerator orchestrates frame generation from raw telemetry data
+type FrameGenerator struct {
+	logger interface{} // Would be *zap.Logger in production
+}
+
+// NewFrameGenerator creates a new frame generator
+func NewFrameGenerator() *FrameGenerator {
+	return &FrameGenerator{}
+}
+
+// Generate creates frames from raw telemetry payload
+func (fg *FrameGenerator) Generate(
+	payload *bridge.RawDataPayload,
+	sessionType string,
+) ([]models.Frame, error) {
+	if err := payload.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	// Create uniform timeline at 25 FPS
+	timeline := CreateTimeline(payload.GlobalTMin, payload.GlobalTMax)
+	if len(timeline) == 0 {
+		return nil, fmt.Errorf("empty timeline")
+	}
+
+	// Resample all driver data to timeline
+	resampledDrivers := make(map[string]*ResampledDriver)
+	for code := range payload.Drivers {
+		origT := payload.Drivers[code].T
+		driverData := map[string]interface{}{
+			"x":        payload.Drivers[code].X,
+			"y":        payload.Drivers[code].Y,
+			"dist":     payload.Drivers[code].Dist,
+			"rel_dist": payload.Drivers[code].RelDist,
+			"lap":      payload.Drivers[code].Lap,
+			"tyre":     payload.Drivers[code].Tyre,
+			"speed":    payload.Drivers[code].Speed,
+			"gear":     payload.Drivers[code].Gear,
+			"drs":      payload.Drivers[code].DRS,
+			"throttle": payload.Drivers[code].Throttle,
+			"brake":    payload.Drivers[code].Brake,
+			"rpm":      payload.Drivers[code].RPM,
+		}
+
+		resampled, err := ResampleDriverData(code, origT, driverData, timeline)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resample driver %s: %w", code, err)
+		}
+
+		resampledDrivers[code] = resampled
+	}
+
+	// Extract timing data (gap, position)
+	timingByDriver := make(map[string][]map[string]interface{})
+	for code := range payload.Drivers {
+		timing := make([]map[string]interface{}, len(timeline))
+		for i := 0; i < len(timeline); i++ {
+			timing[i] = map[string]interface{}{
+				"gap":              getTimingValue(payload.Timing.GapByDriver[code], i),
+				"pos_raw":          getTimingValueInt(payload.Timing.PosByDriver[code], i),
+				"interval_smooth":  getTimingValue(payload.Timing.IntervalSmoothByDriver[code], i),
+			}
+		}
+		timingByDriver[code] = timing
+	}
+
+	// Generate frames
+	frames := make([]models.Frame, len(timeline))
+
+	for i := 0; i < len(timeline); i++ {
+		frame := models.Frame{
+			FrameIndex: i,
+			T:          timeline[i],
+			Lap:        getLeaderLap(resampledDrivers, i),
+			Drivers:    make(map[string]models.DriverData),
+		}
+
+		// Populate driver data for this frame
+		for code, driver := range resampledDrivers {
+			driverData := models.DriverData{
+				X:        driver.X[i],
+				Y:        driver.Y[i],
+				Speed:    driver.Speed[i],
+				Lap:      driver.Lap[i],
+				Tyre:     driver.Tyre[i],
+				Gear:     driver.Gear[i],
+				DRS:      driver.DRS[i],
+				Throttle: driver.Throttle[i],
+				Brake:    driver.Brake[i],
+				RPM:      driver.RPM[i],
+				Dist:     driver.Dist[i],
+				RelDist:  driver.RelDist[i],
+			}
+
+			// Add timing data
+			if timing, ok := timingByDriver[code]; ok && i < len(timing) {
+				if gap, ok := timing[i]["gap"].(float64); ok {
+					driverData.Gap = &gap
+				}
+				if posRaw, ok := timing[i]["pos_raw"].(int); ok {
+					driverData.PosRaw = &posRaw
+				}
+				if interval, ok := timing[i]["interval_smooth"].(float64); ok {
+					driverData.IntervalSmooth = &interval
+				}
+			}
+
+			// Add metadata
+			if color, ok := payload.DriverColors[code]; ok {
+				// Color is available but not used in DriverData
+			}
+
+			frame.Drivers[code] = driverData
+		}
+
+		// Calculate position and gaps (Phase 2.4 will expand this)
+		// For now, assign positions based on distance
+		assignPositions(&frame)
+
+		frames[i] = frame
+	}
+
+	return frames, nil
+}
+
+// getLeaderLap returns the lap number of the leader at frame index
+func getLeaderLap(drivers map[string]*ResampledDriver, i int) int {
+	maxLap := 1
+	for _, driver := range drivers {
+		if i < len(driver.Lap) && driver.Lap[i] > maxLap {
+			maxLap = driver.Lap[i]
+		}
+	}
+	return maxLap
+}
+
+// getTimingValue safely gets a timing value at index
+func getTimingValue(values []float64, index int) float64 {
+	if index >= 0 && index < len(values) {
+		return values[index]
+	}
+	return 0.0
+}
+
+// getTimingValueInt safely gets an integer timing value at index
+func getTimingValueInt(values []int, index int) int {
+	if index >= 0 && index < len(values) {
+		return values[index]
+	}
+	return 0
+}
+
+// assignPositions assigns position based on distance (simplified version)
+// Phase 4 will implement proper position sorting with 4-tier hierarchy
+func assignPositions(frame *models.Frame) {
+	type driverEntry struct {
+		code string
+		dist float64
+	}
+
+	var drivers []driverEntry
+	for code, data := range frame.Drivers {
+		drivers = append(drivers, driverEntry{code: code, dist: data.Dist})
+	}
+
+	// Simple sort by distance (descending)
+	for i := 0; i < len(drivers); i++ {
+		for j := i + 1; j < len(drivers); j++ {
+			if drivers[j].dist > drivers[i].dist {
+				drivers[i], drivers[j] = drivers[j], drivers[i]
+			}
+		}
+	}
+
+	// Assign positions
+	for pos, entry := range drivers {
+		if data, ok := frame.Drivers[entry.code]; ok {
+			data.Position = pos + 1
+			frame.Drivers[entry.code] = data
+		}
+	}
+}

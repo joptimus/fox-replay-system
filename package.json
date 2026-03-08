@@ -1,18 +1,40 @@
 {
-  "name": "fox-replay-system",
-  "version": "1.0.0",
-  "description": "FOX Replay System - Formula One eXperience // Interactive race visualization and analysis",
+  "name": "f1-race-replay",
+  "version": "2.0.0",
+  "description": "F1 Race Replay - Formula 1 Race Visualization with Go Backend // Interactive 3D race telemetry and analysis",
   "scripts": {
-    "dev": "node scripts/dev.js",
-    "start": "node scripts/dev.js"
+    "dev": "npm run build:go:quick && node dev.js",
+    "start": "npm run build:go:quick && node dev.js",
+    "dev:go-only": "npm run build:go:quick && node dev.js --go-only",
+    "dev:no-go": "node dev.js --no-go",
+    "dev:verbose": "npm run build:go:quick && node dev.js --verbose",
+    "build:go": "cd go-backend && go build -o f1-replay-go . && echo '✓ Go binary built successfully'",
+    "build:go:quick": "cd go-backend && [ -f f1-replay-go ] && echo '✓ Go binary exists, skipping rebuild' || (go build -o f1-replay-go . && echo '✓ Go binary built successfully') || exit 1",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:go && npm run build:frontend",
+    "test:go": "cd go-backend && go test ./... -v",
+    "test:frontend": "cd frontend && npm run test",
+    "test": "npm run test:go",
+    "clean": "rm -rf go-backend/f1-replay-go computed_data/*.f1cache",
+    "rebuild": "npm run clean && npm run build:go && node dev.js",
+    "lint:go": "cd go-backend && go vet ./... && go fmt ./..."
   },
   "keywords": [
     "formula1",
     "f1",
     "racing",
     "telemetry",
-    "visualization"
+    "visualization",
+    "go",
+    "react",
+    "3d"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "comment": "Frontend dependencies managed in frontend/package.json"
+  }
 }
