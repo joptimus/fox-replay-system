@@ -18,7 +18,7 @@ const (
 // SessionRequest represents a request to create a new replay session
 type SessionRequest struct {
 	Year        int    `json:"year"`
-	RoundNum    int    `json:"round_num"`
+	RoundNum    int    `json:"round"`
 	SessionType string `json:"session_type"` // "R", "S", "Q", "SQ"
 	Refresh     bool   `json:"refresh"`
 }
