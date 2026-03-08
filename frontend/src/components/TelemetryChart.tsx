@@ -142,6 +142,7 @@ export const TelemetryChart: React.FC = () => {
   }
 
   const hexColor = `rgb(${selectedDriver.color[0]}, ${selectedDriver.color[1]}, ${selectedDriver.color[2]})`;
+  const currentDriverData = currentFrame.drivers[selectedDriver.code];
   const kmhSpeed = currentDriverData.speed;
   const displaySpeed = speedUnit === "kmh" ? kmhSpeed : kmhSpeed * 0.621371;
 
