@@ -146,29 +146,57 @@ func ResampleDriverData(
 	driver map[string]interface{},
 	timeline []float64,
 ) (*ResampledDriver, error) {
-	// Extract arrays from map (from Python bridge output)
+	// Extract arrays from map. Accept both typed slices and generic []interface{}.
 	getFloat64Slice := func(key string) []float64 {
-		if v, ok := driver[key].([]interface{}); ok {
-			result := make([]float64, len(v))
-			for i, val := range v {
-				if fv, ok := val.(float64); ok {
-					result[i] = fv
+		if raw, ok := driver[key]; ok {
+			switch v := raw.(type) {
+			case []float64:
+				return v
+			case []int:
+				result := make([]float64, len(v))
+				for i := range v {
+					result[i] = float64(v[i])
 				}
+				return result
+			case []interface{}:
+				result := make([]float64, len(v))
+				for i, val := range v {
+					switch fv := val.(type) {
+					case float64:
+						result[i] = fv
+					case int:
+						result[i] = float64(fv)
+					}
+				}
+				return result
 			}
-			return result
 		}
 		return []float64{}
 	}
 
 	getIntSlice := func(key string) []int {
-		if v, ok := driver[key].([]interface{}); ok {
-			result := make([]int, len(v))
-			for i, val := range v {
-				if fv, ok := val.(float64); ok {
-					result[i] = int(fv)
+		if raw, ok := driver[key]; ok {
+			switch v := raw.(type) {
+			case []int:
+				return v
+			case []float64:
+				result := make([]int, len(v))
+				for i := range v {
+					result[i] = int(v[i])
 				}
+				return result
+			case []interface{}:
+				result := make([]int, len(v))
+				for i, val := range v {
+					switch fv := val.(type) {
+					case float64:
+						result[i] = int(fv)
+					case int:
+						result[i] = fv
+					}
+				}
+				return result
 			}
-			return result
 		}
 		return []int{}
 	}

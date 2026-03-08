@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"time"
 
 	"f1-replay-go/models"
 )
@@ -42,7 +41,7 @@ func (a PositionSortKey) Less(b PositionSortKey) bool {
 
 // PositionSmoothing prevents rapid position changes (flickering)
 type PositionSmoothing struct {
-	lastPositions map[string]int       // code → last position
+	lastPositions   map[string]int     // code → last position
 	lastChangeTimes map[string]float64 // code → time of last change
 	mu              sync.RWMutex
 }
@@ -50,7 +49,7 @@ type PositionSmoothing struct {
 // NewPositionSmoothing creates a new position smoothing engine
 func NewPositionSmoothing() *PositionSmoothing {
 	return &PositionSmoothing{
-		lastPositions:  make(map[string]int),
+		lastPositions:   make(map[string]int),
 		lastChangeTimes: make(map[string]float64),
 	}
 }
@@ -227,8 +226,8 @@ func CalculateGaps(frame *models.Frame) {
 // DetectRetirements marks drivers as retired if they've been stationary for too long
 const (
 	RetirementThresholdSeconds = 10.0
-	FPS                        = 25
-	RetirementFrameThreshold   = int(RetirementThresholdSeconds * FPS) // 250 frames
+	PositionFPS                = 25
+	RetirementFrameThreshold   = int(RetirementThresholdSeconds * PositionFPS) // 250 frames
 )
 
 // RetirementTracker tracks driver statuses across frames
@@ -312,7 +311,7 @@ func ApplyPositionSmoothingToFrames(frames []models.Frame, trackStatuses map[int
 // (assumes track status is constant throughout, could be enhanced)
 func TrackStatusFromFrames(frames []models.Frame) map[int]string {
 	statuses := make(map[int]string)
-	for i, frame := range frames {
+	for i := range frames {
 		// Track status would come from Python bridge in RawDataPayload
 		// For now, assume all frames are green (status "1")
 		statuses[i] = "1"
@@ -322,10 +321,10 @@ func TrackStatusFromFrames(frames []models.Frame) map[int]string {
 
 // PositionSmoothingConfig allows customization of smoothing behavior
 type PositionSmoothingConfig struct {
-	DefaultThreshold       float64
-	SafetyCarThreshold     float64
+	DefaultThreshold          float64
+	SafetyCarThreshold        float64
 	VirtualSafetyCarThreshold float64
-	EnableLapAnchor        bool
+	EnableLapAnchor           bool
 	EnableRetirementDetection bool
 }
 

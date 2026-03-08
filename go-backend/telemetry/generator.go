@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"fmt"
+	"math"
 
 	"f1-replay-go/bridge"
 	"f1-replay-go/models"
@@ -65,9 +66,9 @@ func (fg *FrameGenerator) Generate(
 		timing := make([]map[string]interface{}, len(timeline))
 		for i := 0; i < len(timeline); i++ {
 			timing[i] = map[string]interface{}{
-				"gap":              getTimingValue(payload.Timing.GapByDriver[code], i),
-				"pos_raw":          getTimingValueInt(payload.Timing.PosByDriver[code], i),
-				"interval_smooth":  getTimingValue(payload.Timing.IntervalSmoothByDriver[code], i),
+				"gap":             getTimingValue(payload.Timing.GapByDriver[code], i),
+				"pos_raw":         getTimingValueInt(payload.Timing.PosByDriver[code], i),
+				"interval_smooth": getTimingValue(payload.Timing.IntervalSmoothByDriver[code], i),
 			}
 		}
 		timingByDriver[code] = timing
@@ -75,6 +76,7 @@ func (fg *FrameGenerator) Generate(
 
 	// Generate frames
 	frames := make([]models.Frame, len(timeline))
+	totalTrackDistance := estimateTrackDistance(resampledDrivers)
 
 	for i := 0; i < len(timeline); i++ {
 		frame := models.Frame{
@@ -100,6 +102,7 @@ func (fg *FrameGenerator) Generate(
 				Dist:     driver.Dist[i],
 				RelDist:  driver.RelDist[i],
 			}
+			driverData.RaceProgress = calculateRaceProgress(driverData.Dist, driverData.Lap, totalTrackDistance)
 
 			// Add timing data
 			if timing, ok := timingByDriver[code]; ok && i < len(timing) {
@@ -114,11 +117,6 @@ func (fg *FrameGenerator) Generate(
 				}
 			}
 
-			// Add metadata
-			if color, ok := payload.DriverColors[code]; ok {
-				// Color is available but not used in DriverData
-			}
-
 			frame.Drivers[code] = driverData
 		}
 
@@ -129,7 +127,40 @@ func (fg *FrameGenerator) Generate(
 		frames[i] = frame
 	}
 
+	trackStatuses := TrackStatusFromFrames(frames)
+	ApplyPositionSmoothingToFrames(frames, trackStatuses)
+
 	return frames, nil
+}
+
+func estimateTrackDistance(drivers map[string]*ResampledDriver) float64 {
+	maxDist := 0.0
+	for _, driver := range drivers {
+		for i := range driver.Dist {
+			if driver.Dist[i] > maxDist {
+				maxDist = driver.Dist[i]
+			}
+		}
+	}
+	if maxDist <= 0 || math.IsNaN(maxDist) || math.IsInf(maxDist, 0) {
+		return 1.0
+	}
+	return maxDist
+}
+
+func calculateRaceProgress(dist float64, lap int, totalTrackDistance float64) float64 {
+	if totalTrackDistance <= 0 {
+		totalTrackDistance = 1.0
+	}
+	lapOffset := float64(maxInt(lap-1, 0))
+	return lapOffset + (dist / totalTrackDistance)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // getLeaderLap returns the lap number of the leader at frame index

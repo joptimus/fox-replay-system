@@ -34,34 +34,34 @@ type SessionResponse struct {
 
 // Frame represents a single frame of telemetry data
 type Frame struct {
-	FrameIndex int                 `json:"frame_index" msgpack:"fi"`
-	T          float64             `json:"t" msgpack:"t"`
-	Lap        int                 `json:"lap" msgpack:"l"`
+	FrameIndex int                   `json:"frame_index" msgpack:"fi"`
+	T          float64               `json:"t" msgpack:"t"`
+	Lap        int                   `json:"lap" msgpack:"l"`
 	Drivers    map[string]DriverData `json:"drivers" msgpack:"d"`
 }
 
 // DriverData represents telemetry data for a single driver in a frame
 type DriverData struct {
-	X               float64  `json:"x" msgpack:"x"`
-	Y               float64  `json:"y" msgpack:"y"`
-	Speed           float64  `json:"speed" msgpack:"sp"`
-	Lap             int      `json:"lap" msgpack:"lap"`
-	Tyre            int      `json:"tyre" msgpack:"tyr"`
-	Gear            int      `json:"gear" msgpack:"g"`
-	DRS             int      `json:"drs" msgpack:"drs"`
-	Throttle        float64  `json:"throttle" msgpack:"th"`
-	Brake           float64  `json:"brake" msgpack:"br"`
-	RPM             int      `json:"rpm" msgpack:"rpm"`
-	Dist            float64  `json:"dist" msgpack:"dist"`
-	RelDist         float64  `json:"rel_dist" msgpack:"rd"`
-	RaceProgress    float64  `json:"race_progress" msgpack:"rp"`
-	Position        int      `json:"position" msgpack:"pos"`
-	PosRaw          *int     `json:"pos_raw,omitempty" msgpack:"pr,omitempty"`
-	Gap             *float64 `json:"gap,omitempty" msgpack:"gap,omitempty"`
-	IntervalSmooth  *float64 `json:"interval_smooth,omitempty" msgpack:"is,omitempty"`
-	GapToLeader     float64  `json:"gap_to_leader" msgpack:"gtl"`
-	GapToPrevious   float64  `json:"gap_to_previous" msgpack:"gtp"`
-	Status          string   `json:"status" msgpack:"st"`
+	X              float64  `json:"x" msgpack:"x"`
+	Y              float64  `json:"y" msgpack:"y"`
+	Speed          float64  `json:"speed" msgpack:"sp"`
+	Lap            int      `json:"lap" msgpack:"lap"`
+	Tyre           int      `json:"tyre" msgpack:"tyr"`
+	Gear           int      `json:"gear" msgpack:"g"`
+	DRS            int      `json:"drs" msgpack:"drs"`
+	Throttle       float64  `json:"throttle" msgpack:"th"`
+	Brake          float64  `json:"brake" msgpack:"br"`
+	RPM            int      `json:"rpm" msgpack:"rpm"`
+	Dist           float64  `json:"dist" msgpack:"dist"`
+	RelDist        float64  `json:"rel_dist" msgpack:"rd"`
+	RaceProgress   float64  `json:"race_progress" msgpack:"rp"`
+	Position       int      `json:"position" msgpack:"pos"`
+	PosRaw         *int     `json:"pos_raw,omitempty" msgpack:"pr,omitempty"`
+	Gap            *float64 `json:"gap,omitempty" msgpack:"gap,omitempty"`
+	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"is,omitempty"`
+	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gtl"`
+	GapToPrevious  float64  `json:"gap_to_previous" msgpack:"gtp"`
+	Status         string   `json:"status" msgpack:"st"`
 }
 
 // ProgressMessage represents a progress update
@@ -72,27 +72,27 @@ type ProgressMessage struct {
 
 // Session represents an active replay session
 type Session struct {
-	ID              string
-	State           SessionState
-	Frames          []Frame
-	Metadata        SessionMetadata
-	CreatedAt       time.Time
-	LastAccessedAt  time.Time
-	LoadingError    string
-	ProgressCh      chan *ProgressMessage
-	mu              sync.RWMutex
+	ID             string
+	State          SessionState
+	Frames         []Frame
+	Metadata       SessionMetadata
+	CreatedAt      time.Time
+	LastAccessedAt time.Time
+	LoadingError   string
+	ProgressCh     chan *ProgressMessage
+	mu             sync.RWMutex
 }
 
 // SessionMetadata stores session-level information
 type SessionMetadata struct {
-	Year           int               `json:"year"`
-	Round          int               `json:"round"`
-	SessionType    string            `json:"session_type"`
-	TotalLaps      int               `json:"total_laps"`
-	TotalFrames    int               `json:"total_frames"`
-	DriverNumbers  map[string]string `json:"driver_numbers"`
-	DriverTeams    map[string]string `json:"driver_teams"`
-	DriverColors   map[string][3]int `json:"driver_colors"`
+	Year          int               `json:"year"`
+	Round         int               `json:"round"`
+	SessionType   string            `json:"session_type"`
+	TotalLaps     int               `json:"total_laps"`
+	TotalFrames   int               `json:"total_frames"`
+	DriverNumbers map[string]string `json:"driver_numbers"`
+	DriverTeams   map[string]string `json:"driver_teams"`
+	DriverColors  map[string][3]int `json:"driver_colors"`
 }
 
 // GetState returns the current session state
@@ -107,6 +107,20 @@ func (s *Session) SetState(state SessionState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.State = state
+}
+
+// SetLoadingError sets a user-facing loading error message.
+func (s *Session) SetLoadingError(errMsg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.LoadingError = errMsg
+}
+
+// GetLoadingError returns the current loading error message.
+func (s *Session) GetLoadingError() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.LoadingError
 }
 
 // GetFrames returns a copy of the frames

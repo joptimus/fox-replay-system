@@ -9,13 +9,18 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 
+	"f1-replay-go/bridge"
 	"f1-replay-go/cache"
 	"f1-replay-go/models"
 	"f1-replay-go/session"
+	"f1-replay-go/telemetry"
 	"f1-replay-go/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 )
 
@@ -151,6 +156,19 @@ func handleCreateSessionRoute(
 		}
 
 		// Cache miss or refresh requested - generate in background
+		if req.SessionType == "Q" || req.SessionType == "SQ" {
+			logger.Warn("unsupported session type for go generation path",
+				zap.String("sessionID", sessionID),
+				zap.String("sessionType", req.SessionType),
+			)
+			_ = sessionMgr.Delete(sessionID)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "session type not supported yet in Go generation path (supported: R, S)",
+			})
+			return
+		}
+
 		logger.Info("Cache miss, generating from telemetry",
 			zap.String("sessionID", sessionID),
 			zap.Int("year", req.Year),
@@ -161,7 +179,7 @@ func handleCreateSessionRoute(
 		sess.SetState(models.StateLoading)
 
 		// Generate cache in background using Python bridge
-		go generateCacheAsync(sessionID, req.Year, req.RoundNum, req.SessionType, sess, cacheReader, logger)
+		go generateCacheAsync(sessionID, req.Year, req.RoundNum, req.SessionType, req.Refresh, sess, cacheReader, logger)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -236,13 +254,19 @@ func generateCacheAsync(
 	year int,
 	round int,
 	sessionType string,
+	refresh bool,
 	sess *models.Session,
 	cacheReader *cache.HybridCacheReader,
 	logger *zap.Logger,
 ) {
+	const maxStderrLines = 30
+	const maxStdoutLineBytes = 512 * 1024 * 1024 // 512MB JSON line budget for large telemetry payloads
+	const maxStderrLineBytes = 1 * 1024 * 1024   // 1MB per stderr line
+
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error("panic in generateCacheAsync", zap.Any("panic", r))
+			sess.SetLoadingError(fmt.Sprintf("panic during cache generation: %v", r))
 			sess.SetState(models.StateError)
 		}
 		close(sess.ProgressCh)
@@ -250,8 +274,12 @@ func generateCacheAsync(
 
 	logger.Info("Starting cache generation", zap.String("sessionID", sessionID))
 
-	// Call Python script to generate telemetry
-	cmd := exec.Command("python3", "scripts/generate_telemetry.py", fmt.Sprintf("%d", year), fmt.Sprintf("%d", round), sessionType)
+	// Call Python FastF1 extractor (raw telemetry payload only)
+	args := []string{"scripts/fetch_telemetry.py", fmt.Sprintf("%d", year), fmt.Sprintf("%d", round), sessionType}
+	if refresh {
+		args = append(args, "--refresh")
+	}
+	cmd := exec.Command("python3", args...)
 
 	// Get stdout pipe to read output as it streams
 	stdout, err := cmd.StdoutPipe()
@@ -260,6 +288,7 @@ func generateCacheAsync(
 		sess.SetState(models.StateError)
 		return
 	}
+	stderr, _ := cmd.StderrPipe()
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
@@ -268,9 +297,40 @@ func generateCacheAsync(
 		return
 	}
 
+	go func() {
+		var mu sync.Mutex
+		stderrLines := make([]string, 0, maxStderrLines)
+
+		errScanner := bufio.NewScanner(stderr)
+		errScanner.Buffer(make([]byte, 64*1024), maxStderrLineBytes)
+		for errScanner.Scan() {
+			line := errScanner.Text()
+			mu.Lock()
+			stderrLines = append(stderrLines, line)
+			if len(stderrLines) > maxStderrLines {
+				stderrLines = stderrLines[len(stderrLines)-maxStderrLines:]
+			}
+			mu.Unlock()
+
+			logger.Debug("python extractor stderr",
+				zap.String("sessionID", sessionID),
+				zap.String("line", line),
+			)
+		}
+
+		// Attach collected stderr lines to session error if process fails later.
+		mu.Lock()
+		if len(stderrLines) > 0 {
+			sess.SetLoadingError(strings.Join(stderrLines, " | "))
+		}
+		mu.Unlock()
+	}()
+
 	// Read output line by line and stream progress
+	// (Python now writes large data payloads to msgpack file instead of stdout)
 	scanner := bufio.NewScanner(stdout)
-	var finalResult map[string]interface{}
+	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024) // 10MB max line size
+	var cacheFilePath string
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -284,76 +344,151 @@ func generateCacheAsync(
 			continue
 		}
 
-		// Check if this is a progress message or final result
-		if msgType, ok := msg["type"].(string); ok && msgType == "progress" {
+		msgType, _ := msg["type"].(string)
+
+		if msgType == "progress" {
 			// Send progress update to WebSocket
-			if message, ok := msg["message"].(string); ok {
+			message := ""
+			if m, ok := msg["msg"].(string); ok {
+				message = m
+			} else if m, ok := msg["message"].(string); ok {
+				message = m
+			}
+			if message != "" {
+				if strings.HasPrefix(message, "ERROR:") {
+					sess.SetLoadingError(message)
+				}
+				pct := 0
+				if rawPct, ok := msg["pct"]; ok {
+					switch v := rawPct.(type) {
+					case float64:
+						pct = int(v)
+					case int:
+						pct = v
+					}
+				}
 				sess.ProgressCh <- &models.ProgressMessage{
+					Pct: pct,
 					Msg: message,
 				}
-				logger.Debug("telemetry progress", zap.String("message", message), zap.String("sessionID", sessionID))
+				logger.Debug("telemetry progress",
+					zap.String("message", message),
+					zap.Int("pct", pct),
+					zap.String("sessionID", sessionID),
+				)
 			}
-		} else {
-			// This is the final result
-			finalResult = msg
+		} else if msgType == "completion" {
+			// Python wrote data to msgpack file
+			if file, ok := msg["cache_file"].(string); ok {
+				cacheFilePath = file
+				logger.Info("telemetry cache file ready", zap.String("path", cacheFilePath))
+			}
+		} else if msgType == "error" {
+			if errMsg, ok := msg["message"].(string); ok {
+				sess.SetLoadingError(errMsg)
+				logger.Error("python extractor error", zap.String("error", errMsg))
+			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
 		logger.Error("error reading scanner", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetLoadingError(fmt.Sprintf("extractor output read error: %v", err))
 		sess.SetState(models.StateError)
 		return
 	}
 
 	// Wait for command to finish
 	if err := cmd.Wait(); err != nil {
-		logger.Error("failed to generate telemetry",
-			zap.Error(err),
-			zap.String("sessionID", sessionID),
-		)
-		sess.SetState(models.StateError)
-		return
-	}
-
-	if finalResult == nil {
-		logger.Error("no result from telemetry generation", zap.String("sessionID", sessionID))
-		sess.SetState(models.StateError)
-		return
-	}
-
-	status, ok := finalResult["status"].(string)
-	if !ok || status != "success" {
-		msg := "unknown error"
-		if m, ok := finalResult["message"].(string); ok {
-			msg = m
+		errMsg := sess.GetLoadingError()
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("extractor process failed: %v", err)
+			sess.SetLoadingError(errMsg)
 		}
-		logger.Error("telemetry generation failed",
-			zap.String("message", msg),
+		logger.Error("failed to extract telemetry",
+			zap.Error(err),
 			zap.String("sessionID", sessionID),
+			zap.String("extractorError", errMsg),
 		)
 		sess.SetState(models.StateError)
 		return
 	}
 
-	// Try to load the newly generated cache
-	frames, err := cacheReader.ReadFrames(year, round, sessionType)
+	if cacheFilePath == "" {
+		logger.Error("no cache file from extractor", zap.String("sessionID", sessionID))
+		sess.SetLoadingError("extractor did not create cache file")
+		sess.SetState(models.StateError)
+		return
+	}
+
+	// Read msgpack file written by Python
+	sess.ProgressCh <- &models.ProgressMessage{Pct: 100, Msg: "Reading telemetry cache..."}
+	msgpackData, err := os.ReadFile(cacheFilePath)
+	if err != nil {
+		logger.Error("failed to read msgpack cache", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetLoadingError(fmt.Sprintf("failed to read cache file: %v", err))
+		sess.SetState(models.StateError)
+		return
+	}
+
+	// Deserialize msgpack payload
+	var rawPayload *bridge.RawDataPayload
+	err = msgpack.Unmarshal(msgpackData, &rawPayload)
+	if err != nil {
+		logger.Error("failed to unmarshal msgpack", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetLoadingError(fmt.Sprintf("failed to deserialize telemetry: %v", err))
+		sess.SetState(models.StateError)
+		return
+	}
+
+	if rawPayload == nil {
+		logger.Error("msgpack payload is nil", zap.String("sessionID", sessionID))
+		sess.SetLoadingError("telemetry payload is empty")
+		sess.SetState(models.StateError)
+		return
+	}
+
+	generator := telemetry.NewFrameGenerator()
+	frames, err := generator.Generate(rawPayload, sessionType)
 	if err != nil || len(frames) == 0 {
-		logger.Error("failed to load generated cache",
+		logger.Error("go frame generation failed",
 			zap.Error(err),
 			zap.String("sessionID", sessionID),
 		)
+		if err != nil {
+			sess.SetLoadingError(fmt.Sprintf("go frame generation failed: %v", err))
+		} else {
+			sess.SetLoadingError("go frame generation produced zero frames")
+		}
 		sess.SetState(models.StateError)
 		return
 	}
 
-	// Update session with loaded frames
-	sess.SetFrames(frames)
-	sess.SetMetadata(models.SessionMetadata{
+	cacheMeta := cache.F1CacheMetadata{
 		Year:        year,
 		Round:       round,
 		SessionType: sessionType,
 		TotalFrames: len(frames),
-	})
+		TotalLaps:   rawPayload.TotalLaps,
+	}
+	if writeErr := cacheReader.WriteFrames(year, round, sessionType, frames, cacheMeta); writeErr != nil {
+		logger.Warn("failed to write f1cache", zap.Error(writeErr), zap.String("sessionID", sessionID))
+	}
+
+	sessionMeta := models.SessionMetadata{
+		Year:          year,
+		Round:         round,
+		SessionType:   sessionType,
+		TotalLaps:     rawPayload.TotalLaps,
+		TotalFrames:   len(frames),
+		DriverNumbers: rawPayload.DriverNumbers,
+		DriverTeams:   rawPayload.DriverTeams,
+		DriverColors:  rawPayload.DriverColors,
+	}
+
+	// Update session with generated frames
+	sess.SetFrames(frames)
+	sess.SetMetadata(sessionMeta)
 	sess.SetState(models.StateReady)
 
 	logger.Info("cache generation complete",

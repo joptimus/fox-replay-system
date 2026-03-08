@@ -88,7 +88,9 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
           if (message.type === 'generation_progress') {
             console.log("[WS Client] Telemetry generation:", message.message);
-            setLoadingProgress(10); // Show some progress while generating
+            const progress =
+              typeof message.progress === "number" ? message.progress : undefined;
+            setLoadingProgress(progress ?? 10);
             return;
           }
 
@@ -112,6 +114,12 @@ export const useReplayWebSocket = (sessionId: string | null) => {
           if (message.type === 'loading_error') {
             console.error("[WS Client] Loading error:", message.message);
             setLoadingError(message.message || "Unknown error");
+            return;
+          }
+
+          if (message.type === 'error') {
+            console.error("[WS Client] Session/WebSocket error:", message.message);
+            setLoadingError(message.message || "Session error");
             return;
           }
 

@@ -69,8 +69,9 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		for progressMsg := range sess.ProgressCh {
 			if progressMsg != nil {
 				conn.WriteJSON(map[string]interface{}{
-					"type":    "generation_progress",
-					"message": progressMsg.Msg,
+					"type":     "generation_progress",
+					"progress": progressMsg.Pct,
+					"message":  progressMsg.Msg,
 				})
 			}
 		}
@@ -91,15 +92,23 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if state != models.StateLoading {
+			errMsg := fmt.Sprintf("session not ready: %s", state)
+			if state == models.StateError {
+				if detail := sess.GetLoadingError(); detail != "" {
+					errMsg = detail
+				}
+			}
+
 			h.logger.Warn("session not ready",
 				zap.String("sessionID", sessionID),
 				zap.String("state", string(state)),
 				zap.Int("frames", len(sess.GetFrames())),
+				zap.String("error", errMsg),
 			)
 
 			conn.WriteJSON(map[string]interface{}{
 				"type":    "error",
-				"message": fmt.Sprintf("session not ready: %s", state),
+				"message": errMsg,
 			})
 			return
 		}

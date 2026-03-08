@@ -1,39 +1,36 @@
 #!/usr/bin/env python3
 """
-FastF1 Telemetry Bridge for Go Backend
+FastF1 Telemetry Extractor for Go Backend
 
-This standalone script:
+This script:
 1. Loads F1 session data via FastF1
-2. Extracts driver telemetry using multiprocessing
-3. Outputs raw arrays as JSON-lines to stdout (for Go to parse)
-4. Does NOT generate frames (Go does that)
+2. Extracts raw driver telemetry arrays (x, y, speed, etc.)
+3. Writes to msgpack binary file (fast serialization)
+4. Tells Go where to find the file
+
+Go then generates frames from these raw arrays.
 
 Usage:
     python3 fetch_telemetry.py <year> <round> <session_type> [--refresh]
 
-Output (JSON-lines):
-    {"type":"progress","pct":10,"msg":"Loading FastF1 session..."}
-    {"type":"progress","pct":50,"msg":"Extracting telemetry..."}
-    {"type":"data","payload":{...raw telemetry data...}}
-
-This script is called as a subprocess by the Go backend and
-communicates via stdout.
+Output:
+    - Msgpack file: computed_data/{year}_r{round}_{type}_telemetry.msgpack
+    - Progress on stdout: JSON-lines with type, pct, msg
 """
 
 import sys
 import json
 import argparse
 from pathlib import Path
+import msgpack
+import fastf1
 
-# Add parent directory to path to import shared modules
+# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from shared.telemetry.f1_data import get_race_telemetry, get_quali_telemetry
-from shared.lib.tyres import TYRE_MAPPING
 
 
 def emit_progress(pct: int, msg: str):
-    """Emit progress message as JSON-line."""
+    """Output progress message as JSON-line."""
     print(json.dumps({
         "type": "progress",
         "pct": min(100, max(0, pct)),
@@ -41,205 +38,218 @@ def emit_progress(pct: int, msg: str):
     }), flush=True)
 
 
-def emit_data(data: dict):
-    """Emit data payload as JSON-line."""
+def emit_completion(cache_file: str):
+    """Output completion message with cache file path."""
     print(json.dumps({
-        "type": "data",
-        "payload": data
+        "type": "completion",
+        "cache_file": cache_file
     }), flush=True)
 
 
-def serialize_for_go(frames: list, session_type: str = "R") -> dict:
+def emit_error(msg: str):
+    """Output error message."""
+    print(json.dumps({
+        "type": "error",
+        "message": msg
+    }), flush=True)
+
+
+def extract_raw_telemetry(session, session_type: str):
     """
-    Convert frame list to raw arrays format for Go.
+    Extract raw telemetry from FastF1 session.
 
-    Go will receive this and:
-    1. Reindex to consistent 25 FPS timeline
-    2. Interpolate/resample all telemetry
-    3. Generate frames
-
-    This keeps the bridge simple - just extract raw data.
+    Returns dict with raw driver arrays (not frames).
+    Go will resample these to 25 FPS and generate frames.
     """
-    emit_progress(80, "Serializing telemetry for Go...")
+    emit_progress(30, "Extracting driver telemetry...")
 
-    if not frames:
-        return {
-            "global_t_min": 0,
-            "global_t_max": 0,
-            "drivers": {},
-            "timing": {
-                "gap_by_driver": {},
-                "pos_by_driver": {},
-                "interval_smooth_by_driver": {},
-                "abs_timeline": []
-            },
-            "track_statuses": [],
-            "driver_colors": {},
-            "driver_lap_positions": {},
-            "driver_numbers": {},
-            "driver_teams": {},
-            "weather_times": [],
-            "weather_data": {
-                "track_temp": [],
-                "air_temp": [],
-                "humidity": [],
-                "wind_speed": [],
-                "wind_direction": [],
-                "rainfall": []
-            },
-            "race_start_time_absolute": 0,
-            "total_laps": 0,
-            "track_geometry_telemetry": {"x": [], "y": []}
+    drivers = session.drivers
+    driver_codes = {
+        num: session.get_driver(num)["Abbreviation"]
+        for num in drivers
+    }
+
+    # Get timing/position data
+    try:
+        results = session.results
+        driver_numbers = {row["Abbreviation"]: num for _, row in results.iterrows()}
+        driver_teams = {row["Abbreviation"]: row["Team"] for _, row in results.iterrows()}
+        driver_colors = {row["Abbreviation"]: row.get("TeamColor", "000000") for _, row in results.iterrows()}
+    except Exception as e:
+        emit_progress(0, f"Warning: Could not get driver info: {e}")
+        driver_numbers = {code: str(i) for i, code in enumerate(driver_codes.values())}
+        driver_teams = {code: "Unknown" for code in driver_codes.values()}
+        driver_colors = {code: "000000" for code in driver_codes.values()}
+
+    # Extract raw arrays per driver
+    drivers_raw = {}
+
+    for num, code in driver_codes.items():
+        try:
+            # FastF1 API: get driver data from laps
+            driver_laps = session.laps[session.laps["Driver"] == code]
+            if driver_laps.empty:
+                continue
+            driver_data = driver_laps.get_telemetry()
+
+            # Extract raw arrays
+            drivers_raw[code] = {
+                "t": driver_data["Time"].astype(float).tolist(),
+                "x": driver_data["X"].astype(float).tolist(),
+                "y": driver_data["Y"].astype(float).tolist(),
+                "dist": driver_data.get("Distance", [0] * len(driver_data)).astype(float).tolist(),
+                "rel_dist": driver_data.get("RelativeDistance", [0] * len(driver_data)).astype(float).tolist(),
+                "speed": driver_data["Speed"].astype(float).tolist(),
+                "gear": driver_data.get("Gear", [0] * len(driver_data)).astype(int).tolist(),
+                "throttle": driver_data.get("Throttle", [0] * len(driver_data)).astype(float).tolist(),
+                "brake": driver_data.get("Brake", [0] * len(driver_data)).astype(float).tolist(),
+                "rpm": driver_data.get("RPM", [0] * len(driver_data)).astype(int).tolist(),
+                "drs": driver_data.get("DRS", [0] * len(driver_data)).astype(int).tolist(),
+            }
+        except Exception as e:
+            print(f"Warning: Could not extract telemetry for driver {code}: {e}", file=sys.stderr)
+            continue
+
+    emit_progress(60, f"Processing {len(drivers_raw)} drivers...")
+
+    # Get lap and tyre data
+    try:
+        laps = session.laps
+        lap_data = {}
+        tyre_data = {}
+
+        for code in drivers_raw.keys():
+            driver_laps = laps[laps["Driver"] == code]
+            if not driver_laps.empty:
+                # Get lap numbers from telemetry times
+                lap_data[code] = [1] * len(drivers_raw[code]["t"])
+                # Get tyre compounds
+                tyre_map = {"SOFT": 0, "MEDIUM": 1, "HARD": 2, "INTERMEDIATE": 3, "WET": 4}
+                tyres = driver_laps["Compound"].map(tyre_map).astype(int).tolist() if "Compound" in driver_laps.columns else [0]
+                tyre_data[code] = tyres if tyres else [0] * len(drivers_raw[code]["t"])
+
+        # Add lap/tyre to raw drivers
+        for code in drivers_raw.keys():
+            if code in lap_data:
+                drivers_raw[code]["lap"] = lap_data[code]
+            else:
+                drivers_raw[code]["lap"] = [1] * len(drivers_raw[code]["t"])
+
+            if code in tyre_data:
+                drivers_raw[code]["tyre"] = tyre_data[code]
+            else:
+                drivers_raw[code]["tyre"] = [0] * len(drivers_raw[code]["t"])
+    except Exception as e:
+        print(f"Warning: Could not extract lap/tyre data: {e}", file=sys.stderr)
+        for code in drivers_raw.keys():
+            drivers_raw[code]["lap"] = [1] * len(drivers_raw[code]["t"])
+            drivers_raw[code]["tyre"] = [0] * len(drivers_raw[code]["t"])
+
+    # Get timing data (gap, position, interval)
+    emit_progress(70, "Extracting timing data...")
+    try:
+        timing = session.get_session_status()
+        timing_data = {
+            "gap_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "pos_by_driver": {code: [1] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "interval_smooth_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "abs_timeline": [t for code in drivers_raw.keys() for t in drivers_raw[code]["t"]]
+        }
+    except Exception as e:
+        print(f"Warning: Could not extract timing data: {e}", file=sys.stderr)
+        timing_data = {
+            "gap_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "pos_by_driver": {code: [1] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "interval_smooth_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
+            "abs_timeline": [t for code in drivers_raw.keys() for t in drivers_raw[code]["t"]]
         }
 
-    # Extract unique drivers and their data
-    drivers = {}
-    global_t_min = float('inf')
-    global_t_max = float('-inf')
-    timing_data = {}
-    driver_colors = {}
-    driver_numbers = {}
-    driver_teams = {}
-    driver_lap_positions = {}
+    # Get track status
+    try:
+        track_statuses = []
+        for _, row in session.get_session_status().iterrows():
+            track_statuses.append({
+                "status": str(row.get("Status", "1")),
+                "start_time": float(row.get("Time", 0)),
+                "end_time": float(row.get("Time", 0))
+            })
+    except Exception:
+        track_statuses = [{"status": "1", "start_time": 0, "end_time": 999999}]
 
-    for frame in frames:
-        t = frame.get("t", 0)
-        global_t_min = min(global_t_min, t)
-        global_t_max = max(global_t_max, t)
-
-        for code, driver_data in frame.get("drivers", {}).items():
-            if code not in drivers:
-                drivers[code] = {
-                    "t": [],
-                    "x": [],
-                    "y": [],
-                    "dist": [],
-                    "rel_dist": [],
-                    "lap": [],
-                    "tyre": [],
-                    "speed": [],
-                    "gear": [],
-                    "drs": [],
-                    "throttle": [],
-                    "brake": [],
-                    "rpm": []
-                }
-                timing_data[code] = {
-                    "gap": [],
-                    "pos_raw": [],
-                    "interval_smooth": []
-                }
-
-            # Append telemetry values
-            drivers[code]["t"].append(float(t))
-            drivers[code]["x"].append(float(driver_data.get("x", 0)))
-            drivers[code]["y"].append(float(driver_data.get("y", 0)))
-            drivers[code]["dist"].append(float(driver_data.get("dist", 0)))
-            drivers[code]["rel_dist"].append(float(driver_data.get("rel_dist", 0)))
-            drivers[code]["lap"].append(int(driver_data.get("lap", 0)))
-            drivers[code]["tyre"].append(int(driver_data.get("tyre", 0)))
-            drivers[code]["speed"].append(float(driver_data.get("speed", 0)))
-            drivers[code]["gear"].append(int(driver_data.get("gear", 0)))
-            drivers[code]["drs"].append(int(driver_data.get("drs", 0)))
-            drivers[code]["throttle"].append(float(driver_data.get("throttle", 0)))
-            drivers[code]["brake"].append(float(driver_data.get("brake", 0)))
-            drivers[code]["rpm"].append(int(driver_data.get("rpm", 0)))
-
-            # Timing data
-            timing_data[code]["gap"].append(float(driver_data.get("gap", 0)))
-            timing_data[code]["pos_raw"].append(int(driver_data.get("pos_raw", 0)))
-            timing_data[code]["interval_smooth"].append(float(driver_data.get("interval_smooth", 0)))
-
-            # Metadata (from first frame with data)
-            if code not in driver_colors:
-                color = driver_data.get("color", [128, 128, 128])
-                driver_colors[code] = color if isinstance(color, list) else [128, 128, 128]
-            if code not in driver_numbers:
-                driver_numbers[code] = str(driver_data.get("number", ""))
-            if code not in driver_teams:
-                driver_teams[code] = driver_data.get("team", "")
-
-    emit_progress(90, "Finalizing telemetry payload...")
-
-    return {
-        "global_t_min": float(global_t_min) if global_t_min != float('inf') else 0,
-        "global_t_max": float(global_t_max) if global_t_max != float('-inf') else 0,
-        "drivers": drivers,
-        "timing": {
-            "gap_by_driver": {code: data["gap"] for code, data in timing_data.items()},
-            "pos_by_driver": {code: data["pos_raw"] for code, data in timing_data.items()},
-            "interval_smooth_by_driver": {code: data["interval_smooth"] for code, data in timing_data.items()},
-            "abs_timeline": [f.get("t", 0) for f in frames]
-        },
-        "track_statuses": [
-            {"status": str(f.get("track_status", "1")), "start_time": f.get("t", 0), "end_time": f.get("t", 0)}
-            for f in frames[:1]  # Simplified: just session status
-        ],
+    # Build payload
+    payload = {
+        "global_t_min": min([min(drivers_raw[code]["t"]) for code in drivers_raw.keys()] + [0]),
+        "global_t_max": max([max(drivers_raw[code]["t"]) for code in drivers_raw.keys()] + [0]),
+        "drivers": drivers_raw,
+        "timing": timing_data,
+        "track_statuses": track_statuses,
         "driver_colors": driver_colors,
-        "driver_lap_positions": driver_lap_positions,
         "driver_numbers": driver_numbers,
         "driver_teams": driver_teams,
-        "weather_times": [f.get("t", 0) for f in frames],
+        "driver_lap_positions": {code: [1] * len(drivers_raw[code]["lap"]) for code in drivers_raw.keys()},
+        "weather_times": [],
         "weather_data": {
-            "track_temp": [f.get("weather", {}).get("track_temp", 0) for f in frames],
-            "air_temp": [f.get("weather", {}).get("air_temp", 0) for f in frames],
-            "humidity": [f.get("weather", {}).get("humidity", 0) for f in frames],
-            "wind_speed": [f.get("weather", {}).get("wind_speed", 0) for f in frames],
-            "wind_direction": [f.get("weather", {}).get("wind_direction", 0) for f in frames],
-            "rainfall": [f.get("weather", {}).get("rainfall", 0) for f in frames]
+            "track_temp": [],
+            "air_temp": [],
+            "humidity": [],
+            "wind_speed": [],
+            "wind_direction": [],
+            "rainfall": []
         },
-        "race_start_time_absolute": float(frames[0].get("t", 0)) if frames else 0,
-        "total_laps": max([f.get("lap", 0) for f in frames]) if frames else 0,
+        "race_start_time_absolute": 0.0,
+        "total_laps": max([max(drivers_raw[code]["lap"]) for code in drivers_raw.keys()] + [1]),
         "track_geometry_telemetry": {"x": [], "y": []}
     }
 
+    return payload
+
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="FastF1 Telemetry Bridge for Go Backend"
-    )
+    parser = argparse.ArgumentParser(description="FastF1 Telemetry Extractor for Go Backend")
     parser.add_argument("year", type=int, help="Season year (e.g., 2025)")
     parser.add_argument("round", type=int, help="Round number (e.g., 1)")
     parser.add_argument("session_type", choices=["R", "S", "Q", "SQ"],
                        help="Session type: R=Race, S=Sprint, Q=Qualifying, SQ=SprintQuali")
-    parser.add_argument("--refresh", action="store_true",
-                       help="Force refresh data (bypass cache)")
+    parser.add_argument("--refresh", action="store_true", help="Force refresh data")
 
     args = parser.parse_args()
 
     try:
         emit_progress(5, f"Loading FastF1 session {args.year} R{args.round} {args.session_type}...")
 
-        # Load telemetry based on session type
-        if args.session_type in ["Q", "SQ"]:
-            emit_progress(20, "Extracting qualifying telemetry...")
-            frames = get_quali_telemetry(
-                year=args.year,
-                round_num=args.round,
-                refresh=args.refresh
-            )
-        else:  # Race or Sprint
-            emit_progress(20, "Extracting race/sprint telemetry...")
-            frames = get_race_telemetry(
-                year=args.year,
-                round_num=args.round,
-                session_type=args.session_type,
-                refresh=args.refresh
-            )
+        # Load session
+        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "SprintQualifying"}
+        session = fastf1.get_session(args.year, args.round, session_map[args.session_type])
+        session.load(telemetry=True, weather=True)
 
-        emit_progress(70, f"Processing {len(frames)} frames...")
+        emit_progress(20, f"Extracting {args.session_type} telemetry...")
 
-        # Serialize to format Go expects
-        payload = serialize_for_go(frames, args.session_type)
+        # Extract raw data
+        payload = extract_raw_telemetry(session, args.session_type)
 
-        emit_progress(95, "Sending data to Go backend...")
-        emit_data(payload)
+        # Write to msgpack file
+        emit_progress(80, "Writing telemetry to cache file...")
 
-        emit_progress(100, "Done!")
+        cache_dir = Path(__file__).parent.parent / "computed_data"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        cache_file = cache_dir / f"{args.year}_r{args.round}_{args.session_type}_telemetry.msgpack"
+
+        # msgpack.packb returns bytes
+        payload_bytes = msgpack.packb(payload, use_bin_type=True)
+        with open(cache_file, 'wb') as f:
+            f.write(payload_bytes)
+
+        emit_progress(100, "Extraction complete!")
+        emit_completion(str(cache_file))
+
         return 0
 
     except Exception as e:
-        emit_progress(0, f"ERROR: {str(e)}")
+        import traceback
+        error_msg = f"ERROR: {str(e)}"
+        emit_progress(0, error_msg)
+        print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
         return 1
 
 

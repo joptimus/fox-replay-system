@@ -2,14 +2,15 @@ package bridge
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"sync"
+	"time"
 
-	"f1-replay-go/models"
 	"go.uber.org/zap"
 )
 
@@ -32,28 +33,28 @@ type RawDriverData struct {
 
 // RawDataPayload is the complete telemetry data from Python bridge
 type RawDataPayload struct {
-	GlobalTMin                float64                        `json:"global_t_min"`
-	GlobalTMax                float64                        `json:"global_t_max"`
-	Drivers                   map[string]RawDriverData      `json:"drivers"`
-	Timing                    TimingData                    `json:"timing"`
-	TrackStatuses             []TrackStatus                 `json:"track_statuses"`
-	DriverColors              map[string][3]int             `json:"driver_colors"`
-	DriverLapPositions        map[string][]int              `json:"driver_lap_positions"`
-	DriverNumbers             map[string]string             `json:"driver_numbers"`
-	DriverTeams               map[string]string             `json:"driver_teams"`
-	WeatherTimes              []float64                     `json:"weather_times"`
-	WeatherData               map[string][]float64          `json:"weather_data"`
-	RaceStartTimeAbsolute     float64                       `json:"race_start_time_absolute"`
-	TotalLaps                 int                           `json:"total_laps"`
-	TrackGeometryTelemetry    TrackGeometryData             `json:"track_geometry_telemetry"`
+	GlobalTMin             float64                  `json:"global_t_min"`
+	GlobalTMax             float64                  `json:"global_t_max"`
+	Drivers                map[string]RawDriverData `json:"drivers"`
+	Timing                 TimingData               `json:"timing"`
+	TrackStatuses          []TrackStatus            `json:"track_statuses"`
+	DriverColors           map[string][3]int        `json:"driver_colors"`
+	DriverLapPositions     map[string][]int         `json:"driver_lap_positions"`
+	DriverNumbers          map[string]string        `json:"driver_numbers"`
+	DriverTeams            map[string]string        `json:"driver_teams"`
+	WeatherTimes           []float64                `json:"weather_times"`
+	WeatherData            map[string][]float64     `json:"weather_data"`
+	RaceStartTimeAbsolute  float64                  `json:"race_start_time_absolute"`
+	TotalLaps              int                      `json:"total_laps"`
+	TrackGeometryTelemetry TrackGeometryData        `json:"track_geometry_telemetry"`
 }
 
 // TimingData contains timing information for all drivers
 type TimingData struct {
-	GapByDriver              map[string][]float64 `json:"gap_by_driver"`
-	PosByDriver              map[string][]int     `json:"pos_by_driver"`
-	IntervalSmoothByDriver   map[string][]float64 `json:"interval_smooth_by_driver"`
-	AbsTimeline              []float64            `json:"abs_timeline"`
+	GapByDriver            map[string][]float64 `json:"gap_by_driver"`
+	PosByDriver            map[string][]int     `json:"pos_by_driver"`
+	IntervalSmoothByDriver map[string][]float64 `json:"interval_smooth_by_driver"`
+	AbsTimeline            []float64            `json:"abs_timeline"`
 }
 
 // TrackGeometryData contains track centerline and boundaries
@@ -78,7 +79,9 @@ type ProgressMessage struct {
 // BridgeOutput represents output from Python bridge (JSON-line)
 type BridgeOutput struct {
 	Type     string           `json:"type"` // "progress" or "data"
-	Progress *ProgressMessage `json:"pct,omitempty"`
+	Progress *ProgressMessage `json:"progress,omitempty"`
+	Pct      *int             `json:"pct,omitempty"`
+	Msg      string           `json:"msg,omitempty"`
 	Data     *RawDataPayload  `json:"payload,omitempty"`
 }
 
@@ -105,6 +108,8 @@ func (b *PythonBridge) Execute(
 	refresh bool,
 ) (*RawDataPayload, <-chan *ProgressMessage, error) {
 	progressCh := make(chan *ProgressMessage, 10)
+	const firstMessageTimeout = 30 * time.Second
+	const maxStdoutLineBytes = 512 * 1024 * 1024 // 512MB JSON line budget
 
 	// Build command
 	args := []string{b.scriptPath, strconv.Itoa(year), strconv.Itoa(round), sessionType}
@@ -112,7 +117,9 @@ func (b *PythonBridge) Execute(
 		args = append(args, "--refresh")
 	}
 
-	cmd := exec.Command("python3", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), firstMessageTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "python3", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -127,11 +134,19 @@ func (b *PythonBridge) Execute(
 	var finalData *RawDataPayload
 	var readErr error
 	var mu sync.Mutex
+	firstMessageCh := make(chan struct{}, 1)
+	signalFirstMessage := func() {
+		select {
+		case firstMessageCh <- struct{}{}:
+		default:
+		}
+	}
 
 	go func() {
 		defer close(progressCh)
 
 		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 1024*1024), maxStdoutLineBytes)
 		for scanner.Scan() {
 			line := scanner.Bytes()
 
@@ -143,16 +158,28 @@ func (b *PythonBridge) Execute(
 				continue
 			}
 
-			if output.Type == "progress" && output.Progress != nil {
+			if output.Type == "progress" {
+				progress := output.Progress
+				if progress == nil && output.Pct != nil {
+					progress = &ProgressMessage{
+						Pct: *output.Pct,
+						Msg: output.Msg,
+					}
+				}
+				if progress == nil {
+					continue
+				}
 				select {
-				case progressCh <- output.Progress:
+				case progressCh <- progress:
 				default:
 					// Channel full, skip this message
 				}
+				signalFirstMessage()
 			} else if output.Type == "data" && output.Data != nil {
 				mu.Lock()
 				finalData = output.Data
 				mu.Unlock()
+				signalFirstMessage()
 			}
 		}
 
@@ -172,9 +199,12 @@ func (b *PythonBridge) Execute(
 		}
 	}()
 
-	// For now, wait a bit for data (in real implementation, timeout based on file size)
-	// This is a simplified version - production would use better synchronization
-	<-progressCh // Wait for at least one progress message
+	// Wait for at least one progress or data message, but never block indefinitely.
+	select {
+	case <-firstMessageCh:
+	case <-ctx.Done():
+		return nil, nil, fmt.Errorf("python bridge timeout waiting for first message after %s", firstMessageTimeout)
+	}
 
 	return finalData, progressCh, nil
 }
