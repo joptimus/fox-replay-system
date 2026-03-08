@@ -1520,41 +1520,6 @@ def get_driver_quali_telemetry(session, driver_code: str, quali_segment: str):
     }
 
 
-def _process_quali_driver(args):
-    """Process qualifying telemetry data for a single driver - must be top-level for multiprocessing"""
-    session, driver_code = args
-
-    print(f"Getting qualifying telemetry for driver: {driver_code}")
-
-    driver_telemetry_data = {}
-
-    max_speed = 0.0
-    min_speed = 0.0
-
-    for segment in ["Q1", "Q2", "Q3"]:
-        try:
-            segment_telemetry = get_driver_quali_telemetry(session, driver_code, segment)
-            driver_telemetry_data[segment] = segment_telemetry
-
-            # Update global max/min speed
-            if segment_telemetry["max_speed"] > max_speed:
-                max_speed = segment_telemetry["max_speed"]
-            if segment_telemetry["min_speed"] < min_speed or min_speed == 0.0:
-                min_speed = segment_telemetry["min_speed"]
-
-        except (ValueError, fastf1.core.DataNotLoadedError):
-            driver_telemetry_data[segment] = {"frames": [], "track_statuses": []}
-
-    print(f"Finished processing qualifying telemetry for driver: {driver_code}")
-        
-    return {
-        "driver_code": driver_code,
-        "driver_telemetry_data": driver_telemetry_data,
-        "max_speed": max_speed,
-        "min_speed": min_speed,
-    }
-
-
 def get_quali_telemetry(session, session_type='Q', refresh=False, progress_callback=None):
     event_name = str(session).replace(' ', '_')
     cache_suffix = 'sprintquali' if session_type == 'SQ' else 'quali'
@@ -1584,27 +1549,30 @@ def get_quali_telemetry(session, session_type='Q', refresh=False, progress_callb
         for num in session.drivers
     }
 
-    driver_args = [(session, driver_codes[driver_no]) for driver_no in session.drivers]
-
-    print(f"Processing {len(session.drivers)} drivers in parallel...")
-
-    num_processes = min(cpu_count(), len(session.drivers))
-    num_drivers = len(session.drivers)
-    chunksize = max(1, (num_drivers + num_processes * 4 - 1) // (num_processes * 4))
+    print(f"Processing {len(session.drivers)} drivers serially...")
 
     raw_telemetry = {}
     max_speed = 0.0
     min_speed = 0.0
 
-    with Pool(processes=num_processes) as pool:
-        results = pool.imap_unordered(_process_quali_driver, driver_args, chunksize=chunksize)
-        for result in results:
-            driver_code = result["driver_code"]
-            raw_telemetry[driver_code] = result["driver_telemetry_data"]
-            if result["max_speed"] > max_speed:
-                max_speed = result["max_speed"]
-            if result["min_speed"] < min_speed or min_speed == 0.0:
-                min_speed = result["min_speed"]
+    for driver_no in session.drivers:
+        driver_code = driver_codes[driver_no]
+        driver_telemetry_data = {}
+
+        for segment in ["Q1", "Q2", "Q3"]:
+            try:
+                segment_telemetry = get_driver_quali_telemetry(session, driver_code, segment)
+                driver_telemetry_data[segment] = segment_telemetry
+
+                if segment_telemetry["max_speed"] > max_speed:
+                    max_speed = segment_telemetry["max_speed"]
+                if segment_telemetry["min_speed"] < min_speed or min_speed == 0.0:
+                    min_speed = segment_telemetry["min_speed"]
+
+            except (ValueError, fastf1.core.DataNotLoadedError):
+                driver_telemetry_data[segment] = {"frames": [], "track_statuses": []}
+
+        raw_telemetry[driver_code] = driver_telemetry_data
 
     segments = {"Q1": {"duration": 0, "drivers": {}}, "Q2": {"duration": 0, "drivers": {}}, "Q3": {"duration": 0, "drivers": {}}}
 

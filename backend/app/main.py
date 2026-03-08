@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import sys
 from pathlib import Path
@@ -8,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from backend.core.logging import setup_logging, get_logger
 from shared.telemetry.f1_data import enable_cache
-from backend.app.api import rounds, sessions, telemetry
+from backend.app.api import rounds, sessions, telemetry, debug
 from backend.app.websocket import handle_replay_websocket
 
 enable_cache()
@@ -44,11 +45,21 @@ app.add_middleware(
 app.include_router(rounds.router)
 app.include_router(sessions.router)
 app.include_router(telemetry.router)
+app.include_router(debug.router)
 
 
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/debug/fastf1-tester")
+async def fastf1_tester():
+    """Serve the FastF1 API tester UI."""
+    tester_file = Path(__file__).parent.parent / "static" / "fastf1-tester.html"
+    if tester_file.exists():
+        return FileResponse(tester_file, media_type="text/html")
+    return {"error": "Tester not found"}
 
 
 @app.websocket("/ws/replay/{session_id}")

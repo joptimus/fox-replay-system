@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastF1 API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #4a9eff;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: #2a2a3e;
+            border: 1px solid #404050;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            color: #4a9eff;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #b0b0b0;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.7rem;
+            background: #1a1a2e;
+            border: 1px solid #404050;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #4a9eff;
+            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+        }
+
+        button {
+            padding: 0.7rem 1.5rem;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #3a8eef;
+        }
+
+        button:active {
+            background: #2a7edf;
+        }
+
+        button:disabled {
+            background: #606070;
+            cursor: not-allowed;
+        }
+
+        .results {
+            margin-top: 2rem;
+            background: #1a1a2e;
+            border: 1px solid #404050;
+            border-radius: 4px;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .results pre {
+            margin: 0;
+            color: #a0a0a0;
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .success {
+            color: #51cf66;
+        }
+
+        .loading {
+            color: #4a9eff;
+        }
+
+        .method-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .method-btn {
+            padding: 0.5rem;
+            background: #404050;
+            color: #e0e0e0;
+            border: 1px solid #505060;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .method-btn:hover {
+            background: #505060;
+            border-color: #4a9eff;
+        }
+
+        .method-btn.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: white;
+        }
+
+        .full-results {
+            margin-top: 2rem;
+        }
+
+        .inspector-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .inspector-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .inspector-section h3 {
+            color: #4a9eff;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+
+        .request-display {
+            background: #1a1a2e;
+            border: 1px solid #404050;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .request-method {
+            color: #51cf66;
+            font-weight: bold;
+        }
+
+        .request-path {
+            color: #4a9eff;
+        }
+
+        .request-param {
+            color: #b0b0b0;
+        }
+
+        .request-value {
+            color: #ff9999;
+        }
+
+        .logs-display {
+            background: #1a1a2e;
+            border: 1px solid #404050;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .log-line {
+            margin: 0.3rem 0;
+        }
+
+        .log-start {
+            color: #4a9eff;
+        }
+
+        .log-params {
+            color: #b0b0b0;
+        }
+
+        .log-call {
+            color: #ffd700;
+        }
+
+        .log-success {
+            color: #51cf66;
+        }
+
+        .log-error {
+            color: #ff6b6b;
+        }
+
+        .info-box {
+            background: #1a1a2e;
+            border-left: 3px solid #4a9eff;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .info-box code {
+            background: #0a0a1e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #4a9eff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏁 FastF1 API Tester</h1>
+
+        <div class="info-box">
+            <strong>Quick Test:</strong> Use this tool to test FastF1 session loading and data extraction.
+            Useful for debugging 2026 R1 Qualifying issues and validating session availability.
+        </div>
+
+        <div class="main-grid">
+            <!-- Input Card -->
+            <div class="card">
+                <h2>Test Parameters</h2>
+                <div class="form-group">
+                    <label>Year</label>
+                    <input type="number" id="year" value="2026" min="2018" max="2030">
+                </div>
+
+                <div class="form-group">
+                    <label>Round</label>
+                    <input type="number" id="round" value="1" min="1" max="24">
+                </div>
+
+                <div class="form-group">
+                    <label>Session Type</label>
+                    <select id="sessionType">
+                        <option value="R">Race (R)</option>
+                        <option value="Q">Qualifying (Q)</option>
+                        <option value="S">Sprint (S)</option>
+                        <option value="SQ">Sprint Qualifying (SQ)</option>
+                        <option value="FP1">Free Practice 1 (FP1)</option>
+                        <option value="FP2">Free Practice 2 (FP2)</option>
+                        <option value="FP3">Free Practice 3 (FP3)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Driver Code (optional, for telemetry)</label>
+                    <input type="text" id="driverCode" placeholder="e.g., VER, HAM, LEC">
+                </div>
+
+                <h3 style="margin-top: 1.5rem; margin-bottom: 1rem; color: #4a9eff; font-size: 1rem;">Select Test Method:</h3>
+                <div class="method-buttons">
+                    <button class="method-btn active" data-method="load_session">Load Session</button>
+                    <button class="method-btn" data-method="laps">Get Laps</button>
+                    <button class="method-btn" data-method="drivers">Get Drivers</button>
+                    <button class="method-btn" data-method="telemetry">Get Telemetry</button>
+                    <button class="method-btn" data-method="weather">Get Weather</button>
+                </div>
+
+                <button id="testBtn" style="margin-top: 1rem;">Run Test</button>
+            </div>
+
+            <!-- Results Card -->
+            <div class="card">
+                <h2>Results</h2>
+                <div id="results" class="results">
+                    <pre class="loading">Ready to test. Select parameters and click "Run Test".</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inspector: Request & Response Side-by-Side -->
+        <div class="inspector-grid">
+            <div class="card inspector-section">
+                <h3>📤 HTTP Request</h3>
+                <div id="requestDisplay" class="request-display">
+                    <pre class="loading">Request details will appear here...</pre>
+                </div>
+            </div>
+
+            <div class="card inspector-section">
+                <h3>📥 HTTP Response</h3>
+                <div id="responseDisplay" class="request-display">
+                    <pre class="loading">Response will appear here...</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Section -->
+        <div class="card">
+            <h2>📋 API Call Logs</h2>
+            <div id="logsDisplay" class="logs-display">
+                <div class="log-line log-params">Logs will appear here after running a test...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedMethod = 'load_session';
+
+        // Method button selection
+        document.querySelectorAll('.method-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedMethod = btn.dataset.method;
+            });
+        });
+
+        // Test button
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            const year = document.getElementById('year').value;
+            const round = document.getElementById('round').value;
+            const sessionType = document.getElementById('sessionType').value;
+            const driverCode = document.getElementById('driverCode').value || undefined;
+
+            const resultsEl = document.getElementById('results');
+            const requestEl = document.getElementById('requestDisplay');
+            const responseEl = document.getElementById('responseDisplay');
+            const logsEl = document.getElementById('logsDisplay');
+
+            // Show loading state
+            resultsEl.innerHTML = '<pre class="loading">Testing...</pre>';
+            requestEl.innerHTML = '<pre class="loading">Building request...</pre>';
+            responseEl.innerHTML = '<pre class="loading">Awaiting response...</pre>';
+            logsEl.innerHTML = '<div class="log-line log-call">[WAITING] Calling API...</div>';
+
+            try {
+                const params = new URLSearchParams({
+                    year,
+                    round_num: round,
+                    session_type: sessionType,
+                    method: selectedMethod,
+                });
+
+                if (driverCode) {
+                    params.append('driver_code', driverCode);
+                }
+
+                const url = `http://localhost:8000/api/debug/fastf1-test?${params}`;
+
+                // Display the request
+                const requestDisplay = `<span class="request-method">GET</span> <span class="request-path">/api/debug/fastf1-test</span>
+
+<span class="request-param">year:</span> <span class="request-value">${year}</span>
+<span class="request-param">round_num:</span> <span class="request-value">${round}</span>
+<span class="request-param">session_type:</span> <span class="request-value">${sessionType}</span>
+<span class="request-param">method:</span> <span class="request-value">${selectedMethod}</span>${driverCode ? `
+<span class="request-param">driver_code:</span> <span class="request-value">${driverCode}</span>` : ''}
+
+URL: <span class="request-value">${url}</span>`;
+                requestEl.innerHTML = `<pre>${requestDisplay}</pre>`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Display the response
+                const responseDisplay = `<span class="request-method">HTTP ${response.status}</span> ${response.ok ? '<span style="color: #51cf66;">OK</span>' : '<span style="color: #ff6b6b;">ERROR</span>'}
+
+${JSON.stringify(data, null, 2)}`;
+                responseEl.innerHTML = `<pre>${responseDisplay}</pre>`;
+
+                // Display logs if available
+                if (data.result && data.result.logs) {
+                    const logsHtml = data.result.logs.map(log => {
+                        let className = 'log-params';
+                        if (log.includes('[START]')) className = 'log-start';
+                        else if (log.includes('[API CALL]')) className = 'log-call';
+                        else if (log.includes('[SUCCESS]')) className = 'log-success';
+                        else if (log.includes('[ERROR]')) className = 'log-error';
+                        return `<div class="log-line ${className}">${log}</div>`;
+                    }).join('');
+                    logsEl.innerHTML = logsHtml;
+                } else {
+                    logsEl.innerHTML = '<div class="log-line log-params">No logs available</div>';
+                }
+
+                // Display summary results
+                if (!response.ok) {
+                    resultsEl.innerHTML = `<pre class="error">HTTP ${response.status}: ${data.detail || JSON.stringify(data)}</pre>`;
+                } else if (data.result && data.result.success) {
+                    const summary = Object.entries(data.result)
+                        .filter(([key]) => !['success', 'logs', 'traceback'].includes(key))
+                        .map(([key, value]) => {
+                            if (typeof value === 'object') {
+                                return `${key}: ${JSON.stringify(value, null, 2)}`;
+                            }
+                            return `${key}: ${value}`;
+                        })
+                        .join('\n');
+
+                    resultsEl.innerHTML = `<pre class="success">${summary}</pre>`;
+                } else if (data.result && !data.result.success) {
+                    let errorDisplay = `<pre class="error">${data.result.error || 'Unknown error'}</pre>`;
+                    if (data.result.traceback) {
+                        errorDisplay += `<pre class="error" style="margin-top: 1rem;">${data.result.traceback}</pre>`;
+                    }
+                    resultsEl.innerHTML = errorDisplay;
+                } else {
+                    resultsEl.innerHTML = `<pre class="error">Unexpected response format:\n${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                const errorMsg = `Fetch Error: ${error.message}\n\nMake sure:\n- Backend is running on localhost:8000\n- CORS is enabled\n- Try opening: http://localhost:8000/api/health`;
+                resultsEl.innerHTML = `<pre class="error">${errorMsg}</pre>`;
+                requestEl.innerHTML = `<pre class="error">${errorMsg}</pre>`;
+                responseEl.innerHTML = `<pre class="error">${errorMsg}</pre>`;
+            }
+        });
+
+        // Allow Enter key to run test
+        document.getElementById('year').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('testBtn').click();
+        });
+    </script>
+</body>
+</html>

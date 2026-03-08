@@ -491,3 +491,40 @@ def test_sort_key_hybrid_none_pos_raw():
     assert key_ham == (9999, 0.5, -1000.0)
     assert key_ver == (2, 1.2, -950.0)
     assert key_ver < key_ham
+
+
+def test_quali_telemetry_generates_frames():
+    """Test that get_quali_telemetry returns frames (not empty) - reproduces bug where 0 frames generated for 2026"""
+    from shared.telemetry.f1_data import get_quali_telemetry, load_session
+
+    # Load a real 2025 qualifying session to test the fix
+    session = load_session(2025, 1, 'Q')
+
+    # Get qualifying telemetry
+    result = get_quali_telemetry(session, session_type='Q', refresh=True)
+
+    # Should have results dict with segments
+    assert result is not None
+    assert 'segments' in result
+
+    segments = result['segments']
+    assert 'Q1' in segments
+    assert 'Q2' in segments
+    assert 'Q3' in segments
+
+    # At least one segment should have drivers with frames
+    total_frame_count = 0
+    for segment_name in ['Q1', 'Q2', 'Q3']:
+        segment = segments[segment_name]
+        assert 'drivers' in segment
+        for driver_code, driver_data in segment['drivers'].items():
+            assert 'frames' in driver_data
+            frames = driver_data['frames']
+            # Each driver in each segment should have non-empty frames
+            # (This would fail with 0 frames if multiprocessing is breaking data loading)
+            if len(frames) > 0:
+                total_frame_count += len(frames)
+
+    # At least one driver in at least one segment should have frames
+    # This assertion would fail if the bug exists (multiprocessing + data loss = 0 frames)
+    assert total_frame_count > 0, "No frames generated for any qualifying segment - multiprocessing is breaking data loading"
