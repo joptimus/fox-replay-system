@@ -2,7 +2,6 @@ package bridge
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,58 +15,58 @@ import (
 
 // RawDriverData represents raw telemetry arrays from Python bridge
 type RawDriverData struct {
-	T        []float64 `json:"t"`
-	X        []float64 `json:"x"`
-	Y        []float64 `json:"y"`
-	Dist     []float64 `json:"dist"`
-	RelDist  []float64 `json:"rel_dist"`
-	Lap      []int     `json:"lap"`
-	Tyre     []int     `json:"tyre"`
-	Speed    []float64 `json:"speed"`
-	Gear     []int     `json:"gear"`
-	DRS      []int     `json:"drs"`
-	Throttle []float64 `json:"throttle"`
-	Brake    []float64 `json:"brake"`
-	RPM      []int     `json:"rpm"`
+	T        []float64 `json:"t" msgpack:"t"`
+	X        []float64 `json:"x" msgpack:"x"`
+	Y        []float64 `json:"y" msgpack:"y"`
+	Dist     []float64 `json:"dist" msgpack:"dist"`
+	RelDist  []float64 `json:"rel_dist" msgpack:"rel_dist"`
+	Lap      []int     `json:"lap" msgpack:"lap"`
+	Tyre     []int     `json:"tyre" msgpack:"tyre"`
+	Speed    []float64 `json:"speed" msgpack:"speed"`
+	Gear     []int     `json:"gear" msgpack:"gear"`
+	DRS      []int     `json:"drs" msgpack:"drs"`
+	Throttle []float64 `json:"throttle" msgpack:"throttle"`
+	Brake    []float64 `json:"brake" msgpack:"brake"`
+	RPM      []int     `json:"rpm" msgpack:"rpm"`
 }
 
 // RawDataPayload is the complete telemetry data from Python bridge
 type RawDataPayload struct {
-	GlobalTMin             float64                  `json:"global_t_min"`
-	GlobalTMax             float64                  `json:"global_t_max"`
-	Drivers                map[string]RawDriverData `json:"drivers"`
-	Timing                 TimingData               `json:"timing"`
-	TrackStatuses          []TrackStatus            `json:"track_statuses"`
-	DriverColors           map[string][3]int        `json:"driver_colors"`
-	DriverLapPositions     map[string][]int         `json:"driver_lap_positions"`
-	DriverNumbers          map[string]string        `json:"driver_numbers"`
-	DriverTeams            map[string]string        `json:"driver_teams"`
-	WeatherTimes           []float64                `json:"weather_times"`
-	WeatherData            map[string][]float64     `json:"weather_data"`
-	RaceStartTimeAbsolute  float64                  `json:"race_start_time_absolute"`
-	TotalLaps              int                      `json:"total_laps"`
-	TrackGeometryTelemetry TrackGeometryData        `json:"track_geometry_telemetry"`
+	GlobalTMin             float64                  `json:"global_t_min" msgpack:"global_t_min"`
+	GlobalTMax             float64                  `json:"global_t_max" msgpack:"global_t_max"`
+	Drivers                map[string]RawDriverData `json:"drivers" msgpack:"drivers"`
+	Timing                 TimingData               `json:"timing" msgpack:"timing"`
+	TrackStatuses          []TrackStatus            `json:"track_statuses" msgpack:"track_statuses"`
+	DriverColors           map[string][3]int        `json:"driver_colors" msgpack:"driver_colors"`
+	DriverLapPositions     map[string][]int         `json:"driver_lap_positions" msgpack:"driver_lap_positions"`
+	DriverNumbers          map[string]string        `json:"driver_numbers" msgpack:"driver_numbers"`
+	DriverTeams            map[string]string        `json:"driver_teams" msgpack:"driver_teams"`
+	WeatherTimes           []float64                `json:"weather_times" msgpack:"weather_times"`
+	WeatherData            map[string][]float64     `json:"weather_data" msgpack:"weather_data"`
+	RaceStartTimeAbsolute  float64                  `json:"race_start_time_absolute" msgpack:"race_start_time_absolute"`
+	TotalLaps              int                      `json:"total_laps" msgpack:"total_laps"`
+	TrackGeometryTelemetry TrackGeometryData        `json:"track_geometry_telemetry" msgpack:"track_geometry_telemetry"`
 }
 
 // TimingData contains timing information for all drivers
 type TimingData struct {
-	GapByDriver            map[string][]float64 `json:"gap_by_driver"`
-	PosByDriver            map[string][]int     `json:"pos_by_driver"`
-	IntervalSmoothByDriver map[string][]float64 `json:"interval_smooth_by_driver"`
-	AbsTimeline            []float64            `json:"abs_timeline"`
+	GapByDriver            map[string][]float64 `json:"gap_by_driver" msgpack:"gap_by_driver"`
+	PosByDriver            map[string][]int     `json:"pos_by_driver" msgpack:"pos_by_driver"`
+	IntervalSmoothByDriver map[string][]float64 `json:"interval_smooth_by_driver" msgpack:"interval_smooth_by_driver"`
+	AbsTimeline            []float64            `json:"abs_timeline" msgpack:"abs_timeline"`
 }
 
 // TrackGeometryData contains track centerline and boundaries
 type TrackGeometryData struct {
-	X []float64 `json:"x"`
-	Y []float64 `json:"y"`
+	X []float64 `json:"x" msgpack:"x"`
+	Y []float64 `json:"y" msgpack:"y"`
 }
 
 // TrackStatus represents track status information
 type TrackStatus struct {
-	Status    string  `json:"status"`
-	StartTime float64 `json:"start_time"`
-	EndTime   float64 `json:"end_time"`
+	Status    string  `json:"status" msgpack:"status"`
+	StartTime float64 `json:"start_time" msgpack:"start_time"`
+	EndTime   float64 `json:"end_time" msgpack:"end_time"`
 }
 
 // ProgressMessage represents a progress update from Python
@@ -117,9 +116,7 @@ func (b *PythonBridge) Execute(
 		args = append(args, "--refresh")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), firstMessageTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "python3", args...)
+	cmd := exec.Command("python3", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -200,9 +197,14 @@ func (b *PythonBridge) Execute(
 	}()
 
 	// Wait for at least one progress or data message, but never block indefinitely.
+	timer := time.NewTimer(firstMessageTimeout)
+	defer timer.Stop()
 	select {
 	case <-firstMessageCh:
-	case <-ctx.Done():
+	case <-timer.C:
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
 		return nil, nil, fmt.Errorf("python bridge timeout waiting for first message after %s", firstMessageTimeout)
 	}
 
@@ -219,18 +221,16 @@ func (p *RawDataPayload) Validate() error {
 		return errors.New("no driver data in payload")
 	}
 
-	// Check that all drivers have the same number of samples
-	var expectedLen int
 	for code, driver := range p.Drivers {
-		if len(driver.T) == 0 {
+		n := len(driver.T)
+		if n == 0 {
 			return fmt.Errorf("driver %s has no timestamp data", code)
 		}
-
-		if expectedLen == 0 {
-			expectedLen = len(driver.T)
-		} else if len(driver.T) != expectedLen {
-			return fmt.Errorf("driver %s has %d samples, expected %d",
-				code, len(driver.T), expectedLen)
+		if len(driver.X) != n || len(driver.Y) != n || len(driver.Dist) != n ||
+			len(driver.RelDist) != n || len(driver.Lap) != n || len(driver.Tyre) != n ||
+			len(driver.Speed) != n || len(driver.Gear) != n || len(driver.DRS) != n ||
+			len(driver.Throttle) != n || len(driver.Brake) != n || len(driver.RPM) != n {
+			return fmt.Errorf("driver %s has inconsistent telemetry field lengths", code)
 		}
 	}
 

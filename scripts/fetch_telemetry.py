@@ -54,6 +54,98 @@ def emit_error(msg: str):
     }), flush=True)
 
 
+def to_seconds(value):
+    """Convert FastF1/pandas time-like values to seconds."""
+    if value is None:
+        return 0.0
+    if hasattr(value, "total_seconds"):
+        try:
+            return float(value.total_seconds())
+        except Exception:
+            pass
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+def safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def safe_int(value, default=0):
+    try:
+        if value is None:
+            return int(default)
+        return int(float(value))
+    except Exception:
+        return int(default)
+
+
+def normalize_team_color(value):
+    """Convert FastF1 team color value to [r,g,b] int triplet."""
+    if value is None:
+        return [0, 0, 0]
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        return [safe_int(value[0]), safe_int(value[1]), safe_int(value[2])]
+
+    color_str = str(value).strip().lstrip("#")
+    if len(color_str) == 6:
+        try:
+            return [
+                int(color_str[0:2], 16),
+                int(color_str[2:4], 16),
+                int(color_str[4:6], 16),
+            ]
+        except ValueError:
+            return [0, 0, 0]
+    return [0, 0, 0]
+
+
+def series_to_float_list(series_like, fallback_len=0, default=0.0, time_mode=False):
+    """Convert pandas-like series/list to float list, with optional timedelta conversion."""
+    try:
+        values = series_like.tolist() if hasattr(series_like, "tolist") else list(series_like)
+    except Exception:
+        return [float(default)] * fallback_len
+    if time_mode:
+        return [to_seconds(v) for v in values]
+    return [safe_float(v, default) for v in values]
+
+
+def series_to_int_list(series_like, fallback_len=0, default=0):
+    """Convert pandas-like series/list to int list."""
+    try:
+        values = series_like.tolist() if hasattr(series_like, "tolist") else list(series_like)
+    except Exception:
+        return [int(default)] * fallback_len
+    return [safe_int(v, default) for v in values]
+
+
+def validate_driver_arrays(drivers_raw: dict):
+    """Validate that per-driver arrays are present and have equal lengths."""
+    required_keys = ["t", "x", "y", "dist", "rel_dist", "lap", "tyre", "speed", "gear", "drs", "throttle", "brake", "rpm"]
+    if not drivers_raw:
+        raise ValueError("no drivers extracted from FastF1 session")
+
+    for code, data in drivers_raw.items():
+        missing = [k for k in required_keys if k not in data]
+        if missing:
+            raise ValueError(f"driver {code} missing keys: {missing}")
+        lengths = {k: len(data[k]) for k in required_keys}
+        expected = lengths["t"]
+        if expected == 0:
+            raise ValueError(f"driver {code} has no telemetry samples")
+        bad = {k: v for k, v in lengths.items() if v != expected}
+        if bad:
+            raise ValueError(f"driver {code} array length mismatch: expected {expected}, got {bad}")
+
+
 def extract_raw_telemetry(session, session_type: str):
     """
     Extract raw telemetry from FastF1 session.
@@ -72,14 +164,25 @@ def extract_raw_telemetry(session, session_type: str):
     # Get timing/position data
     try:
         results = session.results
-        driver_numbers = {row["Abbreviation"]: num for _, row in results.iterrows()}
-        driver_teams = {row["Abbreviation"]: row["Team"] for _, row in results.iterrows()}
-        driver_colors = {row["Abbreviation"]: row.get("TeamColor", "000000") for _, row in results.iterrows()}
+        driver_numbers = {row["Abbreviation"]: str(row.get("DriverNumber", "")) for _, row in results.iterrows()}
+        driver_teams = {
+            row["Abbreviation"]: (
+                row.get("Team")
+                or row.get("TeamName")
+                or row.get("TeamId")
+                or "Unknown"
+            )
+            for _, row in results.iterrows()
+        }
+        driver_colors = {
+            row["Abbreviation"]: normalize_team_color(row.get("TeamColor", "000000"))
+            for _, row in results.iterrows()
+        }
     except Exception as e:
         emit_progress(0, f"Warning: Could not get driver info: {e}")
         driver_numbers = {code: str(i) for i, code in enumerate(driver_codes.values())}
         driver_teams = {code: "Unknown" for code in driver_codes.values()}
-        driver_colors = {code: "000000" for code in driver_codes.values()}
+        driver_colors = {code: [0, 0, 0] for code in driver_codes.values()}
 
     # Extract raw arrays per driver
     drivers_raw = {}
@@ -91,20 +194,23 @@ def extract_raw_telemetry(session, session_type: str):
             if driver_laps.empty:
                 continue
             driver_data = driver_laps.get_telemetry()
+            sample_count = len(driver_data)
+            if sample_count == 0:
+                continue
 
             # Extract raw arrays
             drivers_raw[code] = {
-                "t": driver_data["Time"].astype(float).tolist(),
-                "x": driver_data["X"].astype(float).tolist(),
-                "y": driver_data["Y"].astype(float).tolist(),
-                "dist": driver_data.get("Distance", [0] * len(driver_data)).astype(float).tolist(),
-                "rel_dist": driver_data.get("RelativeDistance", [0] * len(driver_data)).astype(float).tolist(),
-                "speed": driver_data["Speed"].astype(float).tolist(),
-                "gear": driver_data.get("Gear", [0] * len(driver_data)).astype(int).tolist(),
-                "throttle": driver_data.get("Throttle", [0] * len(driver_data)).astype(float).tolist(),
-                "brake": driver_data.get("Brake", [0] * len(driver_data)).astype(float).tolist(),
-                "rpm": driver_data.get("RPM", [0] * len(driver_data)).astype(int).tolist(),
-                "drs": driver_data.get("DRS", [0] * len(driver_data)).astype(int).tolist(),
+                "t": series_to_float_list(driver_data["Time"], sample_count, 0.0, time_mode=True),
+                "x": series_to_float_list(driver_data.get("X", [0.0] * sample_count), sample_count, 0.0),
+                "y": series_to_float_list(driver_data.get("Y", [0.0] * sample_count), sample_count, 0.0),
+                "dist": series_to_float_list(driver_data.get("Distance", [0.0] * sample_count), sample_count, 0.0),
+                "rel_dist": series_to_float_list(driver_data.get("RelativeDistance", [0.0] * sample_count), sample_count, 0.0),
+                "speed": series_to_float_list(driver_data.get("Speed", [0.0] * sample_count), sample_count, 0.0),
+                "gear": series_to_int_list(driver_data.get("Gear", [0] * sample_count), sample_count, 0),
+                "throttle": series_to_float_list(driver_data.get("Throttle", [0.0] * sample_count), sample_count, 0.0),
+                "brake": series_to_float_list(driver_data.get("Brake", [0.0] * sample_count), sample_count, 0.0),
+                "rpm": series_to_int_list(driver_data.get("RPM", [0] * sample_count), sample_count, 0),
+                "drs": series_to_int_list(driver_data.get("DRS", [0] * sample_count), sample_count, 0),
             }
         except Exception as e:
             print(f"Warning: Could not extract telemetry for driver {code}: {e}", file=sys.stderr)
@@ -115,40 +221,25 @@ def extract_raw_telemetry(session, session_type: str):
     # Get lap and tyre data
     try:
         laps = session.laps
-        lap_data = {}
-        tyre_data = {}
-
-        for code in drivers_raw.keys():
+        for code in list(drivers_raw.keys()):
+            sample_count = len(drivers_raw[code]["t"])
             driver_laps = laps[laps["Driver"] == code]
-            if not driver_laps.empty:
-                # Get lap numbers from telemetry times
-                lap_data[code] = [1] * len(drivers_raw[code]["t"])
-                # Get tyre compounds
+            drivers_raw[code]["lap"] = [1] * sample_count
+            tyre_code = 0
+            if not driver_laps.empty and "Compound" in driver_laps.columns:
+                compound = str(driver_laps.iloc[0]["Compound"]) if driver_laps.iloc[0]["Compound"] is not None else ""
                 tyre_map = {"SOFT": 0, "MEDIUM": 1, "HARD": 2, "INTERMEDIATE": 3, "WET": 4}
-                tyres = driver_laps["Compound"].map(tyre_map).astype(int).tolist() if "Compound" in driver_laps.columns else [0]
-                tyre_data[code] = tyres if tyres else [0] * len(drivers_raw[code]["t"])
-
-        # Add lap/tyre to raw drivers
-        for code in drivers_raw.keys():
-            if code in lap_data:
-                drivers_raw[code]["lap"] = lap_data[code]
-            else:
-                drivers_raw[code]["lap"] = [1] * len(drivers_raw[code]["t"])
-
-            if code in tyre_data:
-                drivers_raw[code]["tyre"] = tyre_data[code]
-            else:
-                drivers_raw[code]["tyre"] = [0] * len(drivers_raw[code]["t"])
+                tyre_code = tyre_map.get(compound.upper(), 0)
+            drivers_raw[code]["tyre"] = [tyre_code] * sample_count
     except Exception as e:
         print(f"Warning: Could not extract lap/tyre data: {e}", file=sys.stderr)
-        for code in drivers_raw.keys():
+        for code in list(drivers_raw.keys()):
             drivers_raw[code]["lap"] = [1] * len(drivers_raw[code]["t"])
             drivers_raw[code]["tyre"] = [0] * len(drivers_raw[code]["t"])
 
     # Get timing data (gap, position, interval)
     emit_progress(70, "Extracting timing data...")
     try:
-        timing = session.get_session_status()
         timing_data = {
             "gap_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
             "pos_by_driver": {code: [1] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
@@ -170,8 +261,8 @@ def extract_raw_telemetry(session, session_type: str):
         for _, row in session.get_session_status().iterrows():
             track_statuses.append({
                 "status": str(row.get("Status", "1")),
-                "start_time": float(row.get("Time", 0)),
-                "end_time": float(row.get("Time", 0))
+                "start_time": to_seconds(row.get("Time", 0)),
+                "end_time": to_seconds(row.get("Time", 0))
             })
     except Exception:
         track_statuses = [{"status": "1", "start_time": 0, "end_time": 999999}]
@@ -201,6 +292,7 @@ def extract_raw_telemetry(session, session_type: str):
         "track_geometry_telemetry": {"x": [], "y": []}
     }
 
+    validate_driver_arrays(drivers_raw)
     return payload
 
 

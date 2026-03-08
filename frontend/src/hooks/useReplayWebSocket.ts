@@ -90,7 +90,8 @@ export const useReplayWebSocket = (sessionId: string | null) => {
             console.log("[WS Client] Telemetry generation:", message.message);
             const progress =
               typeof message.progress === "number" ? message.progress : undefined;
-            setLoadingProgress(progress ?? 10);
+            const clamped = Math.min(progress ?? 10, 99);
+            setLoadingProgress(clamped);
             return;
           }
 

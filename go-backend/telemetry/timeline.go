@@ -215,19 +215,105 @@ func ResampleDriverData(
 	brake := getFloat64Slice("brake")
 	rpm := getIntSlice("rpm")
 
+	checkLenFloat := func(name string, arr []float64) error {
+		if len(arr) != len(originalT) {
+			return fmt.Errorf("%s length mismatch: got %d, expected %d", name, len(arr), len(originalT))
+		}
+		return nil
+	}
+	checkLenInt := func(name string, arr []int) error {
+		if len(arr) != len(originalT) {
+			return fmt.Errorf("%s length mismatch: got %d, expected %d", name, len(arr), len(originalT))
+		}
+		return nil
+	}
+
+	if err := checkLenFloat("x", x); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("y", y); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("dist", dist); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("rel_dist", relDist); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenInt("lap", lap); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenInt("tyre", tyre); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("speed", speed); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenInt("gear", gear); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenInt("drs", drs); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("throttle", throttle); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenFloat("brake", brake); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+	if err := checkLenInt("rpm", rpm); err != nil {
+		return nil, fmt.Errorf("driver %s invalid telemetry: %w", code, err)
+	}
+
 	// Resample all telemetry
-	resampledX, _ := ResampleFloat64(timeline, originalT, x)
-	resampledY, _ := ResampleFloat64(timeline, originalT, y)
-	resampledDist, _ := ResampleFloat64(timeline, originalT, dist)
-	resampledRelDist, _ := ResampleFloat64(timeline, originalT, relDist)
-	resampledLap, _ := ResampleInt(timeline, originalT, lap)
-	resampledTyre, _ := ResampleInt(timeline, originalT, tyre)
-	resampledSpeed, _ := ResampleFloat64(timeline, originalT, speed)
-	resampledGear, _ := ResampleInt(timeline, originalT, gear)
-	resampledDRS, _ := ResampleInt(timeline, originalT, drs)
-	resampledThrottle, _ := ResampleFloat64(timeline, originalT, throttle)
-	resampledBrake, _ := ResampleFloat64(timeline, originalT, brake)
-	resampledRPM, _ := ResampleInt(timeline, originalT, rpm)
+	resampledX, err := ResampleFloat64(timeline, originalT, x)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling x for %s: %w", code, err)
+	}
+	resampledY, err := ResampleFloat64(timeline, originalT, y)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling y for %s: %w", code, err)
+	}
+	resampledDist, err := ResampleFloat64(timeline, originalT, dist)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling dist for %s: %w", code, err)
+	}
+	resampledRelDist, err := ResampleFloat64(timeline, originalT, relDist)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling rel_dist for %s: %w", code, err)
+	}
+	resampledLap, err := ResampleInt(timeline, originalT, lap)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling lap for %s: %w", code, err)
+	}
+	resampledTyre, err := ResampleInt(timeline, originalT, tyre)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling tyre for %s: %w", code, err)
+	}
+	resampledSpeed, err := ResampleFloat64(timeline, originalT, speed)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling speed for %s: %w", code, err)
+	}
+	resampledGear, err := ResampleInt(timeline, originalT, gear)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling gear for %s: %w", code, err)
+	}
+	resampledDRS, err := ResampleInt(timeline, originalT, drs)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling drs for %s: %w", code, err)
+	}
+	resampledThrottle, err := ResampleFloat64(timeline, originalT, throttle)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling throttle for %s: %w", code, err)
+	}
+	resampledBrake, err := ResampleFloat64(timeline, originalT, brake)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling brake for %s: %w", code, err)
+	}
+	resampledRPM, err := ResampleInt(timeline, originalT, rpm)
+	if err != nil {
+		return nil, fmt.Errorf("failed resampling rpm for %s: %w", code, err)
+	}
 
 	return &ResampledDriver{
 		Code:     code,

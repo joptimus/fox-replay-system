@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -156,18 +157,6 @@ func handleCreateSessionRoute(
 		}
 
 		// Cache miss or refresh requested - generate in background
-		if req.SessionType == "Q" || req.SessionType == "SQ" {
-			logger.Warn("unsupported session type for go generation path",
-				zap.String("sessionID", sessionID),
-				zap.String("sessionType", req.SessionType),
-			)
-			_ = sessionMgr.Delete(sessionID)
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "session type not supported yet in Go generation path (supported: R, S)",
-			})
-			return
-		}
 
 		logger.Info("Cache miss, generating from telemetry",
 			zap.String("sessionID", sessionID),
@@ -422,7 +411,7 @@ func generateCacheAsync(
 	}
 
 	// Read msgpack file written by Python
-	sess.ProgressCh <- &models.ProgressMessage{Pct: 100, Msg: "Reading telemetry cache..."}
+	sess.ProgressCh <- &models.ProgressMessage{Pct: 85, Msg: "Reading telemetry cache..."}
 	msgpackData, err := os.ReadFile(cacheFilePath)
 	if err != nil {
 		logger.Error("failed to read msgpack cache", zap.Error(err), zap.String("sessionID", sessionID))
@@ -432,8 +421,10 @@ func generateCacheAsync(
 	}
 
 	// Deserialize msgpack payload
-	var rawPayload *bridge.RawDataPayload
-	err = msgpack.Unmarshal(msgpackData, &rawPayload)
+	var payload bridge.RawDataPayload
+	decoder := msgpack.NewDecoder(bytes.NewReader(msgpackData))
+	decoder.SetCustomStructTag("json")
+	err = decoder.Decode(&payload)
 	if err != nil {
 		logger.Error("failed to unmarshal msgpack", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetLoadingError(fmt.Sprintf("failed to deserialize telemetry: %v", err))
@@ -441,6 +432,7 @@ func generateCacheAsync(
 		return
 	}
 
+	rawPayload := &payload
 	if rawPayload == nil {
 		logger.Error("msgpack payload is nil", zap.String("sessionID", sessionID))
 		sess.SetLoadingError("telemetry payload is empty")
@@ -448,6 +440,7 @@ func generateCacheAsync(
 		return
 	}
 
+	sess.ProgressCh <- &models.ProgressMessage{Pct: 92, Msg: "Generating frames in Go..."}
 	generator := telemetry.NewFrameGenerator()
 	frames, err := generator.Generate(rawPayload, sessionType)
 	if err != nil || len(frames) == 0 {

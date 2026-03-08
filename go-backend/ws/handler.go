@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"f1-replay-go/session"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 )
 
@@ -266,17 +266,12 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 
 // marshalFrame converts a Frame to binary msgpack format
 func marshalFrame(frame *models.Frame) ([]byte, error) {
-	// Simple JSON marshaling for now (Phase 3 will use msgpack binary format)
-	// In production, use msgpack.Marshal() for better performance
+	// Keep frontend-compatible field names while encoding true msgpack bytes.
 	data := map[string]interface{}{
 		"frame_index": frame.FrameIndex,
 		"t":           frame.T,
 		"lap":         frame.Lap,
 		"drivers":     frame.Drivers,
 	}
-
-	// For now, use JSON to keep it simple
-	// Phase 3 will switch to binary msgpack for bandwidth efficiency
-	bytes, _ := json.Marshal(data)
-	return bytes, nil
+	return msgpack.Marshal(data)
 }
