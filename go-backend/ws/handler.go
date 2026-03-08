@@ -148,9 +148,21 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 	ticker := time.NewTicker(time.Second / 60) // 60 Hz
 	defer ticker.Stop()
 
-	// Set up non-blocking reads for commands
+	// Set up non-blocking reads for commands and progress updates
 	conn.SetReadDeadline(time.Time{})
 	doneCh := make(chan error, 1)
+
+	// Listen for progress updates from telemetry generation
+	go func() {
+		for progressMsg := range sess.ProgressCh {
+			if progressMsg != nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type":    "generation_progress",
+					"message": progressMsg.Msg,
+				})
+			}
+		}
+	}()
 
 	go func() {
 		for {

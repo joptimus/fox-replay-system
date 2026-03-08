@@ -20,21 +20,37 @@ def generate_cache(year: int, round_num: int, session_type: str):
         # Enable FastF1 caching
         enable_cache()
 
+        # Send progress update
+        print(json.dumps({"type": "progress", "message": "Loading session data..."}))
+        sys.stdout.flush()
+
         # Load the FastF1 session
         session = load_session(year, round_num, session_type)
+
+        # Send progress update
+        print(json.dumps({"type": "progress", "message": "Extracting telemetry..."}))
+        sys.stdout.flush()
 
         if session_type == 'Q' or session_type == 'SQ':
             telemetry = get_quali_telemetry(session, session_type)
         else:
             telemetry = get_race_telemetry(session, session_type)
 
+        # Send progress update
+        print(json.dumps({"type": "progress", "message": "Generating frames..."}))
+        sys.stdout.flush()
+
         # Return as JSON for Go to process
+        frame_count = len(telemetry.get('results', [])) if isinstance(telemetry, dict) else len(telemetry)
         result = {
             "status": "success",
-            "frames": len(telemetry.get('results', [])) if isinstance(telemetry, dict) else len(telemetry),
+            "frames": frame_count,
             "data": telemetry
         }
+
+        # Send final result
         print(json.dumps(result))
+        sys.stdout.flush()
         return 0
 
     except Exception as e:
@@ -43,6 +59,7 @@ def generate_cache(year: int, round_num: int, session_type: str):
             "message": str(e)
         }
         print(json.dumps(error_result))
+        sys.stdout.flush()
         return 1
 
 if __name__ == "__main__":

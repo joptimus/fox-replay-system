@@ -57,6 +57,7 @@ func (m *Manager) Create(sessionID string) (*models.Session, error) {
 		CreatedAt:      time.Now(),
 		LastAccessedAt: time.Now(),
 		Frames:         []models.Frame{},
+		ProgressCh:     make(chan *models.ProgressMessage, 10),
 	}
 	m.sessions[sessionID] = s
 	return s, nil

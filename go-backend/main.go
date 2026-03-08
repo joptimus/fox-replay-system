@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -244,45 +245,86 @@ func generateCacheAsync(
 			logger.Error("panic in generateCacheAsync", zap.Any("panic", r))
 			sess.SetState(models.StateError)
 		}
+		close(sess.ProgressCh)
 	}()
 
 	logger.Info("Starting cache generation", zap.String("sessionID", sessionID))
 
-	// Call Python script to generate telemetry (can take 30-60 seconds)
+	// Call Python script to generate telemetry
 	cmd := exec.Command("python3", "scripts/generate_telemetry.py", fmt.Sprintf("%d", year), fmt.Sprintf("%d", round), sessionType)
 
-	// Capture both stdout and stderr for better error reporting
-	output, err := cmd.CombinedOutput()
+	// Get stdout pipe to read output as it streams
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		logger.Error("failed to get stdout pipe", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetState(models.StateError)
+		return
+	}
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		logger.Error("failed to start telemetry generation", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetState(models.StateError)
+		return
+	}
+
+	// Read output line by line and stream progress
+	scanner := bufio.NewScanner(stdout)
+	var finalResult map[string]interface{}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+
+		var msg map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			logger.Debug("failed to parse line", zap.String("line", line), zap.Error(err))
+			continue
+		}
+
+		// Check if this is a progress message or final result
+		if msgType, ok := msg["type"].(string); ok && msgType == "progress" {
+			// Send progress update to WebSocket
+			if message, ok := msg["message"].(string); ok {
+				sess.ProgressCh <- &models.ProgressMessage{
+					Msg: message,
+				}
+				logger.Debug("telemetry progress", zap.String("message", message), zap.String("sessionID", sessionID))
+			}
+		} else {
+			// This is the final result
+			finalResult = msg
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		logger.Error("error reading scanner", zap.Error(err), zap.String("sessionID", sessionID))
+		sess.SetState(models.StateError)
+		return
+	}
+
+	// Wait for command to finish
+	if err := cmd.Wait(); err != nil {
 		logger.Error("failed to generate telemetry",
 			zap.Error(err),
 			zap.String("sessionID", sessionID),
-			zap.String("output", string(output)),
 		)
 		sess.SetState(models.StateError)
 		return
 	}
 
-	logger.Debug("Python script completed",
-		zap.String("sessionID", sessionID),
-		zap.Int("output_len", len(output)),
-	)
-
-	// Parse Python output
-	var result map[string]interface{}
-	if err := json.Unmarshal(output, &result); err != nil {
-		logger.Error("failed to parse telemetry output",
-			zap.Error(err),
-			zap.String("sessionID", sessionID),
-		)
+	if finalResult == nil {
+		logger.Error("no result from telemetry generation", zap.String("sessionID", sessionID))
 		sess.SetState(models.StateError)
 		return
 	}
 
-	status, ok := result["status"].(string)
+	status, ok := finalResult["status"].(string)
 	if !ok || status != "success" {
 		msg := "unknown error"
-		if m, ok := result["message"].(string); ok {
+		if m, ok := finalResult["message"].(string); ok {
 			msg = m
 		}
 		logger.Error("telemetry generation failed",

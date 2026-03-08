@@ -86,6 +86,12 @@ export const useReplayWebSocket = (sessionId: string | null) => {
             return;
           }
 
+          if (message.type === 'generation_progress') {
+            console.log("[WS Client] Telemetry generation:", message.message);
+            setLoadingProgress(10); // Show some progress while generating
+            return;
+          }
+
           if (message.type === 'loading_complete') {
             console.log("[WS Client] Loading complete");
             setLoadingProgress(100);
