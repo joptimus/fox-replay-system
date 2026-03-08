@@ -64,6 +64,18 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.String("status", string(sess.GetState())),
 	)
 
+	// Start listening for progress updates immediately
+	go func() {
+		for progressMsg := range sess.ProgressCh {
+			if progressMsg != nil {
+				conn.WriteJSON(map[string]interface{}{
+					"type":    "generation_progress",
+					"message": progressMsg.Msg,
+				})
+			}
+		}
+	}()
+
 	// Wait for session to be ready (cache hit or generation)
 	// If currently loading, wait up to 5 minutes for telemetry generation
 	maxRetries := 3000 // 300 seconds / 100ms per retry = 3000 retries
@@ -148,21 +160,9 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 	ticker := time.NewTicker(time.Second / 60) // 60 Hz
 	defer ticker.Stop()
 
-	// Set up non-blocking reads for commands and progress updates
+	// Set up non-blocking reads for commands
 	conn.SetReadDeadline(time.Time{})
 	doneCh := make(chan error, 1)
-
-	// Listen for progress updates from telemetry generation
-	go func() {
-		for progressMsg := range sess.ProgressCh {
-			if progressMsg != nil {
-				conn.WriteJSON(map[string]interface{}{
-					"type":    "generation_progress",
-					"message": progressMsg.Msg,
-				})
-			}
-		}
-	}()
 
 	go func() {
 		for {
