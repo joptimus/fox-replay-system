@@ -487,7 +487,9 @@ func generateCacheAsync(
 	// Convert WeatherData to map format for frontend
 	weatherData := map[string]interface{}{}
 	if rawPayload.WeatherData != nil && len(rawPayload.WeatherData) > 0 {
-		weatherData = rawPayload.WeatherData
+		for key, val := range rawPayload.WeatherData {
+			weatherData[key] = val
+		}
 	}
 
 	// RaceStartTime conversion
