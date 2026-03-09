@@ -370,7 +370,7 @@ function AppRoutes() {
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, round_num: round, session_type: sessionType, refresh })
+        body: JSON.stringify({ year, round, session_type: sessionType, refresh })
       });
       const data = await response.json();
 
@@ -425,7 +425,7 @@ function AppRoutes() {
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, round_num: round, session_type: sessionType, refresh: false })
+        body: JSON.stringify({ year, round, session_type: sessionType, refresh: false })
       });
       const data = await response.json();
 
