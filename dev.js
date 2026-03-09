@@ -20,7 +20,7 @@
  *   PYTHON_PORT: Python bridge port (default: 8001)
  */
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
@@ -53,6 +53,25 @@ const colors = {
 function log(service, message, color = colors.reset) {
   const timestamp = new Date().toLocaleTimeString();
   console.log(`${color}[${timestamp}] ${service}${colors.reset} ${message}`);
+}
+
+function buildGoBackend() {
+  if (noGo) return true;
+
+  log("Go Backend", "Building...", colors.blue);
+
+  const result = spawnSync("go", ["build", "-o", "f1-replay-go", "."], {
+    cwd: path.join(__dirname, "go-backend"),
+    stdio: "inherit",
+  });
+
+  if (result.error || result.status !== 0) {
+    log("✗ Go Backend", "Build failed", colors.red);
+    return false;
+  }
+
+  log("✓ Go Backend", "Build successful", colors.green);
+  return true;
 }
 
 function validateSetup() {
@@ -178,9 +197,14 @@ async function main() {
   const processes = [];
 
   try {
+    // Build Go backend if needed
+    if (!noGo && !buildGoBackend()) {
+      process.exit(1);
+    }
+
     // Start services based on configuration
     if (!noGo) {
-      log("Main", "Starting Go backend (new)...", colors.green);
+      log("Main", "Starting Go backend...", colors.green);
       processes.push(startGoBackend());
 
       // Wait for Go backend to start
