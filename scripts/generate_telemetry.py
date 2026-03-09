@@ -11,6 +11,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from shared.telemetry.f1_data import get_race_telemetry, get_quali_telemetry, load_session, enable_cache
+from shared.utils.track_geometry import build_track_from_example_lap
 
 def generate_cache(year: int, round_num: int, session_type: str):
     """Generate telemetry cache for a session"""
@@ -42,6 +43,39 @@ def generate_cache(year: int, round_num: int, session_type: str):
             telemetry = get_quali_telemetry(session, session_type, progress_callback=telemetry_progress)
         else:
             telemetry = get_race_telemetry(session, session_type, progress_callback=telemetry_progress)
+
+        # Compute track geometry from an example lap
+        emit_progress(90, "Computing track geometry...")
+        try:
+            # Get an example lap - use first lap with good data
+            example_lap = session.laps.iloc[0]
+
+            # Only compute if we have X and Y coordinates
+            if 'X' in example_lap and 'Y' in example_lap:
+                centerline_x, centerline_y, inner_x, inner_y, outer_x, outer_y, \
+                    x_min, x_max, y_min, y_max, sectors = build_track_from_example_lap(
+                        example_lap[['X', 'Y']],
+                        track_width=300,
+                        lap_obj=example_lap
+                    )
+
+                # Add track geometry to telemetry if it's a dict
+                if isinstance(telemetry, dict):
+                    telemetry['track_geometry'] = {
+                        'centerline_x': centerline_x.tolist(),
+                        'centerline_y': centerline_y.tolist(),
+                        'inner_x': inner_x.tolist(),
+                        'inner_y': inner_y.tolist(),
+                        'outer_x': outer_x.tolist(),
+                        'outer_y': outer_y.tolist(),
+                        'x_min': float(x_min),
+                        'x_max': float(x_max),
+                        'y_min': float(y_min),
+                        'y_max': float(y_max),
+                        'sector': sectors.tolist() if sectors is not None else None
+                    }
+        except Exception as e:
+            print(f"Warning: Could not compute track geometry: {e}", file=sys.stderr)
 
         # Send progress update
         emit_progress(95, "Finalizing telemetry...")

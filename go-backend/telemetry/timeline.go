@@ -3,6 +3,7 @@ package telemetry
 import (
 	"fmt"
 	"math"
+	"sort"
 )
 
 const (
@@ -80,10 +81,11 @@ func linearInterpFloat64(t float64, xp, fp []float64) float64 {
 		return fp[len(fp)-1]
 	}
 
-	// Binary search for insertion point
-	j := 0
-	for j < len(xp)-1 && xp[j+1] < t {
-		j++
+	// Binary search for insertion point (using sort.SearchFloat64s)
+	// SearchFloat64s returns the index i where xp[i] <= t < xp[i+1]
+	j := sort.SearchFloat64s(xp, t)
+	if j > 0 {
+		j-- // Move back to get the index where xp[j] <= t
 	}
 
 	// Linear interpolation
@@ -109,10 +111,10 @@ func stepInterpInt(t float64, xp []float64, fp []int) int {
 		return fp[len(fp)-1]
 	}
 
-	// Binary search for insertion point
-	j := 0
-	for j < len(xp)-1 && xp[j+1] < t {
-		j++
+	// Binary search for insertion point (using sort.SearchFloat64s)
+	j := sort.SearchFloat64s(xp, t)
+	if j > 0 {
+		j-- // Move back to get the index where xp[j] <= t
 	}
 
 	return fp[j]

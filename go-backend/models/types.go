@@ -85,14 +85,19 @@ type Session struct {
 
 // SessionMetadata stores session-level information
 type SessionMetadata struct {
-	Year          int               `json:"year"`
-	Round         int               `json:"round"`
-	SessionType   string            `json:"session_type"`
-	TotalLaps     int               `json:"total_laps"`
-	TotalFrames   int               `json:"total_frames"`
-	DriverNumbers map[string]string `json:"driver_numbers"`
-	DriverTeams   map[string]string `json:"driver_teams"`
-	DriverColors  map[string][3]int `json:"driver_colors"`
+	Year              int                         `json:"year"`
+	Round             int                         `json:"round"`
+	SessionType       string                      `json:"session_type"`
+	TotalLaps         int                         `json:"total_laps"`
+	TotalFrames       int                         `json:"total_frames"`
+	DriverNumbers     map[string]string           `json:"driver_numbers"`
+	DriverTeams       map[string]string           `json:"driver_teams"`
+	DriverColors      map[string][3]int           `json:"driver_colors"`
+	TrackStatuses     []map[string]interface{}    `json:"track_statuses,omitempty"`
+	TrackGeometry     map[string]interface{}      `json:"track_geometry,omitempty"`
+	RaceStartTime     *float64                    `json:"race_start_time,omitempty"`
+	WeatherData       map[string]interface{}      `json:"weather_data,omitempty"`
+	QualiSegments     map[string]interface{}      `json:"quali_segments,omitempty"`
 }
 
 // GetState returns the current session state

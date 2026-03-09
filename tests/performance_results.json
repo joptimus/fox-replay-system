@@ -1,0 +1,370 @@
+{
+  "timestamp": "2026-03-08T22:46:34.666294",
+  "configuration": {
+    "year": 2025,
+    "rounds": [
+      1,
+      5,
+      10,
+      15,
+      23
+    ],
+    "session_types": [
+      "R",
+      "Q"
+    ],
+    "backend_url": "http://localhost:8000"
+  },
+  "tests": [
+    {
+      "year": 2025,
+      "round": 1,
+      "session_type": "R",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773027995676753000",
+        "total_time": 0.010925769805908203,
+        "polling_time": 0.0060100555419921875,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 1,
+      "session_type": "R",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773027996693066000",
+        "total_time": 0.006322145462036133,
+        "polling_time": 0.0020291805267333984,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 5,
+      "session_type": "R",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773027998710214000",
+        "total_time": 0.007845878601074219,
+        "polling_time": 0.003448009490966797,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 5,
+      "session_type": "R",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773027999722765000",
+        "total_time": 0.005713939666748047,
+        "polling_time": 0.0021560192108154297,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 10,
+      "session_type": "R",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028001738027000",
+        "total_time": 0.006278276443481445,
+        "polling_time": 0.0027022361755371094,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 10,
+      "session_type": "R",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028002750741000",
+        "total_time": 0.008556842803955078,
+        "polling_time": 0.003461122512817383,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 15,
+      "session_type": "R",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028004769967000",
+        "total_time": 0.007967948913574219,
+        "polling_time": 0.004121065139770508,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 15,
+      "session_type": "R",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028005777325000",
+        "total_time": 0.0041961669921875,
+        "polling_time": 0.0020720958709716797,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 23,
+      "session_type": "R",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028007797922000",
+        "total_time": 0.00790715217590332,
+        "polling_time": 0.0038530826568603516,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 23,
+      "session_type": "R",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_R_1773028008811055000",
+        "total_time": 0.007976770401000977,
+        "polling_time": 0.003610849380493164,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 1,
+      "session_type": "Q",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028010830102000",
+        "total_time": 0.004709959030151367,
+        "polling_time": 0.002076864242553711,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 1,
+      "session_type": "Q",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028011838693000",
+        "total_time": 0.008253812789916992,
+        "polling_time": 0.003748655319213867,
+        "cache_hit": true,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 5,
+      "session_type": "Q",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028013861520000",
+        "total_time": 0.008753299713134766,
+        "polling_time": 0.003525257110595703,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 5,
+      "session_type": "Q",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028014875341000",
+        "total_time": 0.009248018264770508,
+        "polling_time": 0.003572225570678711,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 10,
+      "session_type": "Q",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028016895305000",
+        "total_time": 0.008163928985595703,
+        "polling_time": 0.0026159286499023438,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 10,
+      "session_type": "Q",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028017907568000",
+        "total_time": 0.008307933807373047,
+        "polling_time": 0.004174232482910156,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 15,
+      "session_type": "Q",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028019927396000",
+        "total_time": 0.0070667266845703125,
+        "polling_time": 0.003589153289794922,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 15,
+      "session_type": "Q",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028020941278000",
+        "total_time": 0.010771989822387695,
+        "polling_time": 0.004939079284667969,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 23,
+      "session_type": "Q",
+      "cache_hit": false,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028022963312000",
+        "total_time": 0.008376121520996094,
+        "polling_time": 0.003427743911743164,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    },
+    {
+      "year": 2025,
+      "round": 23,
+      "session_type": "Q",
+      "cache_hit": true,
+      "result": {
+        "success": true,
+        "session_id": "2025_r0_Q_1773028023975226000",
+        "total_time": 0.009974002838134766,
+        "polling_time": 0.005253791809082031,
+        "cache_hit": false,
+        "metadata": {
+          "total_frames": 0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "R_cache_miss": {
+      "count": 5,
+      "min": 0.006278276443481445,
+      "max": 0.010925769805908203,
+      "mean": 0.008185005187988282,
+      "stdev": 0.0016872112908961291
+    },
+    "R_cache_hit": {
+      "count": 5,
+      "min": 0.0041961669921875,
+      "max": 0.008556842803955078,
+      "mean": 0.006553173065185547,
+      "stdev": 0.0017574474298838317
+    },
+    "Q_cache_miss": {
+      "count": 5,
+      "min": 0.004709959030151367,
+      "max": 0.008753299713134766,
+      "mean": 0.007414007186889648,
+      "stdev": 0.001636630024484345
+    },
+    "Q_cache_hit": {
+      "count": 5,
+      "min": 0.008253812789916992,
+      "max": 0.010771989822387695,
+      "mean": 0.009311151504516602,
+      "stdev": 0.0010841837012994886
+    }
+  }
+}

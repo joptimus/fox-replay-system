@@ -3,6 +3,7 @@ package telemetry
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"f1-replay-go/bridge"
 	"f1-replay-go/models"
@@ -23,17 +24,23 @@ func (fg *FrameGenerator) Generate(
 	payload *bridge.RawDataPayload,
 	sessionType string,
 ) ([]models.Frame, error) {
+	startTime := time.Now()
+	fmt.Printf("\n[TIMING] Generate() starting...\n")
+
 	if err := payload.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
 	// Create uniform timeline at 25 FPS
+	t1 := time.Now()
 	timeline := CreateTimeline(payload.GlobalTMin, payload.GlobalTMax)
 	if len(timeline) == 0 {
 		return nil, fmt.Errorf("empty timeline")
 	}
+	fmt.Printf("[TIMING] CreateTimeline: %.2fs (frames: %d)\n", time.Since(t1).Seconds(), len(timeline))
 
 	// Resample all driver data to timeline
+	t2 := time.Now()
 	resampledDrivers := make(map[string]*ResampledDriver)
 	for code := range payload.Drivers {
 		origT := payload.Drivers[code].T
@@ -52,15 +59,23 @@ func (fg *FrameGenerator) Generate(
 			"rpm":      payload.Drivers[code].RPM,
 		}
 
+		driverStartTime := time.Now()
 		resampled, err := ResampleDriverData(code, origT, driverData, timeline)
+		driverTime := time.Since(driverStartTime).Seconds()
+		if driverTime > 1.0 {
+			fmt.Printf("[TIMING]   ResampleDriverData(%s): %.2fs\n", code, driverTime)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("failed to resample driver %s: %w", code, err)
 		}
 
 		resampledDrivers[code] = resampled
 	}
+	fmt.Printf("[TIMING] ResampleAllDrivers: %.2fs (%d drivers)\n", time.Since(t2).Seconds(), len(resampledDrivers))
 
 	// Extract timing data (gap, position)
+	t3 := time.Now()
 	timingByDriver := make(map[string][]map[string]interface{})
 	for code := range payload.Drivers {
 		timing := make([]map[string]interface{}, len(timeline))
@@ -73,8 +88,10 @@ func (fg *FrameGenerator) Generate(
 		}
 		timingByDriver[code] = timing
 	}
+	fmt.Printf("[TIMING] ExtractTimingData: %.2fs\n", time.Since(t3).Seconds())
 
 	// Generate frames
+	t4 := time.Now()
 	frames := make([]models.Frame, len(timeline))
 	totalTrackDistance := estimateTrackDistance(resampledDrivers)
 
@@ -126,9 +143,18 @@ func (fg *FrameGenerator) Generate(
 
 		frames[i] = frame
 	}
+	fmt.Printf("[TIMING] GenerateFrames (loop): %.2fs (%d frames)\n", time.Since(t4).Seconds(), len(frames))
 
+	// Apply smoothing
+	t5 := time.Now()
 	trackStatuses := TrackStatusFromFrames(frames)
+	fmt.Printf("[TIMING] TrackStatusFromFrames: %.2fs\n", time.Since(t5).Seconds())
+
+	t6 := time.Now()
 	ApplyPositionSmoothingToFrames(frames, trackStatuses)
+	fmt.Printf("[TIMING] ApplyPositionSmoothingToFrames: %.2fs\n", time.Since(t6).Seconds())
+
+	fmt.Printf("[TIMING] Total Generate(): %.2fs\n\n", time.Since(startTime).Seconds())
 
 	return frames, nil
 }

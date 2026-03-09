@@ -142,19 +142,8 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 		return
 	}
 
-	// Send session metadata
-	metadata := sess.GetMetadata()
-	conn.WriteJSON(map[string]interface{}{
-		"type": "session_init",
-		"data": map[string]interface{}{
-			"total_frames": len(frames),
-			"total_laps":   metadata.TotalLaps,
-			"year":         metadata.Year,
-			"round":        metadata.Round,
-		},
-	})
-
 	// Signal to frontend that loading is complete
+	metadata := sess.GetMetadata()
 	conn.WriteJSON(map[string]interface{}{
 		"type":     "loading_complete",
 		"frames":   len(frames),

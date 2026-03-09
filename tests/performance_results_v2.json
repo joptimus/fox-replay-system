@@ -1,0 +1,285 @@
+{
+  "timestamp": "2026-03-08T22:48:18.015660",
+  "method": "direct_api",
+  "configuration": {
+    "year": 2025,
+    "rounds": [
+      1,
+      5,
+      10,
+      15,
+      23
+    ],
+    "session_types": [
+      "R",
+      "Q"
+    ]
+  },
+  "cache_miss_tests": [
+    {
+      "success": true,
+      "year": 2025,
+      "round": 1,
+      "session_type": "R",
+      "total_time": 95.12625789642334,
+      "timing": {
+        "get_telemetry": 78.52563905715942
+      },
+      "drivers": 20,
+      "frames": 154173,
+      "cache_hit": false,
+      "load_session_time": 16.600618839263916
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 5,
+      "session_type": "R",
+      "total_time": 0.0004942417144775391,
+      "timing": {
+        "get_telemetry": 0.0004942417144775391
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 10,
+      "session_type": "R",
+      "total_time": 2.7887158393859863,
+      "timing": {
+        "get_telemetry": 2.7887158393859863
+      },
+      "error": "No valid telemetry data found for any driver",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 15,
+      "session_type": "R",
+      "total_time": 0.0003688335418701172,
+      "timing": {
+        "get_telemetry": 0.0003688335418701172
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 23,
+      "session_type": "R",
+      "total_time": 0.0004191398620605469,
+      "timing": {
+        "get_telemetry": 0.0004191398620605469
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 1,
+      "session_type": "Q",
+      "total_time": 0.0634160041809082,
+      "timing": {
+        "get_telemetry": 0.0634160041809082
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 5,
+      "session_type": "Q",
+      "total_time": 0.0572359561920166,
+      "timing": {
+        "get_telemetry": 0.0572359561920166
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 10,
+      "session_type": "Q",
+      "total_time": 0.058424949645996094,
+      "timing": {
+        "get_telemetry": 0.058424949645996094
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 15,
+      "session_type": "Q",
+      "total_time": 0.05631685256958008,
+      "timing": {
+        "get_telemetry": 0.05631685256958008
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": false
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 23,
+      "session_type": "Q",
+      "total_time": 0.05837607383728027,
+      "timing": {
+        "get_telemetry": 0.05837607383728027
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": false
+    }
+  ],
+  "cache_hit_tests": [
+    {
+      "success": true,
+      "year": 2025,
+      "round": 1,
+      "session_type": "R",
+      "total_time": 85.57312488555908,
+      "timing": {
+        "get_telemetry": 74.37490677833557
+      },
+      "drivers": 20,
+      "frames": 154173,
+      "cache_hit": true,
+      "load_session_time": 11.19821810722351
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 5,
+      "session_type": "R",
+      "total_time": 0.0006890296936035156,
+      "timing": {
+        "get_telemetry": 0.0006890296936035156
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 10,
+      "session_type": "R",
+      "total_time": 2.566220998764038,
+      "timing": {
+        "get_telemetry": 2.566220998764038
+      },
+      "error": "No valid telemetry data found for any driver",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 15,
+      "session_type": "R",
+      "total_time": 0.0004029273986816406,
+      "timing": {
+        "get_telemetry": 0.0004029273986816406
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 23,
+      "session_type": "R",
+      "total_time": 0.0003540515899658203,
+      "timing": {
+        "get_telemetry": 0.0003540515899658203
+      },
+      "error": "integer division or modulo by zero",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 1,
+      "session_type": "Q",
+      "total_time": 0.25943589210510254,
+      "timing": {
+        "get_telemetry": 0.25943589210510254
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 5,
+      "session_type": "Q",
+      "total_time": 1.2213172912597656,
+      "timing": {
+        "get_telemetry": 1.2213172912597656
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 10,
+      "session_type": "Q",
+      "total_time": 0.26706504821777344,
+      "timing": {
+        "get_telemetry": 0.26706504821777344
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 15,
+      "session_type": "Q",
+      "total_time": 0.05313682556152344,
+      "timing": {
+        "get_telemetry": 0.05313682556152344
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": true
+    },
+    {
+      "success": false,
+      "year": 2025,
+      "round": 23,
+      "session_type": "Q",
+      "total_time": 0.24914836883544922,
+      "timing": {
+        "get_telemetry": 0.24914836883544922
+      },
+      "error": "attempt to write a readonly database",
+      "cache_hit": true
+    }
+  ],
+  "summary": {
+    "R": {
+      "cache_miss": {
+        "count": 1,
+        "min": 95.12625789642334,
+        "max": 95.12625789642334,
+        "mean": 95.12625789642334,
+        "stdev": 0.0
+      },
+      "cache_hit": {
+        "count": 1,
+        "min": 85.57312488555908,
+        "max": 85.57312488555908,
+        "mean": 85.57312488555908,
+        "stdev": 0.0
+      }
+    },
+    "Q": {}
+  }
+}

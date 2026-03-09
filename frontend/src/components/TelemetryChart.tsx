@@ -141,13 +141,17 @@ export const TelemetryChart: React.FC = () => {
     );
   }
 
+  if (!currentDriverData) {
+    return <div className="text-white">Loading driver data...</div>;
+  }
+
   const hexColor = `rgb(${selectedDriver.color[0]}, ${selectedDriver.color[1]}, ${selectedDriver.color[2]})`;
-  const kmhSpeed = currentDriverData.speed;
+  const kmhSpeed = currentDriverData.speed || 0;
   const displaySpeed = speedUnit === "kmh" ? kmhSpeed : kmhSpeed * 0.621371;
 
   // Handle brake/throttle that might be 0-1 or 0-100
-  const throttlePercent = currentDriverData.throttle > 1 ? currentDriverData.throttle : currentDriverData.throttle * 100;
-  const brakePercent = currentDriverData.brake > 1 ? currentDriverData.brake : currentDriverData.brake * 100;
+  const throttlePercent = (currentDriverData.throttle || 0) > 1 ? (currentDriverData.throttle || 0) : (currentDriverData.throttle || 0) * 100;
+  const brakePercent = (currentDriverData.brake || 0) > 1 ? (currentDriverData.brake || 0) : (currentDriverData.brake || 0) * 100;
 
   // Format time helper (mm:ss.sss format) - used for lap times when data available
   const formatTime = (seconds: number | null): string => {

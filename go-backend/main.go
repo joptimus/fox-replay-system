@@ -468,6 +468,34 @@ func generateCacheAsync(
 		logger.Warn("failed to write f1cache", zap.Error(writeErr), zap.String("sessionID", sessionID))
 	}
 
+	// Convert TrackStatuses to map format for frontend
+	trackStatusMaps := make([]map[string]interface{}, len(rawPayload.TrackStatuses))
+	for i, ts := range rawPayload.TrackStatuses {
+		trackStatusMaps[i] = map[string]interface{}{
+			"status":     ts.Status,
+			"start_time": ts.StartTime,
+			"end_time":   ts.EndTime,
+		}
+	}
+
+	// Use track geometry computed by Python script
+	trackGeometry := map[string]interface{}{}
+	if rawPayload.TrackGeometry != nil && len(rawPayload.TrackGeometry) > 0 {
+		trackGeometry = rawPayload.TrackGeometry
+	}
+
+	// Convert WeatherData to map format for frontend
+	weatherData := map[string]interface{}{}
+	if rawPayload.WeatherData != nil && len(rawPayload.WeatherData) > 0 {
+		weatherData = rawPayload.WeatherData
+	}
+
+	// RaceStartTime conversion
+	var raceStartTime *float64
+	if rawPayload.RaceStartTimeAbsolute > 0 {
+		raceStartTime = &rawPayload.RaceStartTimeAbsolute
+	}
+
 	sessionMeta := models.SessionMetadata{
 		Year:          year,
 		Round:         round,
@@ -477,6 +505,10 @@ func generateCacheAsync(
 		DriverNumbers: rawPayload.DriverNumbers,
 		DriverTeams:   rawPayload.DriverTeams,
 		DriverColors:  rawPayload.DriverColors,
+		TrackStatuses: trackStatusMaps,
+		TrackGeometry: trackGeometry,
+		RaceStartTime: raceStartTime,
+		WeatherData:   weatherData,
 	}
 
 	// Update session with generated frames

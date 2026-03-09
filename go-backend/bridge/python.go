@@ -46,6 +46,7 @@ type RawDataPayload struct {
 	RaceStartTimeAbsolute  float64                  `json:"race_start_time_absolute" msgpack:"race_start_time_absolute"`
 	TotalLaps              int                      `json:"total_laps" msgpack:"total_laps"`
 	TrackGeometryTelemetry TrackGeometryData        `json:"track_geometry_telemetry" msgpack:"track_geometry_telemetry"`
+	TrackGeometry          map[string]interface{}   `json:"track_geometry" msgpack:"track_geometry"`
 }
 
 // TimingData contains timing information for all drivers
