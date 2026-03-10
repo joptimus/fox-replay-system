@@ -83,6 +83,7 @@ export const TrackVisualization3D: React.FC = () => {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const driverMeshesRef = useRef<Map<string, THREE.Mesh | THREE.Group>>(new Map());
+  const driverLightsRef = useRef<Map<string, THREE.PointLight>>(new Map());
   const driverLabelsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const sectorLabelsRef = useRef<HTMLDivElement[]>([]);
   const trackMeshRef = useRef<THREE.Mesh | null>(null);
@@ -123,7 +124,8 @@ try {
 
   // Scene setup
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new THREE.Color(0x080810);
+  scene.fog = new THREE.FogExp2(0x080810, 0.000018);
   sceneRef.current = scene;
 
   // Camera setup (top-down ortho, no movement)
@@ -143,11 +145,17 @@ try {
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     preserveDrawingBuffer: true,
-    alpha: false
+    alpha: true
   });
   renderer.setSize(width, height);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setClearColor(0x000000, 1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x080810, 1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  renderer.domElement.style.position = 'absolute';
+  renderer.domElement.style.top = '0';
+  renderer.domElement.style.left = '0';
+  renderer.domElement.style.zIndex = '1';
   container.appendChild(renderer.domElement);
   rendererRef.current = renderer;
   console.log("Renderer created and appended to DOM", {
@@ -161,9 +169,22 @@ try {
   raycasterRef.current = raycaster;
   mouseRef.current = mouse;
 
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+  // Lighting — atmospheric setup
+  const ambientLight = new THREE.AmbientLight(0x252535, 0.6);
   scene.add(ambientLight);
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  directionalLight.position.set(10, 20, 10);
+  scene.add(directionalLight);
+
+  // Subtle colored fill lights for atmosphere
+  const redFill = new THREE.PointLight(0xe63946, 0.15, 30000);
+  redFill.position.set(-8000, 2000, -5000);
+  scene.add(redFill);
+
+  const blueFill = new THREE.PointLight(0x3671C6, 0.10, 30000);
+  blueFill.position.set(8000, 2000, 5000);
+  scene.add(blueFill);
 
   // Create noise texture via render target (for rain shaping)
   const noiseRenderTarget = new THREE.WebGLRenderTarget(512, 512);
@@ -338,15 +359,40 @@ try {
 
       // Cleanup
       return () => {
-        console.log("Cleanup called, initRef.current:", initRef.current);
         window.removeEventListener("resize", handleWindowResize);
-        if (initRef.current === false) {
-          if (containerRef.current && renderer.domElement.parentNode === containerRef.current) {
-            containerRef.current.removeChild(renderer.domElement);
+        initRef.current = false;
+
+        // Remove driver labels from DOM
+        driverLabelsRef.current.forEach((label) => label.remove());
+        driverLabelsRef.current.clear();
+
+        // Remove sector labels from DOM
+        sectorLabelsRef.current.forEach((label) => label.remove());
+        sectorLabelsRef.current = [];
+
+        // Dispose driver meshes and lights
+        driverLightsRef.current.clear();
+        driverMeshesRef.current.forEach((mesh) => {
+          if (mesh instanceof THREE.Group) {
+            mesh.children.forEach((child) => {
+              if (child instanceof THREE.Mesh) {
+                child.geometry?.dispose();
+                if (child.material instanceof THREE.Material) child.material.dispose();
+              }
+            });
+          } else if (mesh instanceof THREE.Mesh) {
+            mesh.geometry?.dispose();
+            if (mesh.material instanceof THREE.Material) mesh.material.dispose();
           }
-          noiseRenderTargetRef.current?.dispose();
-          renderer.dispose();
+        });
+        driverMeshesRef.current.clear();
+
+        // Dispose render targets and renderer
+        noiseRenderTargetRef.current?.dispose();
+        if (containerRef.current && renderer.domElement.parentNode === containerRef.current) {
+          containerRef.current.removeChild(renderer.domElement);
         }
+        renderer.dispose();
       };
     } catch (error) {
       console.error("Error initializing Three.js scene:", error);
@@ -390,24 +436,32 @@ try {
 
         const numPoints = Math.min(innerPoints.length, outerPoints.length);
 
-        const sectorColors: Record<number, { r: number; g: number; b: number }> = {
-          1: { r: 0.0, g: 0.898, b: 1.0 },
-          2: { r: 0.718, g: 0.0, b: 1.0 },
-          3: { r: 1.0, g: 0.831, b: 0.0 },
+        // Muted sector colors — subtle tint on dark road surface
+        const roadBase = { r: 0.067, g: 0.067, b: 0.094 }; // #111118
+        const sectorTints: Record<number, { r: number; g: number; b: number }> = {
+          1: { r: 0.102, g: 0.541, b: 0.541 }, // #1a8a8a muted teal
+          2: { r: 0.541, g: 0.239, b: 0.431 }, // #8a3d6e muted rose
+          3: { r: 0.541, g: 0.478, b: 0.180 }, // #8a7a2e muted gold
         };
+        const tintStrength = 0.07; // 7% sector color mixed into road
 
         for (let i = 0; i < numPoints; i++) {
           positions.push(innerPoints[i].x, 0, innerPoints[i].y);
           positions.push(outerPoints[i].x, 0, outerPoints[i].y);
 
-          let sectorColor = sectorColors[3];
+          let tint = sectorTints[3];
           if (geometry.sector && geometry.sector[i]) {
             const sectorIndex = geometry.sector[i];
-            sectorColor = sectorColors[sectorIndex] || sectorColors[3];
+            tint = sectorTints[sectorIndex] || sectorTints[3];
           }
 
-          colors.push(sectorColor.r, sectorColor.g, sectorColor.b);
-          colors.push(sectorColor.r, sectorColor.g, sectorColor.b);
+          // Blend road base with subtle sector tint
+          const r = roadBase.r * (1 - tintStrength) + tint.r * tintStrength;
+          const g = roadBase.g * (1 - tintStrength) + tint.g * tintStrength;
+          const b = roadBase.b * (1 - tintStrength) + tint.b * tintStrength;
+
+          colors.push(r, g, b);
+          colors.push(r, g, b);
         }
 
         trackGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
@@ -427,10 +481,11 @@ try {
         trackGeom.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
         trackGeom.computeVertexNormals();
 
-        const trackMaterial = new THREE.MeshBasicMaterial({
+        const trackMaterial = new THREE.MeshStandardMaterial({
           vertexColors: true,
           side: THREE.DoubleSide,
-          wireframe: false,
+          roughness: 0.75,
+          metalness: 0.2,
         });
         const trackMesh = new THREE.Mesh(trackGeom, trackMaterial);
         trackMesh.position.z = -1;
@@ -444,8 +499,14 @@ try {
         console.log("Creating outer track edge with", geometry.outer_x.length, "points");
         const outerPoints = geometry.outer_x.map((x, i) => new THREE.Vector3(x, 0.5, geometry.outer_y[i]));
         const outerCurve = new THREE.CatmullRomCurve3(outerPoints);
-        const tubeGeom = new THREE.TubeGeometry(outerCurve, geometry.outer_x.length - 1, 8, 4, false);
-        const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const tubeGeom = new THREE.TubeGeometry(outerCurve, geometry.outer_x.length - 1, 4, 4, false);
+        const tubeMaterial = new THREE.MeshStandardMaterial({
+          color: 0x252535,
+          emissive: 0x151525,
+          emissiveIntensity: 0.3,
+          roughness: 0.8,
+          metalness: 0.1,
+        });
         const outerTube = new THREE.Mesh(tubeGeom, tubeMaterial);
         trackGroup.add(outerTube);
       }
@@ -454,10 +515,61 @@ try {
         console.log("Creating inner track edge with", geometry.inner_x.length, "points");
         const innerPoints = geometry.inner_x.map((x, i) => new THREE.Vector3(x, 0.5, geometry.inner_y[i]));
         const innerCurve = new THREE.CatmullRomCurve3(innerPoints);
-        const tubeGeom = new THREE.TubeGeometry(innerCurve, geometry.inner_x.length - 1, 8, 4, false);
-        const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const tubeGeom = new THREE.TubeGeometry(innerCurve, geometry.inner_x.length - 1, 4, 4, false);
+        const tubeMaterial = new THREE.MeshStandardMaterial({
+          color: 0x252535,
+          emissive: 0x151525,
+          emissiveIntensity: 0.3,
+          roughness: 0.8,
+          metalness: 0.1,
+        });
         const innerTube = new THREE.Mesh(tubeGeom, tubeMaterial);
         trackGroup.add(innerTube);
+      }
+
+      // Ground plane
+      const groundGeom = new THREE.PlaneGeometry(60000, 60000);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x080812,
+        roughness: 0.95,
+        metalness: 0.1,
+      });
+      const ground = new THREE.Mesh(groundGeom, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -15;
+      trackGroup.add(ground);
+
+      // Subtle grid helper
+      const gridHelper = new THREE.GridHelper(60000, 60, 0x151525, 0x0c0c1a);
+      gridHelper.position.y = -14;
+      trackGroup.add(gridHelper);
+
+      // Centerline racing line with sector-colored glow
+      if (geometry.centerline_x.length > 1) {
+        const sectorLineColors: Record<number, THREE.Color> = {
+          1: new THREE.Color(0x1a8a8a),
+          2: new THREE.Color(0x8a3d6e),
+          3: new THREE.Color(0x8a7a2e),
+        };
+        const linePositions: number[] = [];
+        const lineColors: number[] = [];
+        for (let i = 0; i < geometry.centerline_x.length; i++) {
+          linePositions.push(geometry.centerline_x[i], 2, geometry.centerline_y[i]);
+          const sector = geometry.sector?.[i] || 1;
+          const c = sectorLineColors[sector] || sectorLineColors[1];
+          lineColors.push(c.r, c.g, c.b);
+        }
+        const lineGeom = new THREE.BufferGeometry();
+        lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+        lineGeom.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
+        const lineMat = new THREE.LineBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.4,
+          linewidth: 1,
+        });
+        const centerLine = new THREE.Line(lineGeom, lineMat);
+        trackGroup.add(centerLine);
       }
 
       const boundsX = geometry.x_max - geometry.x_min;
@@ -481,9 +593,9 @@ try {
         const boundaries = findSectorBoundaryIndices(geometry.sector);
         if (boundaries) {
           const sectorInfo = [
-            { label: "SECTOR 1", color: "#00e5ff", rgb: { r: 0, g: 229, b: 255 } },
-            { label: "SECTOR 2", color: "#b700ff", rgb: { r: 183, g: 0, b: 255 } },
-            { label: "SECTOR 3", color: "#ffd400", rgb: { r: 255, g: 212, b: 0 } },
+            { label: "S1", color: "#1a8a8a", rgb: { r: 26, g: 138, b: 138 } },
+            { label: "S2", color: "#8a3d6e", rgb: { r: 138, g: 61, b: 110 } },
+            { label: "S3", color: "#8a7a2e", rgb: { r: 138, g: 122, b: 46 } },
           ];
 
           const boundaryGroup = new THREE.Group();
@@ -527,11 +639,12 @@ try {
 
           function createBoundaryLine(
             innerPos: THREE.Vector3,
-            outerPos: THREE.Vector3
+            outerPos: THREE.Vector3,
+            isStartFinish: boolean = false
           ) {
             const direction = new THREE.Vector3().subVectors(outerPos, innerPos);
             const distance = direction.length();
-            const extensionFactor = 0.3;
+            const extensionFactor = 0.15;
             const extension = distance * extensionFactor;
 
             const normalizedDir = direction.clone().normalize();
@@ -539,20 +652,26 @@ try {
             const extendedOuterPos = outerPos.clone().addScaledVector(normalizedDir, extension);
 
             const curve = new THREE.LineCurve3(extendedInnerPos, extendedOuterPos);
-            const tubeGeom = new THREE.TubeGeometry(curve, 1, 50, 4, false);
-            const tubeMaterial = new THREE.MeshBasicMaterial({
-              color: 0xffffff,
-              fog: false
+            const tubeGeom = new THREE.TubeGeometry(curve, 1, 15, 4, false);
+            const tubeMaterial = new THREE.MeshStandardMaterial({
+              color: isStartFinish ? 0xffffff : 0xffffff,
+              emissive: 0xffffff,
+              emissiveIntensity: isStartFinish ? 0.2 : 0.1,
+              transparent: true,
+              opacity: isStartFinish ? 0.5 : 0.15,
+              roughness: 0.5,
+              metalness: 0.1,
             });
 
             return new THREE.Mesh(tubeGeom, tubeMaterial);
           }
 
-          const line1 = createBoundaryLine(line1InnerPos, line1OuterPos);
-          const line2 = createBoundaryLine(line2InnerPos, line2OuterPos);
+          const line1 = createBoundaryLine(line1InnerPos, line1OuterPos, false);
+          const line2 = createBoundaryLine(line2InnerPos, line2OuterPos, false);
           const startFinishLine = createBoundaryLine(
             startFinishInnerPos,
-            startFinishOuterPos
+            startFinishOuterPos,
+            true
           );
 
           boundaryGroup.add(line1);
@@ -587,22 +706,25 @@ try {
               const screenX = (vector.x * 0.5 + 0.5) * containerRef.current.clientWidth;
               const screenY = (-vector.y * 0.5 + 0.5) * containerRef.current.clientHeight;
 
+              const { r: sr, g: sg, b: sb } = sectorInfo[idx].rgb;
               const tagDiv = document.createElement("div");
               tagDiv.textContent = label;
               tagDiv.style.position = "absolute";
               tagDiv.style.pointerEvents = "none";
-              tagDiv.style.padding = "8px 16px";
-              tagDiv.style.fontSize = "14px";
-              tagDiv.style.fontWeight = "bold";
+              tagDiv.style.padding = "4px 10px";
+              tagDiv.style.fontSize = "11px";
+              tagDiv.style.fontWeight = "600";
               tagDiv.style.color = color;
-              tagDiv.style.border = `2px solid ${color}`;
+              tagDiv.style.opacity = "0.6";
+              tagDiv.style.border = `1px solid rgba(${sr}, ${sg}, ${sb}, 0.20)`;
               tagDiv.style.borderRadius = "4px";
-              tagDiv.style.backgroundColor = "rgba(15, 15, 18, 0.9)";
+              tagDiv.style.backgroundColor = `rgba(${sr}, ${sg}, ${sb}, 0.08)`;
               tagDiv.style.whiteSpace = "nowrap";
               tagDiv.style.transform = "translate(-50%, -50%)";
               tagDiv.style.left = `${screenX}px`;
               tagDiv.style.top = `${screenY}px`;
-              tagDiv.style.fontFamily = "monospace";
+              tagDiv.style.fontFamily = "'Share Tech Mono', monospace";
+              tagDiv.style.letterSpacing = "0.1em";
 
               containerRef.current.appendChild(tagDiv);
               sectorLabelsRef.current.push(tagDiv);
@@ -641,18 +763,19 @@ try {
             sfTagDiv.textContent = "START/FINISH";
             sfTagDiv.style.position = "absolute";
             sfTagDiv.style.pointerEvents = "none";
-            sfTagDiv.style.padding = "4px 8px";
-            sfTagDiv.style.fontSize = "10px";
-            sfTagDiv.style.fontWeight = "bold";
-            sfTagDiv.style.color = "#ffffff";
-            sfTagDiv.style.border = "1px solid #ffffff";
-            sfTagDiv.style.borderRadius = "3px";
-            sfTagDiv.style.backgroundColor = "rgba(15, 15, 18, 0.9)";
+            sfTagDiv.style.padding = "3px 8px";
+            sfTagDiv.style.fontSize = "9px";
+            sfTagDiv.style.fontWeight = "600";
+            sfTagDiv.style.color = "rgba(255,255,255,0.5)";
+            sfTagDiv.style.border = "1px solid rgba(255,255,255,0.15)";
+            sfTagDiv.style.borderRadius = "4px";
+            sfTagDiv.style.backgroundColor = "rgba(8, 8, 16, 0.85)";
             sfTagDiv.style.whiteSpace = "nowrap";
             sfTagDiv.style.transform = "translate(-50%, -50%)";
             sfTagDiv.style.left = `${sfScreenX}px`;
             sfTagDiv.style.top = `${sfScreenY}px`;
-            sfTagDiv.style.fontFamily = "monospace";
+            sfTagDiv.style.fontFamily = "'Share Tech Mono', monospace";
+            sfTagDiv.style.letterSpacing = "0.1em";
 
             containerRef.current.appendChild(sfTagDiv);
             sectorLabelsRef.current.push(sfTagDiv);
@@ -703,6 +826,7 @@ try {
       if (!currentFrame.drivers[code]) {
         scene.remove(mesh);
         driverMeshesRef.current.delete(code);
+        driverLightsRef.current.delete(code);
 
         const label = driverLabelsRef.current.get(code);
         if (label) {
@@ -720,6 +844,7 @@ try {
         if (mesh) {
           scene.remove(mesh);
           driverMeshesRef.current.delete(code);
+          driverLightsRef.current.delete(code);
 
           const label = driverLabelsRef.current.get(code);
           if (label) {
@@ -741,45 +866,40 @@ try {
       if (!mesh) {
         const group = new THREE.Group();
 
-        // Main driver sphere with improved material
+        // Main driver sphere — the brightest element in the scene
         const sphereGeometry = new THREE.SphereGeometry(80, 32, 32);
         const color = new THREE.Color(hexColor);
         const material = new THREE.MeshStandardMaterial({
           color,
           emissive: color,
-          emissiveIntensity: 0.6,
+          emissiveIntensity: 0.7,
           metalness: 0.7,
-          roughness: 0.2,
+          roughness: 0.3,
         });
         const sphere = new THREE.Mesh(sphereGeometry, material);
         group.add(sphere);
 
-        // Outer glow ring
-        const ringGeometry = new THREE.TorusGeometry(95, 8, 16, 32);
+        // Subtle outer glow ring
+        const ringGeometry = new THREE.TorusGeometry(95, 5, 16, 32);
         const ringMaterial = new THREE.MeshStandardMaterial({
           color,
           emissive: color,
-          emissiveIntensity: 0.4,
+          emissiveIntensity: 0.3,
           metalness: 0.5,
-          roughness: 0.3,
+          roughness: 0.4,
+          transparent: true,
+          opacity: 0.6,
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.position.y = 0;
         ring.rotation.x = Math.PI / 3;
         group.add(ring);
 
-        // Highlight point
-        const highlightGeometry = new THREE.SphereGeometry(40, 16, 16);
-        const highlightMaterial = new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xffffff,
-          emissiveIntensity: 0.8,
-          metalness: 0.9,
-          roughness: 0.1,
-        });
-        const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
-        highlight.position.set(-30, 30, -30);
-        group.add(highlight);
+        // Point light per car — casts colored pool on track
+        const pointLight = new THREE.PointLight(hexColor, 0.5, 300);
+        pointLight.position.set(0, 30, 0);
+        group.add(pointLight);
+        driverLightsRef.current.set(code, pointLight);
 
         scene.add(group);
         driverMeshesRef.current.set(code, group);
@@ -789,21 +909,32 @@ try {
       mesh.position.set(x, 50, y);
 
       const isSelected = code === selectedDriver?.code;
+      const pointLight = driverLightsRef.current.get(code);
+
       if (mesh instanceof THREE.Group && mesh.children.length > 0) {
         const mainMaterial = (mesh.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
         const ringMaterial = mesh.children.length > 1 ? (mesh.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial : null;
-        const highlightMaterial = mesh.children.length > 2 ? (mesh.children[2] as THREE.Mesh).material as THREE.MeshStandardMaterial : null;
 
         if (isSelected) {
-          mainMaterial.emissiveIntensity = 0.9;
-          if (ringMaterial) ringMaterial.emissiveIntensity = 0.7;
-          if (highlightMaterial) highlightMaterial.emissiveIntensity = 1.0;
-          mesh.scale.set(1.4, 1.4, 1.4);
+          // Selected car: brighter, pulsing (pulse applied in animate loop)
+          const time = performance.now() / 1000;
+          const scalePulse = 1.0 + Math.sin(time * 4) * 0.1;
+          const emissivePulse = 0.9 + Math.sin(time * 6) * 0.2;
+          mainMaterial.emissiveIntensity = emissivePulse;
+          if (ringMaterial) {
+            ringMaterial.emissiveIntensity = 0.6;
+            ringMaterial.opacity = 0.9;
+          }
+          mesh.scale.set(scalePulse, scalePulse, scalePulse);
+          if (pointLight) pointLight.intensity = 0.8;
         } else {
-          mainMaterial.emissiveIntensity = 0.6;
-          if (ringMaterial) ringMaterial.emissiveIntensity = 0.4;
-          if (highlightMaterial) highlightMaterial.emissiveIntensity = 0.8;
-          mesh.scale.set(1, 1, 1);
+          mainMaterial.emissiveIntensity = 0.7;
+          if (ringMaterial) {
+            ringMaterial.emissiveIntensity = 0.3;
+            ringMaterial.opacity = 0.6;
+          }
+          mesh.scale.set(0.7, 0.7, 0.7);
+          if (pointLight) pointLight.intensity = 0.5;
         }
       }
 
@@ -815,29 +946,43 @@ try {
           label.style.position = 'absolute';
           label.style.display = 'flex';
           label.style.alignItems = 'center';
-          label.style.gap = '8px';
-          label.style.padding = '6px 12px';
-          label.style.backgroundColor = `rgb(${teamColor[0]}, ${teamColor[1]}, ${teamColor[2]})`;
-          label.style.color = 'white';
-          label.style.fontFamily = 'monospace';
-          label.style.borderRadius = '4px';
+          label.style.gap = '6px';
+          label.style.padding = '4px 10px';
+          label.style.backgroundColor = 'rgba(8, 8, 16, 0.85)';
+          label.style.border = `1px solid rgba(${teamColor[0]}, ${teamColor[1]}, ${teamColor[2]}, 0.30)`;
+          label.style.color = '#e8e8ee';
+          label.style.fontFamily = "'Share Tech Mono', monospace";
+          label.style.borderRadius = '5px';
           label.style.pointerEvents = 'none';
           label.style.zIndex = '10';
           label.style.letterSpacing = '0.05em';
+          label.style.fontSize = '11px';
 
-          const textSpan = document.createElement('span');
-          textSpan.style.fontSize = '13px';
-          textSpan.style.fontWeight = '700';
-          label.appendChild(textSpan);
+          // Position text (team color)
+          const posSpan = document.createElement('span');
+          posSpan.style.fontWeight = '700';
+          posSpan.style.color = `rgb(${teamColor[0]}, ${teamColor[1]}, ${teamColor[2]})`;
+          label.appendChild(posSpan);
 
+          // Separator
+          const sepSpan = document.createElement('span');
+          sepSpan.textContent = '\u2014';
+          sepSpan.style.color = 'rgba(255,255,255,0.3)';
+          label.appendChild(sepSpan);
+
+          // Driver code
+          const codeSpan = document.createElement('span');
+          codeSpan.style.fontWeight = '700';
+          codeSpan.style.color = '#e8e8ee';
+          label.appendChild(codeSpan);
+
+          // Team logo
           const img = document.createElement('img');
-          img.style.height = '18px';
+          img.style.height = '14px';
           img.style.width = 'auto';
+          img.style.marginLeft = '4px';
           img.onerror = () => { img.style.display = 'none'; };
           label.appendChild(img);
-
-          label.dataset.textSpan = '0';
-          label.dataset.img = '1';
 
           container.appendChild(label);
           driverLabelsRef.current.set(code, label);
@@ -846,10 +991,12 @@ try {
         const position = driver.position || '?';
         const teamName = (sessionMetadata as any)?.driver_teams?.[code];
 
-        const textSpan = label.children[0] as HTMLSpanElement;
-        const img = label.children[1] as HTMLImageElement;
+        const posSpan = label.children[0] as HTMLSpanElement;
+        const codeSpan = label.children[2] as HTMLSpanElement;
+        const img = label.children[3] as HTMLImageElement;
 
-        textSpan.textContent = `P${position} - ${code}`;
+        posSpan.textContent = `P${position}`;
+        codeSpan.textContent = code;
 
         const logoPath = getTeamLogoPath(teamName);
         if (logoPath) {
@@ -889,10 +1036,12 @@ try {
     if (showSectorColors) {
       colorAttribute.array = trackMaterialColorsRef.current;
     } else {
+      // Uniform dark road surface when sectors disabled
       const grayColors = new Float32Array(trackMaterialColorsRef.current.length);
-      const grayValue = 0.3;
-      for (let i = 0; i < grayColors.length; i++) {
-        grayColors[i] = grayValue;
+      for (let i = 0; i < grayColors.length; i += 3) {
+        grayColors[i] = 0.067;     // R — #111118
+        grayColors[i + 1] = 0.067; // G
+        grayColors[i + 2] = 0.094; // B
       }
       colorAttribute.array = grayColors;
     }
@@ -979,6 +1128,7 @@ try {
         height: "100%",
         position: "relative",
         overflow: "hidden",
+        background: "#080810",
       }}
     >
       {/* Settings Button at Top-Right */}
@@ -986,66 +1136,72 @@ try {
         onClick={() => setShowSettingsPanel(true)}
         style={{
           position: 'absolute',
-          top: '16px',
-          right: '16px',
+          top: '10px',
+          right: '18px',
           zIndex: 25,
-          background: '#e10600',
-          border: 'none',
-          width: '40px',
-          height: '40px',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid var(--border-color)',
+          width: '32px',
+          height: '32px',
           borderRadius: '8px',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'white',
-          transition: 'all 0.2s ease',
+          color: 'var(--text-faint)',
+          transition: 'all 0.15s',
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as any).style.background = '#c70000';
-          (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
+          (e.currentTarget as any).style.color = 'var(--text-dimmed)';
+          (e.currentTarget as any).style.background = 'rgba(255,255,255,0.06)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as any).style.background = '#e10600';
-          (e.currentTarget as any).style.boxShadow = 'none';
+          (e.currentTarget as any).style.color = 'var(--text-faint)';
+          (e.currentTarget as any).style.background = 'rgba(255,255,255,0.04)';
         }}
       >
-        <Settings size={20} />
+        <Settings size={16} />
       </button>
 
-      {/* Weather Panel at Top-Left */}
-      {currentFrame?.weather && showWeatherPanel && (
+      {/* Conditions Bar at Top-Left */}
+      {showWeatherPanel && (
         <div
           style={{
             position: 'absolute',
-            top: '16px',
-            left: '16px',
+            top: '0',
+            left: '0',
+            right: '48px',
             zIndex: 20,
-            background: 'rgba(15, 15, 18, 0.85)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '12px 16px',
+            background: 'rgba(17, 17, 25, 0.95)',
+            borderBottom: '1px solid var(--border-color)',
+            padding: '10px 18px',
             backdropFilter: 'blur(8px)',
           }}
         >
-          <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#9ca3af', letterSpacing: '0.05em', display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <span style={{ color: '#d1d5db', fontWeight: 700 }}>TRACK:</span>
-              <span>{Math.round(convertTemperature(currentFrame.weather.track_temp))}°{temperatureUnit}</span>
-            </div>
-            <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <span style={{ color: '#d1d5db', fontWeight: 700 }}>AIR:</span>
-              <span>{Math.round(convertTemperature(currentFrame.weather.air_temp))}°{temperatureUnit}</span>
-            </div>
-            <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <span style={{ color: '#d1d5db', fontWeight: 700 }}>WIND:</span>
-              <span>{Math.round(currentFrame.weather.wind_speed)} m/s</span>
-            </div>
-            {currentFrame.weather.rain_state !== 'Dry' && (
-              <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '4px', alignItems: 'center', color: '#3b82f6' }}>
-                <span style={{ color: '#d1d5db', fontWeight: 700 }}>CONDITIONS:</span>
-                <span>{currentFrame.weather.rain_state}</span>
-              </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+            {currentFrame?.weather ? (
+              <>
+                <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-dimmed)' }}>TRACK:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>{Math.round(convertTemperature(currentFrame.weather.track_temp))}&deg;{temperatureUnit}</span>
+                </div>
+                <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-dimmed)' }}>AIR:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>{Math.round(convertTemperature(currentFrame.weather.air_temp))}&deg;{temperatureUnit}</span>
+                </div>
+                <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-dimmed)' }}>WIND:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>{Math.round(currentFrame.weather.wind_speed)} m/s</span>
+                </div>
+                <div style={{ whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-dimmed)' }}>CONDITIONS:</span>
+                  <span style={{ color: currentFrame.weather.rain_state === 'DRY' ? 'var(--cyan)' : '#3b82f6', fontWeight: 600 }}>
+                    {currentFrame.weather.rain_state || 'DRY'}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-faint)', letterSpacing: '0.06em' }}>AWAITING CONDITIONS DATA...</span>
             )}
           </div>
         </div>

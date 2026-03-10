@@ -58,6 +58,19 @@ function log(service, message, color = colors.reset) {
 function buildGoBackend() {
   if (noGo) return true;
 
+  // Skip build if binary already exists and go isn't available
+  if (fs.existsSync(config.goBinary)) {
+    const result = spawnSync("go", ["version"], {
+      stdio: "pipe",
+      shell: process.platform === "win32",
+    });
+
+    if (result.error || result.status !== 0) {
+      log("Go Backend", "Using existing binary (go not in PATH)", colors.yellow);
+      return true;
+    }
+  }
+
   log("Go Backend", "Building...", colors.blue);
 
   const binaryName = process.platform === "win32" ? "f1-replay-go.exe" : "f1-replay-go";
@@ -68,7 +81,11 @@ function buildGoBackend() {
   });
 
   if (result.error || result.status !== 0) {
-    log("✗ Go Backend", "Build failed", colors.red);
+    if (fs.existsSync(config.goBinary)) {
+      log("Go Backend", "Build failed, using existing binary", colors.yellow);
+      return true;
+    }
+    log("✗ Go Backend", "Build failed and no existing binary found", colors.red);
     return false;
   }
 

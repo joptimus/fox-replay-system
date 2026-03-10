@@ -1,27 +1,30 @@
 /**
  * Main App component for FOX Replay System
  */
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useReplayStore, useSelectedDriver, useSectorColors } from "./store/replayStore";
 import { useReplayWebSocket } from "./hooks/useReplayWebSocket";
 import { usePlaybackAnimation } from "./hooks/usePlaybackAnimation";
 import { LightsBoard, LightsBoardHandle } from "./components/LightsBoard";
-import { TrackVisualization3D } from "./components/TrackVisualization3D";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { Leaderboard } from "./components/Leaderboard";
-import { FP1Dashboard } from "./components/FP1Dashboard";
-import { QualiDashboard } from "./components/QualiDashboard";
-import { TelemetryChart } from "./components/TelemetryChart";
 import { SidebarMenu } from "./components/SidebarMenu";
 import { LoadingModal } from "./components/LoadingModal";
 import { LandingPage } from "./components/LandingPage";
-import { ComparisonPage } from "./components/ComparisonPage";
 import { VerticalNavMenu } from "./components/VerticalNavMenu";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { motion } from "framer-motion";
 import { dataService } from "./services/dataService";
 import { preloadDriverImages, preloadTeamLogos, preloadTyreIcons, preloadCommonImages } from "./utils/imagePreloader";
 import { getDriverCountryFlagEmoji } from "./utils/countryFlags";
+
+// Lazy-load heavy components
+const TrackVisualization3D = lazy(() => import("./components/TrackVisualization3D").then(m => ({ default: m.TrackVisualization3D })));
+const TelemetryChart = lazy(() => import("./components/TelemetryChart").then(m => ({ default: m.TelemetryChart })));
+const ComparisonPage = lazy(() => import("./components/ComparisonPage").then(m => ({ default: m.ComparisonPage })));
+const QualiDashboard = lazy(() => import("./components/QualiDashboard").then(m => ({ default: m.QualiDashboard })));
+const FP1Dashboard = lazy(() => import("./components/FP1Dashboard").then(m => ({ default: m.FP1Dashboard })));
 
 
 const getImageExtension = (year: number, imageType: 'driver' | 'number' = 'driver'): string => {
@@ -62,6 +65,8 @@ const DriverImage = ({ year, code, ext }: { year: number; code: string; ext: str
   );
 };
 
+
+
 const DriverNumberImage = ({ year, number, ext }: { year: number; number: string; ext: string }) => {
   const [imageError, setImageError] = useState(false);
   const [tryingFallback, setTryingFallback] = useState(false);
@@ -83,7 +88,7 @@ const DriverNumberImage = ({ year, number, ext }: { year: number; number: string
       src={imageSrc}
       alt={`Driver ${number}`}
       onError={handleError}
-      className="h-[60px] w-full max-w-[200px] mt-3 block object-contain object-left"
+      style={{ height: '32px', width: 'auto', maxWidth: '100px', display: 'block', objectFit: 'contain', objectPosition: 'left', marginTop: 'auto' }}
     />
   );
 };
@@ -92,16 +97,27 @@ const DriverHero = ({ year }: { year?: number }) => {
   const selected = useSelectedDriver();
 
   if (!selected) return (
-    <div className="flex items-center justify-center min-h-[256px] border border-f1-border bg-f1-dark-gray rounded-xl text-center p-6 mb-3 flex-shrink-0">
-      <p className="f1-monospace text-f1-silver text-sm font-semibold tracking-wide">NO DRIVER SELECTED</p>
+    <div style={{
+      height: '200px',
+      minHeight: '200px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'var(--bg-panel)',
+      borderBottom: '1px solid var(--border-color)',
+      flexShrink: 0,
+    }}>
+      <p style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--text-faint)',
+        letterSpacing: '0.08em',
+      }}>NO DRIVER SELECTED</p>
     </div>
   );
 
   const { code, color } = selected;
   const teamColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-
-  // Calculate accessible color (darker version)
-  const accessibleColor = `rgb(${Math.max(0, color[0] - 80)}, ${Math.max(0, color[1] - 80)}, ${Math.max(0, color[2] - 80)})`;
   const displayYear = year || 2025;
   const driver = year ? dataService.getDriverByCode(year, code) : null;
   const driverNum = driver?.CarNumber || "0";
@@ -113,6 +129,9 @@ const DriverHero = ({ year }: { year?: number }) => {
   const driverImgExt = getImageExtension(displayYear, 'driver');
   const numberImgExt = getImageExtension(displayYear, 'number');
 
+  // Calculate accessible color (darker version) — same as original
+  const accessibleColor = `rgb(${Math.max(0, color[0] - 80)}, ${Math.max(0, color[1] - 80)}, ${Math.max(0, color[2] - 80)})`;
+
   return (
     <motion.div
       key={code}
@@ -121,26 +140,53 @@ const DriverHero = ({ year }: { year?: number }) => {
       className="f1-driver-card"
       style={{
         '--f1-team-colour': teamColor,
-        '--f1-accessible-colour': accessibleColor
+        '--f1-accessible-colour': accessibleColor,
       } as any}
     >
-      {/* 1. BACKGROUND LAYERS (Z-INDEX 1 & 2) */}
+      {/* Team color accent strip at top */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '2px',
+        background: `linear-gradient(to right, ${teamColor}, transparent)`,
+        zIndex: 15,
+      }} />
+
+      {/* 1. BACKGROUND LAYERS — unchanged from original */}
       <div className="f1-card-pattern-container">
         <div className="f1-card-pattern" />
       </div>
       <div className="f1-card-gradient" />
 
-      {/* 2. TEXT CONTENT (Z-INDEX 10) */}
+      {/* 2. TEXT CONTENT */}
       <div className="f1-card-info">
         <p className="f1-first-name">{firstName}</p>
         <p className="f1-last-name">{lastName}</p>
-        <div className="f1-team-name">{code} {countryFlag}</div>
 
-        {/* Number Image */}
+        {/* Code + flag badge */}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          fontWeight: 700,
+          color: teamColor,
+          background: `${teamColor}15`,
+          padding: '3px 8px',
+          borderRadius: '4px',
+          width: 'fit-content',
+        }}>
+          {code} {countryFlag}
+        </div>
+
+        {/* Driver number image at bottom-left */}
         <DriverNumberImage year={displayYear} number={driverNum} ext={numberImgExt} />
       </div>
 
-      {/* 3. PHOTO CONTENT (Z-INDEX 5) */}
+      {/* 3. PHOTO CONTENT — unchanged from original */}
       <div className="f1-card-photo-wrapper">
         <div className="f1-card-photo-inner">
           <DriverImage year={displayYear} code={code} ext={driverImgExt} />
@@ -163,30 +209,24 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
   const handlePlayWithLights = useCallback(() => {
     console.log('handlePlayWithLights called, hasPlayedLights:', hasPlayedLights, 'ref:', lightsBoardRef.current);
-    // Only show lights board if this is the first play (not a resume)
     if (!hasPlayedLights) {
       console.log('Showing lights board');
       setHasPlayedLights(true);
-      // Don't call play() yet - wait for lights sequence to complete
       lightsBoardRef.current?.startSequence();
     } else {
       console.log('Skipping lights board, already played');
-      // Just resume playback without lights
       play();
     }
   }, [hasPlayedLights, play]);
 
   const handleLightsSequenceComplete = useCallback(() => {
-    // Now start playback after lights complete
     play();
   }, [play]);
 
-  // Update total frames when session metadata changes and reset lights flag on new session
   useEffect(() => {
     if (session.metadata?.total_frames) {
       setTotalFrames(session.metadata.total_frames);
     }
-    // Reset lights played flag when new session is loaded
     setHasPlayedLights(false);
   }, [session.metadata?.total_frames, session.sessionId, setTotalFrames]);
 
@@ -204,10 +244,14 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
   if (isQualifying) {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         <VerticalNavMenu />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <QualiDashboard />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ErrorBoundary>
+            <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING QUALIFYING...</div>}>
+              <QualiDashboard />
+            </Suspense>
+          </ErrorBoundary>
         </div>
         <SidebarMenu
           isOpen={menuOpen}
@@ -226,10 +270,14 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
   if (isPractice) {
     return (
-      <div className="flex h-screen overflow-hidden">
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         <VerticalNavMenu />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <FP1Dashboard />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ErrorBoundary>
+            <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING PRACTICE...</div>}>
+              <FP1Dashboard />
+            </Suspense>
+          </ErrorBoundary>
         </div>
         <SidebarMenu
           isOpen={menuOpen}
@@ -247,69 +295,155 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-page)' }}>
       <LightsBoard ref={lightsBoardRef} onSequenceComplete={handleLightsSequenceComplete} />
       <VerticalNavMenu />
-      <div className="app-container">
-        <header className="app-header">
-          <div className="flex items-center gap-4">
+
+      {/* Main 3-column content area (standings | track | telemetry) with top bar */}
+      <div style={{
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: '280px 1fr 320px',
+        gridTemplateRows: '48px 1fr',
+        overflow: 'hidden',
+      }}>
+        {/* Top Bar */}
+        <header style={{
+          gridColumn: '1 / -1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--bg-panel)',
+          borderBottom: '1px solid var(--border-color)',
+          padding: '0 16px',
+          height: '48px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={() => setMenuOpen(true)}
-              className="bg-f1-red hover:bg-[#c70000] text-white w-8 h-8 rounded text-lg border-none cursor-pointer transition-all duration-200 hover:shadow-lg flex items-center justify-center"
+              style={{
+                width: '48px',
+                height: '48px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-dimmed)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '18px',
+                transition: 'color 0.15s',
+              }}
               title="Menu"
-              onMouseEnter={(e) => {
-                (e.currentTarget as any).style.boxShadow = '0 4px 12px rgba(225, 6, 0, 0.3)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as any).style.boxShadow = 'none';
-              }}
+              onMouseEnter={(e) => { (e.currentTarget as any).style.color = 'var(--text-primary)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as any).style.color = 'var(--text-dimmed)'; }}
             >
-              ☰
+              &#9776;
             </button>
-            <div className="bg-f1-red text-white px-3 py-1 font-black text-xs">REPLAY</div>
+            <span className="replay-badge">REPLAY</span>
             <div>
-              <h1 className="text-base font-bold tracking-wide m-0">{raceName}</h1>
+              <h1 style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                letterSpacing: '0.02em',
+                margin: 0,
+              }}>{raceName}</h1>
               {trackName && (
-                <p className="text-xs text-f1-silver m-0 mt-1 font-mono">
-                  {trackName}
-                </p>
+                <p style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: 'var(--text-dimmed)',
+                  margin: 0,
+                  marginTop: '1px',
+                }}>{trackName}</p>
               )}
             </div>
           </div>
-          <div className="flex-1"></div>
-          <div className="text-right flex flex-col gap-2">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
             {location && (
-              <div className="f1-monospace text-xs text-f1-silver">
-                {location}
-              </div>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: 'var(--text-dimmed)',
+              }}>{location}</div>
             )}
-            <div className="f1-monospace text-xs text-f1-silver">
-              STATUS: <span className={isConnected ? 'text-green-500' : 'text-red-500'}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: 'var(--text-faint)',
+              }}>STATUS:</span>
+              {isConnected ? (
+                <span className="status-badge-live">LIVE</span>
+              ) : (
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: 'var(--accent-red)',
+                }}>OFFLINE</span>
+              )}
             </div>
           </div>
         </header>
 
-        <aside className="sidebar-scroll">
-          {isPractice ? (
-            <FP1Dashboard />
-          ) : (
-            <Leaderboard />
-          )}
+        {/* Standings Panel */}
+        <aside style={{
+          background: 'var(--bg-panel)',
+          borderRight: '1px solid var(--border-color)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}>
+          <div className="sidebar-scroll">
+            {isPractice ? (
+              <FP1Dashboard />
+            ) : (
+              <Leaderboard />
+            )}
+          </div>
         </aside>
 
-        <main className="relative bg-f1-carbon border border-f1-border rounded-lg overflow-hidden flex flex-col">
-          <div className="flex-1 relative overflow-hidden">
-            <TrackVisualization3D />
+        {/* Center Track Area */}
+        <main style={{
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          background: '#0a0a10',
+          minHeight: 0,
+        }}>
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <ErrorBoundary>
+              <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING TRACK...</div>}>
+                <TrackVisualization3D />
+              </Suspense>
+            </ErrorBoundary>
           </div>
-          <div className="border-t border-f1-border">
-            <PlaybackControls onPlayWithLights={handlePlayWithLights} />
-          </div>
+          <PlaybackControls onPlayWithLights={handlePlayWithLights} />
         </main>
 
-        <aside className="flex flex-col overflow-hidden h-full max-w-[300px]">
+        {/* Driver Telemetry Panel */}
+        <aside style={{
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          background: 'var(--bg-panel)',
+          borderLeft: '1px solid var(--border-color)',
+          minHeight: 0,
+        }}>
           <DriverHero year={year} />
-          <div className="sidebar-scroll bg-f1-black p-4 rounded-lg border border-f1-border flex-1">
-            <TelemetryChart />
+          <div style={{
+            flex: 1,
+            overflow: 'auto',
+            minHeight: 0,
+          }}>
+            <ErrorBoundary>
+              <Suspense fallback={<div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)', padding: '18px' }}>LOADING TELEMETRY...</div>}>
+                <TelemetryChart />
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </aside>
 
@@ -324,7 +458,6 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           showSectorColors={showSectorColors}
           onToggleSectorColors={toggleSectorColors}
         />
-
       </div>
     </div>
   );
@@ -344,19 +477,19 @@ function AppRoutes() {
     return () => window.removeEventListener('sessionTypeChange', handleSessionTypeChangeEvent);
   }, []);
 
-  const handleSessionSelect = async (year: number, round: number, sessionType: string = "R", refresh: boolean = false) => {
+  const loadSession = async (year: number, round: number, sessionType: string, refresh: boolean, shouldNavigate: boolean) => {
     try {
       if (session.sessionId) {
         pause();
       }
 
-      // CRITICAL: Reset loading state BEFORE opening modal
+      setSessionLoading(true);
+
       const store = useReplayStore.getState();
       store.setLoadingProgress(0);
       store.setLoadingError(null);
       store.setLoadingComplete(false);
 
-      // Preload images in the background while loading the session
       const drivers = dataService.getAllDriversForYear(year);
       const driverCodes = drivers.map(d => d.Code);
 
@@ -379,12 +512,16 @@ function AppRoutes() {
         round,
         session_type: sessionType,
       } as any);
-      setSessionLoading(true);  // NOW open modal - WebSocket will close it when done
-      navigate("/replay");
+      setSessionLoading(true);
+      if (shouldNavigate) navigate("/replay");
     } catch (err) {
       console.error("Failed to load session:", err);
       setSessionLoading(false);
     }
+  };
+
+  const handleSessionSelect = (year: number, round: number, sessionType: string = "R", refresh: boolean = false) => {
+    loadSession(year, round, sessionType, refresh, true);
   };
 
   const handleRefreshData = async () => {
@@ -399,46 +536,8 @@ function AppRoutes() {
     }
   };
 
-  const handleSessionTypeChange = async (year: number, round: number, sessionType: string) => {
-    try {
-      if (session.sessionId) {
-        pause();
-      }
-
-      // CRITICAL: Reset loading state BEFORE opening modal
-      const store = useReplayStore.getState();
-      store.setLoadingProgress(0);
-      store.setLoadingError(null);
-      store.setLoadingComplete(false);
-
-      // Preload images in the background while loading the session
-      const drivers = dataService.getAllDriversForYear(year);
-      const driverCodes = drivers.map(d => d.Code);
-
-      Promise.all([
-        preloadDriverImages(driverCodes, year),
-        preloadTeamLogos(),
-        preloadTyreIcons(),
-        preloadCommonImages(),
-      ]).catch(err => console.warn("Image preloading failed:", err));
-
-      const response = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, round, session_type: sessionType, refresh: false })
-      });
-      const data = await response.json();
-
-      setSession(data.session_id, {
-        year,
-        round,
-        session_type: sessionType,
-      } as any);
-      setSessionLoading(true);  // NOW open modal - WebSocket will close it when done
-    } catch (err) {
-      console.error("Failed to load session:", err);
-      setSessionLoading(false);
-    }
+  const handleSessionTypeChange = (year: number, round: number, sessionType: string) => {
+    loadSession(year, round, sessionType, false, false);
   };
 
   return (
@@ -448,7 +547,7 @@ function AppRoutes() {
         path="/replay"
         element={session.sessionId ? <ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} /> : <Navigate to="/" replace />}
       />
-      <Route path="/comparison" element={<ComparisonPage />} />
+      <Route path="/comparison" element={<ErrorBoundary><Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING COMPARISON...</div>}><ComparisonPage /></Suspense></ErrorBoundary>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

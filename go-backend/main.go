@@ -71,6 +71,10 @@ func main() {
 	r.Get("/api/sessions/{session_id}", handleGetSessionRoute(sessionMgr, logger))
 	r.Delete("/api/sessions/cache", handleDeleteCacheRoute(cacheReader, logger))
 
+	// Telemetry comparison endpoints (proxy to Python scripts)
+	r.Post("/api/telemetry/sectors", handlePythonTelemetry("scripts/get_sector_times.py", logger))
+	r.Post("/api/telemetry/laps", handlePythonTelemetry("scripts/get_lap_telemetry.py", logger))
+
 	// WebSocket
 	r.HandleFunc("/ws/replay/{session_id}", wsHandler.Handle)
 
@@ -536,4 +540,72 @@ func generateCacheAsync(
 		zap.String("sessionID", sessionID),
 		zap.Int("frames", len(frames)),
 	)
+}
+
+// handlePythonTelemetry creates a handler that runs a Python script for telemetry comparison data.
+// The request body must have: year, round_num, session_type, driver_codes, lap_numbers.
+func handlePythonTelemetry(scriptPath string, logger *zap.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Year        int      `json:"year"`
+			RoundNum    int      `json:"round_num"`
+			SessionType string   `json:"session_type"`
+			DriverCodes []string `json:"driver_codes"`
+			LapNumbers  []int    `json:"lap_numbers"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if len(req.DriverCodes) == 0 || len(req.LapNumbers) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "driver_codes and lap_numbers are required"})
+			return
+		}
+
+		// Build comma-separated lists
+		driverCodesStr := strings.Join(req.DriverCodes, ",")
+		lapNumbersStr := make([]string, len(req.LapNumbers))
+		for i, ln := range req.LapNumbers {
+			lapNumbersStr[i] = fmt.Sprintf("%d", ln)
+		}
+		lapsStr := strings.Join(lapNumbersStr, ",")
+
+		cmd := exec.Command("python3", scriptPath,
+			fmt.Sprintf("%d", req.Year),
+			fmt.Sprintf("%d", req.RoundNum),
+			req.SessionType,
+			driverCodesStr,
+			lapsStr,
+		)
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		logger.Info("Running telemetry script",
+			zap.String("script", scriptPath),
+			zap.Int("year", req.Year),
+			zap.Int("round", req.RoundNum),
+			zap.Strings("drivers", req.DriverCodes),
+		)
+
+		if err := cmd.Run(); err != nil {
+			logger.Error("telemetry script failed",
+				zap.String("script", scriptPath),
+				zap.Error(err),
+				zap.String("stderr", stderr.String()),
+			)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to get telemetry data: %s", stderr.String())})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(stdout.Bytes())
+	}
 }

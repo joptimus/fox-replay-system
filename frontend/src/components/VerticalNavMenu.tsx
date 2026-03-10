@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Gauge, BarChart3, Home, Flag, Zap, Trophy } from "lucide-react";
+import { Gauge, BarChart3, Home } from "lucide-react";
 import { useReplayStore } from "../store/replayStore";
 
 export const VerticalNavMenu: React.FC = () => {
@@ -9,97 +9,42 @@ export const VerticalNavMenu: React.FC = () => {
   const session = useReplayStore((state) => state.session);
 
   const navItems = [
-    {
-      icon: Home,
-      label: "Home",
-      path: "/",
-      tooltip: "Home",
-      always: true
-    },
-    {
-      icon: Gauge,
-      label: "Replay",
-      path: "/replay",
-      tooltip: "Race Replay",
-      always: true
-    },
-    {
-      icon: BarChart3,
-      label: "Telemetry",
-      path: "/comparison",
-      tooltip: "Telemetry Analysis",
-      always: true
-    }
+    { icon: Home, path: "/", tooltip: "Home" },
+    { icon: Gauge, path: "/replay", tooltip: "Race Replay" },
+    { icon: BarChart3, path: "/comparison", tooltip: "Telemetry Analysis" },
   ];
 
   const sessionButtons = [
-    {
-      icon: Flag,
-      label: "FP1",
-      sessionType: "FP1",
-      tooltip: "Free Practice 1"
-    },
-    {
-      icon: Flag,
-      label: "FP2",
-      sessionType: "FP2",
-      tooltip: "Free Practice 2"
-    },
-    {
-      icon: Flag,
-      label: "FP3",
-      sessionType: "FP3",
-      tooltip: "Free Practice 3"
-    },
-    {
-      icon: Zap,
-      label: "QUALI",
-      sessionType: "Q",
-      tooltip: "Qualifying"
-    },
-    {
-      icon: Trophy,
-      label: "SPRINT",
-      sessionType: "S",
-      tooltip: "Sprint Race"
-    },
-    {
-      icon: Trophy,
-      label: "RACE",
-      sessionType: "R",
-      tooltip: "Grand Prix"
-    }
+    { label: "FP1", sessionType: "FP1", tooltip: "Free Practice 1" },
+    { label: "FP2", sessionType: "FP2", tooltip: "Free Practice 2" },
+    { label: "FP3", sessionType: "FP3", tooltip: "Free Practice 3" },
+    { label: "QUALI", sessionType: "Q", tooltip: "Qualifying" },
+    { label: "SPRINT", sessionType: "S", tooltip: "Sprint Race" },
+    { label: "RACE", sessionType: "R", tooltip: "Grand Prix" },
   ];
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActivePath = (path: string) => location.pathname === path;
   const currentSessionType = session.metadata?.session_type;
-
-  const getAvailableSessions = (): typeof sessionButtons => {
-    // For now, show all session types that we can load
-    // In a real implementation, this would come from the API
-    return sessionButtons;
-  };
-
-
-  const availableSessions = getAvailableSessions();
 
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
-        padding: '12px',
-        background: 'var(--f1-black)',
-        borderRight: '1px solid var(--f1-border)',
+        gap: '6px',
+        padding: '10px 5px',
+        background: 'var(--bg-panel)',
+        borderRight: '1px solid var(--border-color)',
+        width: '48px',
+        minWidth: '48px',
         height: '100%',
         alignItems: 'center',
-        overflowY: 'auto'
+        overflowY: 'auto',
       }}
     >
       {/* Navigation Items */}
       {navItems.map(({ icon: Icon, path, tooltip }) => {
-        const active = isActive(path);
+        const active = isActivePath(path);
         return (
           <button
             key={path}
@@ -109,60 +54,53 @@ export const VerticalNavMenu: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '48px',
-              height: '48px',
+              width: '38px',
+              height: '38px',
               borderRadius: '8px',
-              border: active ? '2px solid var(--f1-red)' : '1px solid var(--f1-border)',
-              background: active ? 'rgba(225, 6, 0, 0.1)' : 'var(--f1-dark-gray)',
-              color: active ? '#e10600' : '#9ca3af',
+              border: 'none',
+              background: active ? 'rgba(39, 244, 210, 0.08)' : 'transparent',
+              color: active ? 'var(--cyan)' : 'var(--text-faint)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              padding: 0
+              transition: 'all 0.15s',
+              padding: 0,
             }}
             onMouseEnter={(e) => {
-              const el = e.currentTarget;
               if (!active) {
-                el.style.borderColor = '#e10600';
-                el.style.color = '#e10600';
-                el.style.background = 'rgba(225, 6, 0, 0.05)';
+                (e.currentTarget as any).style.color = 'var(--text-dimmed)';
+                (e.currentTarget as any).style.background = 'rgba(255,255,255,0.03)';
               }
             }}
             onMouseLeave={(e) => {
-              const el = e.currentTarget;
               if (!active) {
-                el.style.borderColor = 'var(--f1-border)';
-                el.style.color = '#9ca3af';
-                el.style.background = 'var(--f1-dark-gray)';
+                (e.currentTarget as any).style.color = 'var(--text-faint)';
+                (e.currentTarget as any).style.background = 'transparent';
               }
             }}
           >
-            <Icon size={24} />
+            <Icon size={20} />
           </button>
         );
       })}
 
       {/* Separator */}
-      {availableSessions.length > 0 && (
-        <div
-          style={{
-            width: '30px',
-            height: '1px',
-            background: 'rgba(255, 255, 255, 0.1)',
-            margin: '4px 0'
-          }}
-        />
-      )}
+      <div
+        style={{
+          width: '24px',
+          height: '1px',
+          background: 'var(--border-color)',
+          margin: '8px 0',
+          flexShrink: 0,
+        }}
+      />
 
       {/* Session Type Buttons */}
-      {availableSessions.map(({ label, sessionType, tooltip }) => {
+      {sessionButtons.map(({ label, sessionType, tooltip }) => {
         const isActive = currentSessionType === sessionType;
         return (
           <button
             key={sessionType}
             onClick={() => {
               if (session.metadata?.year && session.metadata?.round) {
-                // Trigger session type change by calling the handler
-                // This will be handled through the parent component
                 window.dispatchEvent(new CustomEvent('sessionTypeChange', {
                   detail: { sessionType, year: session.metadata.year, round: session.metadata.round }
                 }));
@@ -172,38 +110,35 @@ export const VerticalNavMenu: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '48px',
-              height: '40px',
+              width: '38px',
+              height: '32px',
               borderRadius: '6px',
-              border: isActive ? '2px solid var(--f1-red)' : '1px solid var(--f1-border)',
-              background: isActive ? 'rgba(225, 6, 0, 0.1)' : 'var(--f1-dark-gray)',
-              color: isActive ? '#e10600' : '#9ca3af',
-              fontSize: '9px',
-              fontWeight: 900,
+              border: 'none',
+              borderLeft: isActive ? '2px solid var(--accent-red)' : '2px solid transparent',
+              background: isActive ? 'rgba(230, 57, 70, 0.07)' : 'transparent',
+              color: isActive ? 'var(--accent-red)' : 'var(--text-faint)',
+              fontSize: '10px',
+              fontWeight: 400,
               cursor: isActive ? 'default' : 'pointer',
-              fontFamily: 'monospace',
-              letterSpacing: '0.05em',
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.03em',
               padding: 0,
-              transition: 'all 0.2s ease',
-              opacity: session.metadata ? 1 : 0.5,
-              pointerEvents: session.metadata ? 'auto' : 'none'
+              transition: 'all 0.15s',
+              opacity: session.metadata ? 1 : 0.4,
+              pointerEvents: session.metadata ? 'auto' : 'none',
             }}
             title={tooltip}
             disabled={!session.metadata}
             onMouseEnter={(e) => {
-              const el = e.currentTarget;
               if (!isActive && session.metadata) {
-                el.style.borderColor = '#e10600';
-                el.style.color = '#e10600';
-                el.style.background = 'rgba(225, 6, 0, 0.15)';
+                (e.currentTarget as any).style.color = 'var(--accent-red)';
+                (e.currentTarget as any).style.background = 'rgba(230, 57, 70, 0.05)';
               }
             }}
             onMouseLeave={(e) => {
-              const el = e.currentTarget;
               if (!isActive) {
-                el.style.borderColor = 'var(--f1-border)';
-                el.style.color = '#9ca3af';
-                el.style.background = 'var(--f1-dark-gray)';
+                (e.currentTarget as any).style.color = 'var(--text-faint)';
+                (e.currentTarget as any).style.background = 'transparent';
               }
             }}
           >

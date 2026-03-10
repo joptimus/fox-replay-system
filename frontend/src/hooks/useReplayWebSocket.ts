@@ -1,6 +1,6 @@
 /**
  * WebSocket hook for real-time frame streaming
- * Handles msgpack deserialization and state updates
+ * Handles msgpack deserialization, state updates, and reconnection
  */
 
 import { useEffect, useRef, useCallback, useState } from "react";
@@ -14,9 +14,15 @@ interface WebSocketMessage {
   frame?: number;
 }
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY = 1000;
+
 export const useReplayWebSocket = (sessionId: string | null) => {
   const wsRef = useRef<WebSocket | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   const setCurrentFrame = useReplayStore((state) => state.setCurrentFrame);
   const setLoadingProgress = useReplayStore((state) => state.setLoadingProgress);
@@ -26,6 +32,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   const playback = useReplayStore((state) => state.playback);
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
   const sendCommandRef = useRef<(message: WebSocketMessage) => void>();
+  const initialFrameReceivedRef = useRef(false);
 
   // Create sendCommand function (store in ref to avoid dependency issues)
   const sendCommand = useCallback((message: WebSocketMessage) => {
@@ -57,117 +64,139 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       return;
     }
 
-    console.log("[WS Client] Initiating connection for session:", sessionId);
-    const protocol =
-      window.location.protocol === "https:" ? "wss:" : "ws:";
-    // In development, connect directly to backend WebSocket
-    // In production, would use /ws proxy path
-    const wsUrl = `${protocol}//localhost:8000/ws/replay/${sessionId}`;
+    const connect = () => {
+      console.log("[WS Client] Initiating connection for session:", sessionId);
+      const protocol =
+        window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = import.meta.env.VITE_WS_HOST || window.location.host;
+      const wsUrl = `${protocol}//${host}/ws/replay/${sessionId}`;
 
-    wsRef.current = new WebSocket(wsUrl);
+      wsRef.current = new WebSocket(wsUrl);
 
-    wsRef.current.onopen = () => {
-      console.log("[WS Client] Connection opened, requesting initial frame");
-      setIsConnected(true);
-      // Request initial frame when connection opens
-      if (sendCommandRef.current) {
-        sendCommandRef.current({ action: "seek", frame: 0 });
-      }
-    };
+      wsRef.current.onopen = () => {
+        console.log("[WS Client] Connection opened, requesting initial frame");
+        setIsConnected(true);
+        reconnectAttemptRef.current = 0;
+        // Request initial frame when connection opens
+        if (sendCommandRef.current) {
+          sendCommandRef.current({ action: "seek", frame: 0 });
+        }
+      };
 
-    wsRef.current.onmessage = async (event) => {
-      try {
-        // Handle JSON control messages (loading_progress, loading_complete, loading_error, frame data)
-        if (typeof event.data === 'string') {
-          const message = JSON.parse(event.data);
+      wsRef.current.onmessage = async (event) => {
+        try {
+          // Handle JSON control messages
+          if (typeof event.data === 'string') {
+            const message = JSON.parse(event.data);
 
-          // ===== LOADING PHASE MESSAGES =====
-          if (message.type === 'loading_progress') {
-            console.log("[WS Client] Loading progress:", message.progress + "%");
-            setLoadingProgress(message.progress || 0);
-            return;
-          }
-
-          if (message.type === 'generation_progress') {
-            console.log("[WS Client] Telemetry generation:", message.message);
-            const progress =
-              typeof message.progress === "number" ? message.progress : undefined;
-            const clamped = Math.min(progress ?? 10, 99);
-            setLoadingProgress(clamped);
-            return;
-          }
-
-          if (message.type === 'loading_complete') {
-            console.log("[WS Client] Loading complete");
-            setLoadingProgress(100);
-            setLoadingComplete(true);
-            setLoadingError(null);
-
-            // Update session metadata if provided
-            if (message.metadata && sessionId) {
-              setSession(sessionId, message.metadata);
-              // Also set total frames for playback UI
-              if (message.frames) {
-                useReplayStore.getState().setTotalFrames(message.frames);
-              }
+            if (message.type === 'loading_progress') {
+              console.log("[WS Client] Loading progress:", message.progress + "%");
+              setLoadingProgress(message.progress || 0);
+              return;
             }
+
+            if (message.type === 'generation_progress') {
+              console.log("[WS Client] Telemetry generation:", message.message);
+              const progress =
+                typeof message.progress === "number" ? message.progress : undefined;
+              const clamped = Math.min(progress ?? 10, 99);
+              setLoadingProgress(clamped);
+              return;
+            }
+
+            if (message.type === 'loading_complete') {
+              console.log("[WS Client] Loading complete");
+              setLoadingProgress(100);
+              setLoadingComplete(true);
+              setLoadingError(null);
+
+              if (message.metadata && sessionId) {
+                setSession(sessionId, message.metadata);
+                if (message.frames) {
+                  useReplayStore.getState().setTotalFrames(message.frames);
+                }
+              }
+              return;
+            }
+
+            if (message.type === 'loading_error') {
+              console.error("[WS Client] Loading error:", message.message);
+              setLoadingError(message.message || "Unknown error");
+              return;
+            }
+
+            if (message.type === 'error') {
+              console.error("[WS Client] Session/WebSocket error:", message.message);
+              setLoadingError(message.message || "Session error");
+              return;
+            }
+
+            console.warn("[WS Client] Unknown control message:", message);
             return;
           }
 
-          if (message.type === 'loading_error') {
-            console.error("[WS Client] Loading error:", message.message);
-            setLoadingError(message.message || "Unknown error");
-            return;
+          // Handle binary msgpack frame data
+          let data: Uint8Array;
+          if (event.data instanceof Blob) {
+            const arrayBuffer = await event.data.arrayBuffer();
+            data = new Uint8Array(arrayBuffer);
+          } else if (event.data instanceof ArrayBuffer) {
+            data = new Uint8Array(event.data);
+          } else {
+            data = event.data;
           }
 
-          if (message.type === 'error') {
-            console.error("[WS Client] Session/WebSocket error:", message.message);
-            setLoadingError(message.message || "Session error");
-            return;
+          const decoder = new Unpackr({
+            mapsAsObjects: true,
+          });
+          const decoded = decoder.unpack(data) as FrameData;
+
+          if (!decoded.error) {
+            // Only process frames if: (a) it's the initial seek response, or (b) playback is active
+            if (!initialFrameReceivedRef.current) {
+              initialFrameReceivedRef.current = true;
+              setCurrentFrame(decoded);
+            } else if (useReplayStore.getState().playback.isPlaying) {
+              setCurrentFrame(decoded);
+            }
+          } else {
+            console.error("[WS Client] Frame has error property:", decoded.error);
           }
-
-          console.warn("[WS Client] Unknown control message:", message);
-          return;
+        } catch (error) {
+          console.error("[WS Client] Failed to decode message:", error);
         }
+      };
 
-        // Handle binary msgpack frame data
-        let data: Uint8Array;
-        if (event.data instanceof Blob) {
-          const arrayBuffer = await event.data.arrayBuffer();
-          data = new Uint8Array(arrayBuffer);
-        } else if (event.data instanceof ArrayBuffer) {
-          data = new Uint8Array(event.data);
-        } else {
-          data = event.data;
+      wsRef.current.onerror = (error) => {
+        console.error("[WS Client] WebSocket error:", error);
+        setIsConnected(false);
+      };
+
+      wsRef.current.onclose = () => {
+        console.log("[WS Client] WebSocket closed");
+        setIsConnected(false);
+
+        // Reconnect with exponential backoff if not intentionally closed
+        if (!intentionalCloseRef.current && reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
+          const delay = BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current);
+          console.log(`[WS Client] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+          reconnectAttemptRef.current++;
+          reconnectTimerRef.current = setTimeout(connect, delay);
+        } else if (reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          setLoadingError("Connection lost. Please reload to reconnect.");
         }
-
-        const decoder = new Unpackr({
-          mapsAsObjects: true, // Convert Maps to plain objects
-        });
-        const decoded = decoder.unpack(data) as FrameData;
-
-        if (!decoded.error) {
-          setCurrentFrame(decoded);
-        } else {
-          console.error("[WS Client] Frame has error property:", decoded.error);
-        }
-      } catch (error) {
-        console.error("[WS Client] Failed to decode message:", error);
-      }
+      };
     };
 
-    wsRef.current.onerror = (error) => {
-      console.error("[WS Client] WebSocket error:", error);
-      setIsConnected(false);
-    };
-
-    wsRef.current.onclose = () => {
-      console.log("[WS Client] WebSocket closed");
-      setIsConnected(false);
-    };
+    intentionalCloseRef.current = false;
+    reconnectAttemptRef.current = 0;
+    initialFrameReceivedRef.current = false;
+    connect();
 
     return () => {
       console.log("[WS Client] Cleanup: closing connection for session:", sessionId);
+      intentionalCloseRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -186,7 +215,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       }
     }, 10000);
 
-    // CRITICAL: Subscribe to ANY loading state change and clear timeout on first message
+    // Subscribe to ANY loading state change and clear timeout on first message
     const unsubscribe = useReplayStore.subscribe(
       (state) => ({
         progress: state.loadingProgress,
@@ -207,7 +236,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
   // Sync playback state to WebSocket
   useEffect(() => {
-    // Only send playback commands if WebSocket is connected
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -224,7 +252,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
   // Sync frame index (seeking) to WebSocket
   useEffect(() => {
-    // Only send seek commands if WebSocket is connected
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       return;
     }

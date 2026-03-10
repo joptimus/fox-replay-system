@@ -34,7 +34,6 @@ export const TelemetryChart: React.FC = () => {
 
   // All hooks must be called unconditionally
   useEffect(() => {
-    // Reset history when driver changes
     telemetryHistoryRef.current = [];
     lastFrameTimeRef.current = -1;
   }, [selectedDriver?.code]);
@@ -46,13 +45,10 @@ export const TelemetryChart: React.FC = () => {
     const currentDriverData = currentFrame.drivers[driverCodeInFrame];
     if (!currentDriverData) return;
 
-    // Detect any significant time jump (backward or forward): clear history to prevent rubber banding
-    // This handles both seeking backward and seeking forward past the current playback
     if (lastFrameTimeRef.current >= 0 && Math.abs(currentFrame.t - lastFrameTimeRef.current) > 1) {
       telemetryHistoryRef.current = [];
     }
 
-    // Only add new data point if frame time has changed
     if (currentFrame.t !== lastFrameTimeRef.current) {
       const kmhSpeed = currentDriverData.speed;
 
@@ -65,7 +61,6 @@ export const TelemetryChart: React.FC = () => {
         drs: currentDriverData.drs,
       };
 
-      // Only add if this is not going backward in time (prevents out-of-order frame buffering)
       const lastHistoryTime = telemetryHistoryRef.current.length > 0
         ? telemetryHistoryRef.current[telemetryHistoryRef.current.length - 1].time
         : -Infinity;
@@ -102,15 +97,12 @@ export const TelemetryChart: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'transparent',
-        border: 'none',
-        color: '#6b7280',
       }}>
-        <p className="f1-monospace" style={{
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-          margin: 0,
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          color: 'var(--text-faint)',
+          letterSpacing: '0.08em',
         }}>NO DRIVER SELECTED</p>
       </div>
     );
@@ -127,33 +119,24 @@ export const TelemetryChart: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'transparent',
-        border: 'none',
-        color: '#6b7280',
       }}>
-        <p className="f1-monospace" style={{
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-          margin: 0,
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          color: 'var(--text-faint)',
+          letterSpacing: '0.08em',
         }}>LOADING DATA...</p>
       </div>
     );
-  }
-
-  if (!currentDriverData) {
-    return <div className="text-white">Loading driver data...</div>;
   }
 
   const hexColor = `rgb(${selectedDriver.color[0]}, ${selectedDriver.color[1]}, ${selectedDriver.color[2]})`;
   const kmhSpeed = currentDriverData.speed || 0;
   const displaySpeed = speedUnit === "kmh" ? kmhSpeed : kmhSpeed * 0.621371;
 
-  // Handle brake/throttle that might be 0-1 or 0-100
   const throttlePercent = (currentDriverData.throttle || 0) > 1 ? (currentDriverData.throttle || 0) : (currentDriverData.throttle || 0) * 100;
   const brakePercent = (currentDriverData.brake || 0) > 1 ? (currentDriverData.brake || 0) : (currentDriverData.brake || 0) * 100;
 
-  // Format time helper (mm:ss.sss format) - used for lap times when data available
   const formatTime = (seconds: number | null | undefined): string => {
     if (seconds === null || seconds === undefined || isNaN(seconds) || seconds <= 0) return "N/A";
     const mins = Math.floor(seconds / 60);
@@ -161,7 +144,13 @@ export const TelemetryChart: React.FC = () => {
     return `${mins}:${secs.toFixed(3).padStart(7, '0')}`;
   };
 
-  // Format delta (for sector deltas and live delta) - used when data available
+  const formatSectorTime = (seconds: number | null | undefined): string => {
+    if (seconds === null || seconds === undefined || isNaN(seconds) || seconds <= 0) return "N/A";
+    const secs = Math.floor(seconds);
+    const ms = Math.round((seconds - secs) * 1000);
+    return `${secs}:${ms.toString().padStart(3, '0')}`;
+  };
+
   const formatDelta = (delta: number | null): string => {
     if (delta === null || isNaN(delta)) return "N/A";
     const sign = delta > 0 ? "+" : "";
@@ -170,291 +159,342 @@ export const TelemetryChart: React.FC = () => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full"
-      style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+      style={{ display: 'flex', flexDirection: 'column', width: '100%' }}
     >
-      {/* Driver Info Header */}
-      <div className="flex items-center justify-between gap-2 pb-3 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-3 h-3 rounded"
-            style={{ backgroundColor: hexColor }}
-          />
-          <div>
-            <div className="font-bold text-white f1-monospace" style={{ fontSize: '0.85rem' }}>
-              {selectedDriver.code}
-            </div>
-            <div className="text-xs text-gray-400 f1-monospace flex items-center gap-2">
-              <span>LAP {currentDriverData.lap}</span>
-              {(() => {
-                let bgColor = '#374151';
-                let label = 'DRS OFF';
-                if ([10, 12, 14].includes(currentDriverData.drs)) {
-                  bgColor = '#10b981';
-                  label = 'DRS ACTIVE';
-                } else if (currentDriverData.drs === 8) {
-                  bgColor = '#eab308';
-                  label = 'DRS AVAILABLE';
-                }
-                return (
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '2px 6px',
-                    backgroundColor: bgColor,
-                    color: '#fff',
-                    borderRadius: '3px',
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    marginLeft: '14px',
-                  }}>
-                    {label}
-                  </span>
-                );
-              })()}
-            </div>
-          </div>
+      {/* Meta bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 18px',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: hexColor,
+          }} />
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}>{selectedDriver.code}</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--text-dimmed)',
+          }}>LAP {currentDriverData.lap}</span>
+          {(() => {
+            let bgColor = 'var(--text-faint)';
+            let label = 'DRS OFF';
+            if ([10, 12, 14].includes(currentDriverData.drs)) {
+              bgColor = 'var(--green)';
+              label = 'DRS ACTIVE';
+            } else if (currentDriverData.drs === 8) {
+              bgColor = 'var(--yellow)';
+              label = 'DRS AVAILABLE';
+            }
+            return (
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                display: 'inline-block',
+                padding: '2px 6px',
+                background: `${bgColor}18`,
+                color: bgColor,
+                borderRadius: '3px',
+                fontSize: '9px',
+                border: `1px solid ${bgColor}30`,
+                marginLeft: '6px',
+              }}>{label}</span>
+            );
+          })()}
         </div>
-        <div style={{ display: 'flex', gap: '3px' }}>
-          <button
-            onClick={() => setSpeedUnit("kmh")}
-            style={{
-              padding: "2px 6px",
-              backgroundColor: speedUnit === "kmh" ? hexColor : "transparent",
-              color: "white",
-              border: `1px solid ${hexColor}`,
-              borderRadius: "3px",
-              cursor: "pointer",
-              fontSize: "0.65rem",
-              fontWeight: 700,
-              transition: "background-color 0.2s",
-            }}
-          >
-            KM/H
-          </button>
-          <button
-            onClick={() => setSpeedUnit("mph")}
-            style={{
-              padding: "2px 6px",
-              backgroundColor: speedUnit === "mph" ? hexColor : "transparent",
-              color: "white",
-              border: `1px solid ${hexColor}`,
-              borderRadius: "3px",
-              cursor: "pointer",
-              fontSize: "0.65rem",
-              fontWeight: 700,
-              transition: "background-color 0.2s",
-            }}
-          >
-            MPH
-          </button>
+        <div style={{ display: 'flex', gap: '2px' }}>
+          {(['kmh', 'mph'] as const).map(unit => (
+            <button
+              key={unit}
+              onClick={() => setSpeedUnit(unit)}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                padding: '2px 6px',
+                background: speedUnit === unit ? hexColor : 'transparent',
+                color: speedUnit === unit ? 'white' : 'var(--text-faint)',
+                border: `1px solid ${speedUnit === unit ? hexColor : 'var(--border-color)'}`,
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '9px',
+                transition: 'all 0.15s',
+              }}
+            >{unit.toUpperCase()}</button>
+          ))}
         </div>
       </div>
 
       {/* Gear Display */}
       <div style={{
-        backgroundColor: '#111827',
-        border: '1px solid #374151',
-        borderRadius: '6px',
-        padding: '12px',
+        padding: '20px 18px 16px',
         textAlign: 'center',
+        borderBottom: '1px solid var(--border-color)',
       }}>
         <div style={{
-          fontSize: '2rem',
-          fontWeight: 900,
-          color: hexColor,
+          fontFamily: 'var(--font-mono)',
+          fontSize: '72px',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
           lineHeight: 1,
           marginBottom: '4px',
         }}>
           {currentDriverData.gear === 0 ? 'N' : currentDriverData.gear}
         </div>
         <div style={{
-          fontSize: '0.65rem',
-          color: '#9CA3AF',
-          fontWeight: 700,
-          letterSpacing: '0.05em',
-        }}>
-          GEAR
-        </div>
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          color: 'var(--text-faint)',
+          letterSpacing: '0.15em',
+        }}>GEAR</div>
       </div>
 
-      {/* Compact Stats Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-gray-900 rounded p-2 border border-gray-700" style={{ textAlign: 'center' }}>
-          <div className="text-xs text-gray-400 f1-monospace">SPEED</div>
-          <div className="text-sm font-bold text-white f1-monospace">
-            {displaySpeed.toFixed(0)} {speedUnit === "kmh" ? "km/h" : "mph"}
-          </div>
-        </div>
-        <div className="bg-gray-900 rounded p-2 border border-gray-700" style={{ textAlign: 'center' }}>
-          <div className="text-xs text-gray-400 f1-monospace">RPM</div>
-          <div className="text-sm font-bold text-white f1-monospace">
-            {currentDriverData.speed > 0 ? Math.round(currentDriverData.speed * 100) : 0}
-          </div>
-        </div>
-      </div>
-
-      {/* Compact Throttle/Brake Bars */}
-      <div className="space-y-2">
-        <div>
-          <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>THROTTLE</div>
-          <div style={{
-            width: '100%',
-            height: '20px',
-            backgroundColor: '#1F2937',
-            borderRadius: '3px',
-            overflow: 'hidden',
-            border: '1px solid #374151',
-            position: 'relative'
-          }}>
-            <div style={{
-              width: `${Math.min(Math.max(throttlePercent, 0), 100)}%`,
-              height: '100%',
-              backgroundColor: '#10B981',
-              transition: 'width 0.1s ease'
-            }} />
-            <div style={{
-              position: 'absolute',
-              right: '3px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#FFF',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              fontFamily: 'monospace'
-            }}>
-              {Math.min(Math.max(throttlePercent, 0), 100).toFixed(0)}%
-            </div>
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>BRAKE</div>
-          <div style={{
-            width: '100%',
-            height: '20px',
-            backgroundColor: '#1F2937',
-            borderRadius: '3px',
-            overflow: 'hidden',
-            border: '1px solid #374151',
-            position: 'relative'
-          }}>
-            <div style={{
-              width: `${Math.min(Math.max(brakePercent, 0), 100)}%`,
-              height: '100%',
-              backgroundColor: '#EF4444',
-              transition: 'width 0.1s ease'
-            }} />
-            <div style={{
-              position: 'absolute',
-              right: '3px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#FFF',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              fontFamily: 'monospace'
-            }}>
-              {Math.min(Math.max(brakePercent, 0), 100).toFixed(0)}%
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Lap Time & Deltas */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {/* Lap Time Row */}
+      {/* Speed / RPM - 2 column */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '8px',
-          padding: '8px',
-          backgroundColor: '#111827',
-          border: '1px solid #374151',
-          borderRadius: '6px'
+          padding: '14px 18px',
+          borderRight: '1px solid var(--border-color)',
         }}>
-          <div>
-            <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace', fontWeight: 700 }}>LAP TIME</div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#9CA3AF', fontFamily: 'monospace' }}>
-              {formatTime(currentDriverData.lap_time ?? null)}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace', fontWeight: 700 }}>GAP TO LEADER</div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? '#ef4444' : '#22c55e', fontFamily: 'monospace' }}>
-              {currentDriverData.position === 1 ? 'LEADER' : formatDelta(currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? currentDriverData.gap_to_leader : null)}
-            </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+            marginBottom: '4px',
+          }}>SPEED</div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '20px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}>{displaySpeed.toFixed(0)}</div>
+        </div>
+        <div style={{ padding: '14px 18px' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+            marginBottom: '4px',
+          }}>RPM</div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '20px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}>{currentDriverData.speed > 0 ? Math.round(currentDriverData.speed * 100) : 0}</div>
+        </div>
+      </div>
+
+      {/* Throttle Bar */}
+      <div style={{
+        padding: '14px 18px 10px',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '6px',
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+          }}>THROTTLE</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--green)',
+          }}>{Math.min(Math.max(throttlePercent, 0), 100).toFixed(0)}%</span>
+        </div>
+        <div style={{
+          width: '100%',
+          height: '6px',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: '3px',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${Math.min(Math.max(throttlePercent, 0), 100)}%`,
+            height: '100%',
+            background: 'linear-gradient(to right, #00c853, var(--green))',
+            borderRadius: '3px',
+            transition: 'width 0.1s ease',
+            boxShadow: throttlePercent > 20 ? '0 0 8px rgba(0, 230, 118, 0.3)' : 'none',
+          }} />
+        </div>
+      </div>
+
+      {/* Brake Bar */}
+      <div style={{
+        padding: '14px 18px 10px',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '6px',
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+          }}>BRAKE</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--accent-red)',
+          }}>{Math.min(Math.max(brakePercent, 0), 100).toFixed(0)}%</span>
+        </div>
+        <div style={{
+          width: '100%',
+          height: '6px',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: '3px',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${Math.min(Math.max(brakePercent, 0), 100)}%`,
+            height: '100%',
+            background: 'linear-gradient(to right, #c7303c, var(--accent-red))',
+            borderRadius: '3px',
+            transition: 'width 0.1s ease',
+            boxShadow: brakePercent > 20 ? '0 0 8px rgba(230, 57, 70, 0.3)' : 'none',
+          }} />
+        </div>
+      </div>
+
+      {/* Lap Time / Gap to Leader - 2 column */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
+        <div style={{
+          padding: '14px 18px',
+          borderRight: '1px solid var(--border-color)',
+        }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+            marginBottom: '4px',
+          }}>LAP TIME</div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '16px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}>{formatTime(currentDriverData.lap_time ?? null)}</div>
+        </div>
+        <div style={{ padding: '14px 18px' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.06em',
+            marginBottom: '4px',
+          }}>GAP TO LEADER</div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '16px',
+            fontWeight: 700,
+            color: currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? 'var(--accent-red)' : 'var(--green)',
+          }}>
+            {currentDriverData.position === 1 ? 'LEADER' : formatDelta(currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? currentDriverData.gap_to_leader : null)}
           </div>
         </div>
+      </div>
 
-        {/* Sector Deltas Row */}
+      {/* Sector Times */}
+      <div style={{
+        padding: '14px 18px',
+        borderBottom: '1px solid var(--border-color)',
+      }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr',
-          gap: '4px',
-          padding: '8px',
-          backgroundColor: '#111827',
-          border: '1px solid #374151',
-          borderRadius: '6px'
-        }}>
-          <div style={{ fontSize: '0.65rem', color: '#9CA3AF', fontFamily: 'monospace', fontWeight: 700 }}>SECTOR Δ</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace' }}>S1</div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#d1d5db', fontFamily: 'monospace' }}>
-                {formatTime(currentDriverData.sector1 ?? null)}
-              </div>
+          fontFamily: 'var(--font-mono)',
+          fontSize: '9px',
+          color: 'var(--text-faint)',
+          letterSpacing: '0.06em',
+          marginBottom: '8px',
+        }}>SECTORS</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+          {(['sector1', 'sector2', 'sector3'] as const).map((key, i) => (
+            <div key={key} style={{ textAlign: 'center' }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '9px',
+                color: 'var(--text-faint)',
+                marginBottom: '2px',
+              }}>S{i + 1}</div>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--text-dimmed)',
+              }}>{formatSectorTime(currentDriverData[key] ?? null)}</div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace' }}>S2</div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#d1d5db', fontFamily: 'monospace' }}>
-                {formatTime(currentDriverData.sector2 ?? null)}
-              </div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace' }}>S3</div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#d1d5db', fontFamily: 'monospace' }}>
-                {formatTime(currentDriverData.sector3 ?? null)}
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Mini Speed Chart */}
-      <div>
-        <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '3px', fontFamily: 'monospace', fontWeight: 700 }}>SPEED HISTORY</div>
+      <div style={{ padding: '14px 18px' }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '9px',
+          color: 'var(--text-faint)',
+          letterSpacing: '0.06em',
+          marginBottom: '6px',
+        }}>SPEED HISTORY</div>
         <ResponsiveContainer width="100%" height={100}>
           <AreaChart data={telemetryData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient
-                id="colorSpeed"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor={hexColor} stopOpacity={0.5} />
-                <stop offset="95%" stopColor={hexColor} stopOpacity={0.05} />
+              <linearGradient id="colorSpeed" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={hexColor} stopOpacity={0.4} />
+                <stop offset="95%" stopColor={hexColor} stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" width={0.5} vertical={false} />
-            <XAxis dataKey="time" stroke="#9CA3AF" hide={true} />
-            <YAxis stroke="#9CA3AF" width={30} style={{ fontSize: '0.65rem' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+            <XAxis dataKey="time" stroke="transparent" hide={true} />
+            <YAxis stroke="transparent" width={30} tick={{ fill: 'var(--text-faint)', fontSize: 9, fontFamily: 'var(--font-mono)' }} />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1F2937",
-                border: "1px solid #374151",
-                fontSize: '0.75rem',
+                backgroundColor: 'var(--bg-panel)',
+                border: '1px solid var(--border-color)',
+                fontSize: '11px',
+                fontFamily: 'var(--font-mono)',
+                borderRadius: '4px',
               }}
-              labelStyle={{ color: "#FFF" }}
+              labelStyle={{ color: 'var(--text-primary)' }}
               animationDuration={0}
             />
             <Area
               type="natural"
               dataKey="speed"
               stroke={hexColor}
-              strokeWidth={2}
+              strokeWidth={1.5}
               fillOpacity={1}
               fill="url(#colorSpeed)"
               animationDuration={500}

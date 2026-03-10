@@ -13,7 +13,7 @@ export const DriverSelector: React.FC = () => {
 
   if (!metadata) return <div>No session loaded</div>;
 
-  const availableDrivers = Object.entries(metadata.driver_colors).map(([code, color]) => ({
+  const availableDrivers = Object.entries(metadata.driver_colors || {}).map(([code, color]) => ({
     code,
     color: color as [number, number, number],
   }));
