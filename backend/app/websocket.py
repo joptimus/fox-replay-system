@@ -94,7 +94,7 @@ async def handle_replay_websocket(websocket: WebSocket, session_id: str, active_
                 "frames": len(session.frames),
                 "load_time_seconds": 0,
                 "elapsed_seconds": int(time.time() - connection_start),
-                "metadata": session.get_metadata()
+                "metadata": metadata
             })
         else:
             # Wait for session to load

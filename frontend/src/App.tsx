@@ -1,7 +1,7 @@
 /**
  * Main App component for FOX Replay System
  */
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useReplayStore, useSelectedDriver, useSectorColors } from "./store/replayStore";
 import { useReplayWebSocket } from "./hooks/useReplayWebSocket";
@@ -161,7 +161,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   // Animate playback - advances frameIndex during playback
   usePlaybackAnimation();
 
-  const handlePlayWithLights = () => {
+  const handlePlayWithLights = useCallback(() => {
     console.log('handlePlayWithLights called, hasPlayedLights:', hasPlayedLights, 'ref:', lightsBoardRef.current);
     // Only show lights board if this is the first play (not a resume)
     if (!hasPlayedLights) {
@@ -174,12 +174,12 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
       // Just resume playback without lights
       play();
     }
-  };
+  }, [hasPlayedLights, play]);
 
-  const handleLightsSequenceComplete = () => {
+  const handleLightsSequenceComplete = useCallback(() => {
     // Now start playback after lights complete
     play();
-  };
+  }, [play]);
 
   // Update total frames when session metadata changes and reset lights flag on new session
   useEffect(() => {

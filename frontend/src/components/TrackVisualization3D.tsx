@@ -356,7 +356,11 @@ try {
   // Build track geometry when metadata is available
   useEffect(() => {
     if (!sceneRef.current || !sessionMetadata?.track_geometry) {
-      console.log("Track geometry not ready:", { hasScene: !!sceneRef.current, hasGeometry: !!sessionMetadata?.track_geometry });
+      console.log("Track geometry not ready:", {
+        hasScene: !!sceneRef.current,
+        hasGeometry: !!sessionMetadata?.track_geometry,
+        metadataKeys: sessionMetadata ? Object.keys(sessionMetadata) : "no metadata"
+      });
       return;
     }
 

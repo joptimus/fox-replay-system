@@ -267,6 +267,32 @@ def extract_raw_telemetry(session, session_type: str):
     except Exception:
         track_statuses = [{"status": "1", "start_time": 0, "end_time": 999999}]
 
+    # Build track geometry from fastest lap
+    track_geometry = None
+    try:
+        from shared.utils.track_geometry import build_track_from_example_lap
+        fastest_lap = session.laps.pick_fastest()
+        fastest_telem = fastest_lap.get_telemetry()
+        track_data = build_track_from_example_lap(fastest_telem, lap_obj=fastest_lap)
+        if track_data:
+            track_geometry = {
+                "centerline_x": [float(x) for x in track_data[0]],
+                "centerline_y": [float(y) for y in track_data[1]],
+                "inner_x": [float(x) for x in track_data[2]],
+                "inner_y": [float(y) for y in track_data[3]],
+                "outer_x": [float(x) for x in track_data[4]],
+                "outer_y": [float(y) for y in track_data[5]],
+                "x_min": float(track_data[6]),
+                "x_max": float(track_data[7]),
+                "y_min": float(track_data[8]),
+                "y_max": float(track_data[9]),
+            }
+            if track_data[10] is not None:
+                track_geometry["sector"] = [int(s) for s in track_data[10]]
+    except Exception as e:
+        print(f"Warning: Could not build track geometry: {e}", file=sys.stderr)
+        track_geometry = None
+
     # Build payload
     payload = {
         "global_t_min": min([min(drivers_raw[code]["t"]) for code in drivers_raw.keys()] + [0]),
@@ -289,7 +315,7 @@ def extract_raw_telemetry(session, session_type: str):
         },
         "race_start_time_absolute": 0.0,
         "total_laps": max([max(drivers_raw[code]["lap"]) for code in drivers_raw.keys()] + [1]),
-        "track_geometry_telemetry": {"x": [], "y": []}
+        "track_geometry": track_geometry if track_geometry else {}
     }
 
     validate_driver_arrays(drivers_raw)
