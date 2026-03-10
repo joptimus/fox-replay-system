@@ -137,9 +137,12 @@ func (fg *FrameGenerator) Generate(
 			frame.Drivers[code] = driverData
 		}
 
-		// Calculate position and gaps (Phase 2.4 will expand this)
-		// For now, assign positions based on distance
+		// Calculate position and gaps
+		// First assign positions based on distance
 		assignPositions(&frame)
+
+		// Then compute gap_to_leader and gap_to_previous
+		computeGaps(&frame)
 
 		frames[i] = frame
 	}
@@ -242,6 +245,72 @@ func assignPositions(frame *models.Frame) {
 	for pos, entry := range drivers {
 		if data, ok := frame.Drivers[entry.code]; ok {
 			data.Position = pos + 1
+			frame.Drivers[entry.code] = data
+		}
+	}
+}
+
+// computeGaps calculates gap_to_leader and gap_to_previous for all drivers in a frame
+func computeGaps(frame *models.Frame) {
+	if len(frame.Drivers) == 0 {
+		return
+	}
+
+	// Find leader (position 1) distance
+	var leaderDist float64
+	var prevDist float64
+
+	// Build sorted list by position
+	type posEntry struct {
+		code string
+		pos  int
+		dist float64
+	}
+	var sorted []posEntry
+	for code, data := range frame.Drivers {
+		sorted = append(sorted, posEntry{code: code, pos: data.Position, dist: data.Dist})
+	}
+
+	// Sort by position
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].pos < sorted[i].pos {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+
+	// Calculate gaps
+	for i, entry := range sorted {
+		if data, ok := frame.Drivers[entry.code]; ok {
+			// Gap to leader
+			if i == 0 {
+				// Leader has 0 gap
+				leaderDist = entry.dist
+				data.GapToLeader = 0.0
+			} else {
+				// Gap = leader distance - this driver distance
+				gap := leaderDist - entry.dist
+				if gap < 0 {
+					gap = 0 // Shouldn't happen but protect against it
+				}
+				data.GapToLeader = gap
+			}
+
+			// Gap to previous
+			if i == 0 {
+				// Leader has no previous
+				data.GapToPrevious = 0.0
+			} else {
+				// Gap = previous driver distance - this driver distance
+				gap := prevDist - entry.dist
+				if gap < 0 {
+					gap = 0
+				}
+				data.GapToPrevious = gap
+			}
+
+			prevDist = entry.dist
 			frame.Drivers[entry.code] = data
 		}
 	}
