@@ -59,8 +59,8 @@ type DriverData struct {
 	PosRaw         *int     `json:"pos_raw,omitempty" msgpack:"pr,omitempty"`
 	Gap            *float64 `json:"gap,omitempty" msgpack:"gap,omitempty"`
 	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"is,omitempty"`
-	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gtl"`
-	GapToPrevious  float64  `json:"gap_to_previous" msgpack:"gtp"`
+	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gap_to_leader"`
+	GapToPrevious  float64  `json:"gap_to_previous" msgpack:"gap_to_previous"`
 	Status         string   `json:"status" msgpack:"st"`
 }
 
