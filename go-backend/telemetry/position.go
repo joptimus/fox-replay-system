@@ -56,6 +56,7 @@ func NewPositionSmoothing() *PositionSmoothing {
 
 // ApplyHysteresis applies position smoothing to prevent flickering
 // threshold: seconds before allowing position change (1.0s default, 0.3s under SC/VSC)
+// All drivers are always included in the result — suppressed drivers keep their last position.
 func (ps *PositionSmoothing) ApplyHysteresis(
 	sortedCodes []string,
 	drivers map[string]models.DriverData,
@@ -71,37 +72,101 @@ func (ps *PositionSmoothing) ApplyHysteresis(
 		threshold = 0.3 // Under SC/VSC: 0.3 seconds
 	}
 
-	result := make([]string, 0, len(sortedCodes))
+	n := len(sortedCodes)
 
-	for _, code := range sortedCodes {
-		position := len(result) + 1 // Current position in smoothed order
+	// Phase 1: Determine the target position for each driver.
+	// Drivers whose position change is within the hysteresis window keep their last position.
+	type entry struct {
+		code string
+		pos  int // 1-indexed target position
+	}
+	// Track which positions in the new sorted order are "accepted" (not suppressed)
+	accepted := make([]string, 0, n)   // drivers that accept new position
+	suppressed := make([]entry, 0)     // drivers that keep old position
 
-		// Check if this is a known driver with a previous position
+	for i, code := range sortedCodes {
+		newPos := i + 1 // position in the new sorted order
+
 		if lastPos, ok := ps.lastPositions[code]; ok {
 			lastChange := ps.lastChangeTimes[code]
 
-			// If position hasn't changed, keep it
-			if position == lastPos {
-				result = append(result, code)
+			// If position hasn't changed, accept
+			if newPos == lastPos {
+				accepted = append(accepted, code)
 				continue
 			}
 
 			// If position changed but not enough time has passed, keep old position
 			if currentTime-lastChange < threshold {
-				// Don't include in smoothed order yet
+				suppressed = append(suppressed, entry{code: code, pos: lastPos})
 				continue
 			}
 
 			// Enough time has passed, allow position change
-			ps.lastPositions[code] = position
 			ps.lastChangeTimes[code] = currentTime
-			result = append(result, code)
+			accepted = append(accepted, code)
 		} else {
-			// New driver, add immediately
-			ps.lastPositions[code] = position
+			// New driver, accept immediately
 			ps.lastChangeTimes[code] = currentTime
-			result = append(result, code)
+			accepted = append(accepted, code)
 		}
+	}
+
+	// Phase 2: Build final result with all drivers.
+	// Place suppressed drivers at their last known position, then fill remaining slots
+	// with accepted drivers in their sorted order.
+	result := make([]string, n)
+	occupied := make([]bool, n)
+
+	// First, place suppressed drivers at their last positions (clamped to valid range)
+	for _, s := range suppressed {
+		pos := s.pos - 1 // 0-indexed
+		if pos < 0 {
+			pos = 0
+		}
+		if pos >= n {
+			pos = n - 1
+		}
+		// If slot is taken, find nearest free slot
+		if occupied[pos] {
+			// Search outward for nearest free slot
+			found := false
+			for delta := 1; delta < n; delta++ {
+				if pos+delta < n && !occupied[pos+delta] {
+					pos = pos + delta
+					found = true
+					break
+				}
+				if pos-delta >= 0 && !occupied[pos-delta] {
+					pos = pos - delta
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue // shouldn't happen — n slots for n drivers
+			}
+		}
+		result[pos] = s.code
+		occupied[pos] = true
+	}
+
+	// Then fill remaining slots with accepted drivers in order
+	slot := 0
+	for _, code := range accepted {
+		for slot < n && occupied[slot] {
+			slot++
+		}
+		if slot < n {
+			result[slot] = code
+			occupied[slot] = true
+			slot++
+		}
+	}
+
+	// Update last positions for all drivers
+	for i, code := range result {
+		ps.lastPositions[code] = i + 1
 	}
 
 	return result
@@ -280,6 +345,7 @@ func (rt *RetirementTracker) GetRetiredDrivers() []string {
 // ApplyPositionSmoothingToFrames applies smoothing to all frames in sequence
 func ApplyPositionSmoothingToFrames(frames []models.Frame, trackStatuses map[int]string) {
 	smoother := NewPositionSmoothing()
+	retirementTracker := NewRetirementTracker()
 
 	for i := range frames {
 		// Get track status for this frame
@@ -287,6 +353,9 @@ func ApplyPositionSmoothingToFrames(frames []models.Frame, trackStatuses map[int
 		if status, ok := trackStatuses[i]; ok {
 			trackStatus = status
 		}
+
+		// Detect retirements (marks stationary drivers as "Retired")
+		retirementTracker.UpdateFrame(&frames[i])
 
 		// Get sorted codes before smoothing
 		sortedCodes := SortPositions(&frames[i])

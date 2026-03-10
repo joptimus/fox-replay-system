@@ -150,13 +150,10 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 		"metadata": metadata,
 	})
 
-	// Playback control state
-	frameIndex := 0.0
-	playbackSpeed := 1.0
-	isPlaying := false
+	// Playback state — frontend drives frame advancement via seek commands.
+	// Backend only responds to commands; no independent frame advancing.
 	lastFrameSent := -1
-	ticker := time.NewTicker(time.Second / 60) // 60 Hz
-	defer ticker.Stop()
+	frameCh := make(chan int, 4) // buffered channel for seek requests
 
 	// Set up non-blocking reads for commands
 	conn.SetReadDeadline(time.Time{})
@@ -172,75 +169,67 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 
 			action, _ := cmd["action"].(string)
 			switch action {
-			case "play":
-				isPlaying = true
-				if speed, ok := cmd["speed"].(float64); ok {
-					playbackSpeed = speed
-				}
-				h.logger.Debug("playback started",
-					zap.String("sessionID", sess.ID),
-					zap.Float64("speed", playbackSpeed))
-
-			case "pause":
-				isPlaying = false
-				h.logger.Debug("playback paused",
-					zap.String("sessionID", sess.ID))
-
 			case "seek":
 				if frame, ok := cmd["frame"].(float64); ok {
-					frameIndex = frame
-					lastFrameSent = -1
-					h.logger.Debug("seeking",
-						zap.String("sessionID", sess.ID),
-						zap.Float64("frame", frame))
+					idx := int(frame)
+					if idx < 0 {
+						idx = 0
+					}
+					if idx >= len(frames) {
+						idx = len(frames) - 1
+					}
+					// Non-blocking send — drop stale seeks if buffer full
+					select {
+					case frameCh <- idx:
+					default:
+						// Drain old value and send new one
+						select {
+						case <-frameCh:
+						default:
+						}
+						frameCh <- idx
+					}
 				}
+
+			case "play":
+				h.logger.Debug("playback started (frontend-driven)",
+					zap.String("sessionID", sess.ID))
+			case "pause":
+				h.logger.Debug("playback paused (frontend-driven)",
+					zap.String("sessionID", sess.ID))
 			}
 		}
 	}()
 
-	// Main streaming loop
+	// Main streaming loop — send frames only when frontend requests them
 	for {
 		select {
-		case <-ticker.C:
-			// Update frame index based on playback speed
-			if isPlaying {
-				frameIndex += playbackSpeed * (1.0 / 60.0) * float64(len(frames)) /
-					(frames[len(frames)-1].T - frames[0].T)
+		case requestedFrame := <-frameCh:
+			if requestedFrame == lastFrameSent {
+				continue
+			}
+			if requestedFrame < 0 || requestedFrame >= len(frames) {
+				continue
 			}
 
-			// Clamp frame index to valid range
-			if frameIndex < 0 {
-				frameIndex = 0
+			frame := frames[requestedFrame]
+
+			frameBytes, err := marshalFrame(&frame)
+			if err != nil {
+				h.logger.Error("failed to marshal frame",
+					zap.Error(err),
+					zap.Int("frameIndex", requestedFrame))
+				return
 			}
-			if frameIndex >= float64(len(frames)) {
-				frameIndex = float64(len(frames) - 1)
-				isPlaying = false // Stop at end
+
+			if err := conn.WriteMessage(websocket.BinaryMessage, frameBytes); err != nil {
+				h.logger.Info("WebSocket write error",
+					zap.Error(err),
+					zap.String("sessionID", sess.ID))
+				return
 			}
 
-			currentFrame := int(frameIndex)
-
-			// Send frame if index changed
-			if currentFrame != lastFrameSent && currentFrame >= 0 && currentFrame < len(frames) {
-				frame := frames[currentFrame]
-
-				// Send as binary msgpack (more efficient for large data)
-				frameBytes, err := marshalFrame(&frame)
-				if err != nil {
-					h.logger.Error("failed to marshal frame",
-						zap.Error(err),
-						zap.Int("frameIndex", currentFrame))
-					return
-				}
-
-				if err := conn.WriteMessage(websocket.BinaryMessage, frameBytes); err != nil {
-					h.logger.Info("WebSocket write error",
-						zap.Error(err),
-						zap.String("sessionID", sess.ID))
-					return
-				}
-
-				lastFrameSent = currentFrame
-			}
+			lastFrameSent = requestedFrame
 
 		case err := <-doneCh:
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {

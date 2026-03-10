@@ -3,7 +3,7 @@
  * Handles msgpack deserialization and state updates
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { Unpackr } from "msgpackr";
 import { useReplayStore } from "../store/replayStore";
 import { FrameData } from "../types";
@@ -17,6 +17,7 @@ interface WebSocketMessage {
 export const useReplayWebSocket = (sessionId: string | null) => {
   const wsRef = useRef<WebSocket | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const setCurrentFrame = useReplayStore((state) => state.setCurrentFrame);
   const setLoadingProgress = useReplayStore((state) => state.setLoadingProgress);
   const setLoadingError = useReplayStore((state) => state.setLoadingError);
@@ -67,6 +68,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
     wsRef.current.onopen = () => {
       console.log("[WS Client] Connection opened, requesting initial frame");
+      setIsConnected(true);
       // Request initial frame when connection opens
       if (sendCommandRef.current) {
         sendCommandRef.current({ action: "seek", frame: 0 });
@@ -156,10 +158,12 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
     wsRef.current.onerror = (error) => {
       console.error("[WS Client] WebSocket error:", error);
+      setIsConnected(false);
     };
 
     wsRef.current.onclose = () => {
       console.log("[WS Client] WebSocket closed");
+      setIsConnected(false);
     };
 
     return () => {
@@ -229,7 +233,7 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   }, [playback.frameIndex]);
 
   return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isConnected,
     sendSeek: (frameIndex: number) => {
       if (sendCommandRef.current) {
         sendCommandRef.current({ action: "seek", frame: frameIndex });
