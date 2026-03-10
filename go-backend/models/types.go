@@ -34,34 +34,34 @@ type SessionResponse struct {
 
 // Frame represents a single frame of telemetry data
 type Frame struct {
-	FrameIndex int                   `json:"frame_index" msgpack:"fi"`
+	FrameIndex int                   `json:"frame_index" msgpack:"frame_index"`
 	T          float64               `json:"t" msgpack:"t"`
-	Lap        int                   `json:"lap" msgpack:"l"`
-	Drivers    map[string]DriverData `json:"drivers" msgpack:"d"`
+	Lap        int                   `json:"lap" msgpack:"lap"`
+	Drivers    map[string]DriverData `json:"drivers" msgpack:"drivers"`
 }
 
 // DriverData represents telemetry data for a single driver in a frame
 type DriverData struct {
 	X              float64  `json:"x" msgpack:"x"`
 	Y              float64  `json:"y" msgpack:"y"`
-	Speed          float64  `json:"speed" msgpack:"sp"`
+	Speed          float64  `json:"speed" msgpack:"speed"`
 	Lap            int      `json:"lap" msgpack:"lap"`
-	Tyre           int      `json:"tyre" msgpack:"tyr"`
-	Gear           int      `json:"gear" msgpack:"g"`
+	Tyre           int      `json:"tyre" msgpack:"tyre"`
+	Gear           int      `json:"gear" msgpack:"gear"`
 	DRS            int      `json:"drs" msgpack:"drs"`
-	Throttle       float64  `json:"throttle" msgpack:"th"`
-	Brake          float64  `json:"brake" msgpack:"br"`
+	Throttle       float64  `json:"throttle" msgpack:"throttle"`
+	Brake          float64  `json:"brake" msgpack:"brake"`
 	RPM            int      `json:"rpm" msgpack:"rpm"`
 	Dist           float64  `json:"dist" msgpack:"dist"`
-	RelDist        float64  `json:"rel_dist" msgpack:"rd"`
-	RaceProgress   float64  `json:"race_progress" msgpack:"rp"`
+	RelDist        float64  `json:"rel_dist" msgpack:"rel_dist"`
+	RaceProgress   float64  `json:"race_progress" msgpack:"race_progress"`
 	Position       int      `json:"position" msgpack:"position"`
 	PosRaw         *int     `json:"pos_raw,omitempty" msgpack:"pos_raw,omitempty"`
 	Gap            *float64 `json:"gap,omitempty" msgpack:"gap,omitempty"`
-	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"is,omitempty"`
+	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"interval_smooth,omitempty"`
 	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gap_to_leader"`
 	GapToPrevious  float64  `json:"gap_to_previous" msgpack:"gap_to_previous"`
-	Status         string   `json:"status" msgpack:"st"`
+	Status         string   `json:"status" msgpack:"status"`
 }
 
 // ProgressMessage represents a progress update
