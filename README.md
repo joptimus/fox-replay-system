@@ -244,8 +244,7 @@ See [Issues](https://github.com/jamesadams90/f1-race-replay/issues) for the full
 Contributions welcome! Here's how to get started:
 
 1. **Fork the repository** and create your feature branch (`git checkout -b feature/amazing-feature`)
-2. **Follow the development guidelines** in CLAUDE.md
-3. **Test your changes** thoroughly
+2. **Test your changes** thoroughly
 4. **Commit with clear messages** describing your changes
 5. **Push to your branch** and open a Pull Request
 
