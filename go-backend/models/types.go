@@ -55,8 +55,8 @@ type DriverData struct {
 	Dist           float64  `json:"dist" msgpack:"dist"`
 	RelDist        float64  `json:"rel_dist" msgpack:"rd"`
 	RaceProgress   float64  `json:"race_progress" msgpack:"rp"`
-	Position       int      `json:"position" msgpack:"pos"`
-	PosRaw         *int     `json:"pos_raw,omitempty" msgpack:"pr,omitempty"`
+	Position       int      `json:"position" msgpack:"position"`
+	PosRaw         *int     `json:"pos_raw,omitempty" msgpack:"pos_raw,omitempty"`
 	Gap            *float64 `json:"gap,omitempty" msgpack:"gap,omitempty"`
 	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"is,omitempty"`
 	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gap_to_leader"`
