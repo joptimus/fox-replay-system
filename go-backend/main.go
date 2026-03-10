@@ -130,9 +130,22 @@ func handleCreateSessionRoute(
 
 		// Check cache first
 		if !req.Refresh {
-			frames, err := cacheReader.ReadFrames(req.Year, req.RoundNum, req.SessionType)
+			frames, cacheMeta, err := cacheReader.ReadFrames(req.Year, req.RoundNum, req.SessionType)
 			if err == nil && len(frames) > 0 {
 				logger.Info("Cache hit", zap.Int("year", req.Year), zap.Int("round", req.RoundNum), zap.String("sessionType", req.SessionType))
+
+				// Get total laps from cache metadata, or compute from frames
+				totalLaps := 0
+				if cacheMeta != nil {
+					totalLaps = cacheMeta.TotalLaps
+				}
+				if totalLaps == 0 {
+					for _, frame := range frames {
+						if frame.Lap > totalLaps {
+							totalLaps = frame.Lap
+						}
+					}
+				}
 
 				sess.SetFrames(frames)
 				sess.SetState(models.StateReady)
@@ -141,6 +154,7 @@ func handleCreateSessionRoute(
 					Round:       req.RoundNum,
 					SessionType: req.SessionType,
 					TotalFrames: len(frames),
+					TotalLaps:   totalLaps,
 				})
 
 				w.Header().Set("Content-Type", "application/json")

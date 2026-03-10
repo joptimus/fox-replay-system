@@ -498,79 +498,59 @@ html, body, #root {
   width: 100%;
 }
 
-.playback-slider {
+.timeline-track {
+  position: relative;
   width: 100%;
   height: 6px;
+  background: #1a1a24;
   border-radius: 3px;
-  outline: none;
   cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  transition: height 0.2s ease;
+  touch-action: none;
+  transition: height 0.15s ease;
 }
 
-.playback-slider::-webkit-slider-runnable-track {
+.timeline-track:hover {
+  height: 10px;
+}
+
+.timeline-buffer {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 6px;
-  background: var(--f1-dark-gray);
+  height: 100%;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
-  border: none;
 }
 
-.playback-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
+.timeline-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--f1-red);
+  border-radius: 3px;
+  pointer-events: none;
+  transition: none;
+}
+
+.timeline-thumb {
+  position: absolute;
+  top: 50%;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
   background: var(--f1-red);
-  cursor: pointer;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
   box-shadow: 0 2px 8px rgba(225, 6, 0, 0.4);
-  transition: all 0.2s ease;
-  margin-top: -4px;
+  pointer-events: none;
+  transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
 }
 
-.playback-slider::-webkit-slider-thumb:hover {
+.timeline-track:hover .timeline-thumb {
   width: 18px;
   height: 18px;
   box-shadow: 0 4px 12px rgba(225, 6, 0, 0.6);
-  margin-top: -6px;
-}
-
-.playback-slider::-moz-range-track {
-  background: transparent;
-  border: none;
-}
-
-.playback-slider::-moz-range-progress {
-  background-color: var(--f1-red);
-  height: 6px;
-  border-radius: 3px;
-}
-
-.playback-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--f1-red);
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 2px 8px rgba(225, 6, 0, 0.4);
-  transition: all 0.2s ease;
-}
-
-.playback-slider::-moz-range-thumb:hover {
-  width: 18px;
-  height: 18px;
-  box-shadow: 0 4px 12px rgba(225, 6, 0, 0.6);
-}
-
-.playback-slider:hover {
-  height: 8px;
-}
-
-.playback-slider:hover::-webkit-slider-runnable-track {
-  height: 8px;
 }
 
 .playback-time-display {

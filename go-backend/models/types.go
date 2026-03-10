@@ -61,6 +61,10 @@ type DriverData struct {
 	IntervalSmooth *float64 `json:"interval_smooth,omitempty" msgpack:"interval_smooth,omitempty"`
 	GapToLeader    float64  `json:"gap_to_leader" msgpack:"gap_to_leader"`
 	GapToPrevious  float64  `json:"gap_to_previous" msgpack:"gap_to_previous"`
+	LapTime        float64  `json:"lap_time" msgpack:"lap_time"`
+	Sector1        float64  `json:"sector1" msgpack:"sector1"`
+	Sector2        float64  `json:"sector2" msgpack:"sector2"`
+	Sector3        float64  `json:"sector3" msgpack:"sector3"`
 	Status         string   `json:"status" msgpack:"status"`
 }
 

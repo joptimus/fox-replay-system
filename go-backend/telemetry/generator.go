@@ -74,16 +74,33 @@ func (fg *FrameGenerator) Generate(
 	}
 	fmt.Printf("[TIMING] ResampleAllDrivers: %.2fs (%d drivers)\n", time.Since(t2).Seconds(), len(resampledDrivers))
 
-	// Extract timing data (gap, position)
+	// Extract and resample timing data (gap, position, sectors) to uniform timeline
+	// Timing arrays are aligned to each driver's original time base, so they must
+	// be resampled to the uniform timeline just like telemetry data.
 	t3 := time.Now()
 	timingByDriver := make(map[string][]map[string]interface{})
 	for code := range payload.Drivers {
+		origT := payload.Drivers[code].T
+
+		// Resample each timing array to the uniform timeline using step interpolation
+		resGap, _ := ResampleFloat64Step(timeline, origT, payload.Timing.GapByDriver[code])
+		resPosRaw, _ := ResampleInt(timeline, origT, payload.Timing.PosByDriver[code])
+		resInterval, _ := ResampleFloat64Step(timeline, origT, payload.Timing.IntervalSmoothByDriver[code])
+		resLapTime, _ := ResampleFloat64Step(timeline, origT, payload.Timing.LapTimeByDriver[code])
+		resSector1, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector1ByDriver[code])
+		resSector2, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector2ByDriver[code])
+		resSector3, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector3ByDriver[code])
+
 		timing := make([]map[string]interface{}, len(timeline))
 		for i := 0; i < len(timeline); i++ {
 			timing[i] = map[string]interface{}{
-				"gap":             getTimingValue(payload.Timing.GapByDriver[code], i),
-				"pos_raw":         getTimingValueInt(payload.Timing.PosByDriver[code], i),
-				"interval_smooth": getTimingValue(payload.Timing.IntervalSmoothByDriver[code], i),
+				"gap":             safeIndex(resGap, i),
+				"pos_raw":         safeIndexInt(resPosRaw, i),
+				"interval_smooth": safeIndex(resInterval, i),
+				"lap_time":        safeIndex(resLapTime, i),
+				"sector1":         safeIndex(resSector1, i),
+				"sector2":         safeIndex(resSector2, i),
+				"sector3":         safeIndex(resSector3, i),
 			}
 		}
 		timingByDriver[code] = timing
@@ -131,6 +148,18 @@ func (fg *FrameGenerator) Generate(
 				}
 				if interval, ok := timing[i]["interval_smooth"].(float64); ok {
 					driverData.IntervalSmooth = &interval
+				}
+				if lapTime, ok := timing[i]["lap_time"].(float64); ok {
+					driverData.LapTime = lapTime
+				}
+				if s1, ok := timing[i]["sector1"].(float64); ok {
+					driverData.Sector1 = s1
+				}
+				if s2, ok := timing[i]["sector2"].(float64); ok {
+					driverData.Sector2 = s2
+				}
+				if s3, ok := timing[i]["sector3"].(float64); ok {
+					driverData.Sector3 = s3
 				}
 			}
 
@@ -201,6 +230,22 @@ func getLeaderLap(drivers map[string]*ResampledDriver, i int) int {
 		}
 	}
 	return maxLap
+}
+
+// safeIndex safely gets a float64 from a slice
+func safeIndex(arr []float64, i int) float64 {
+	if i >= 0 && i < len(arr) {
+		return arr[i]
+	}
+	return 0.0
+}
+
+// safeIndexInt safely gets an int from a slice
+func safeIndexInt(arr []int, i int) int {
+	if i >= 0 && i < len(arr) {
+		return arr[i]
+	}
+	return 0
 }
 
 // getTimingValue safely gets a timing value at index

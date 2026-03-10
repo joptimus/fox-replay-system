@@ -55,7 +55,7 @@ func ResampleFloat64(x, xp, fp []float64) ([]float64, error) {
 // x: target time points (usually the timeline)
 func ResampleInt(x, xp []float64, fp []int) ([]int, error) {
 	if len(xp) == 0 || len(fp) == 0 {
-		return nil, fmt.Errorf("empty input arrays")
+		return make([]int, len(x)), nil // Return zeros if no data
 	}
 
 	if len(xp) != len(fp) {
@@ -66,6 +66,37 @@ func ResampleInt(x, xp []float64, fp []int) ([]int, error) {
 
 	for i, t := range x {
 		result[i] = stepInterpInt(t, xp, fp)
+	}
+
+	return result, nil
+}
+
+// ResampleFloat64Step resamples a float64 series using step (nearest-previous) interpolation.
+// Use this for discrete values (gaps, sector times) that shouldn't be linearly interpolated.
+func ResampleFloat64Step(x, xp, fp []float64) ([]float64, error) {
+	if len(xp) == 0 || len(fp) == 0 {
+		return make([]float64, len(x)), nil // Return zeros if no data
+	}
+
+	if len(xp) != len(fp) {
+		return nil, fmt.Errorf("xp and fp must have same length")
+	}
+
+	result := make([]float64, len(x))
+
+	for i, t := range x {
+		// Step interpolation: use the value at the most recent sample
+		if t <= xp[0] {
+			result[i] = fp[0]
+		} else if t >= xp[len(xp)-1] {
+			result[i] = fp[len(fp)-1]
+		} else {
+			j := sort.SearchFloat64s(xp, t)
+			if j > 0 {
+				j--
+			}
+			result[i] = fp[j]
+		}
 	}
 
 	return result, nil

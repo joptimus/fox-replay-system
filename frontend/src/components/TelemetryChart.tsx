@@ -154,8 +154,8 @@ export const TelemetryChart: React.FC = () => {
   const brakePercent = (currentDriverData.brake || 0) > 1 ? (currentDriverData.brake || 0) : (currentDriverData.brake || 0) * 100;
 
   // Format time helper (mm:ss.sss format) - used for lap times when data available
-  const formatTime = (seconds: number | null): string => {
-    if (seconds === null || isNaN(seconds)) return "N/A";
+  const formatTime = (seconds: number | null | undefined): string => {
+    if (seconds === null || seconds === undefined || isNaN(seconds) || seconds <= 0) return "N/A";
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toFixed(3).padStart(7, '0')}`;
@@ -380,9 +380,9 @@ export const TelemetryChart: React.FC = () => {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace', fontWeight: 700 }}>LIVE DELTA</div>
-            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#9CA3AF', fontFamily: 'monospace' }}>
-              {formatDelta(null)}
+            <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '2px', fontFamily: 'monospace', fontWeight: 700 }}>GAP TO LEADER</div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? '#ef4444' : '#22c55e', fontFamily: 'monospace' }}>
+              {currentDriverData.position === 1 ? 'LEADER' : formatDelta(currentDriverData.gap_to_leader && currentDriverData.gap_to_leader > 0 ? currentDriverData.gap_to_leader : null)}
             </div>
           </div>
         </div>

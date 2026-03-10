@@ -26,7 +26,7 @@ const fs = require("fs");
 
 // Configuration
 const config = {
-  goBinary: process.env.GO_BINARY || path.join(__dirname, "go-backend/f1-replay-go"),
+  goBinary: process.env.GO_BINARY || path.join(__dirname, `go-backend/f1-replay-go${process.platform === "win32" ? ".exe" : ""}`),
   pythonBridge: process.env.PYTHON_BRIDGE || path.join(__dirname, "scripts/fastf1_api.py"),
   cacheDir: process.env.CACHE_DIR || path.join(__dirname, "computed_data"),
   goPort: process.env.GO_PORT || 8000,
@@ -60,9 +60,11 @@ function buildGoBackend() {
 
   log("Go Backend", "Building...", colors.blue);
 
-  const result = spawnSync("go", ["build", "-o", "f1-replay-go", "."], {
+  const binaryName = process.platform === "win32" ? "f1-replay-go.exe" : "f1-replay-go";
+  const result = spawnSync("go", ["build", "-o", binaryName, "."], {
     cwd: path.join(__dirname, "go-backend"),
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   if (result.error || result.status !== 0) {
@@ -141,6 +143,7 @@ function startPythonBridge() {
   const proc = spawn("python3", [config.pythonBridge], {
     env: { ...process.env, PORT: config.pythonPort },
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   proc.on("error", (err) => {
@@ -157,6 +160,7 @@ function startFrontend() {
   const proc = spawn("npm", ["run", "dev"], {
     cwd: frontendDir,
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 
   proc.on("error", (err) => {

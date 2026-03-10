@@ -54,6 +54,10 @@ type TimingData struct {
 	GapByDriver            map[string][]float64 `json:"gap_by_driver" msgpack:"gap_by_driver"`
 	PosByDriver            map[string][]int     `json:"pos_by_driver" msgpack:"pos_by_driver"`
 	IntervalSmoothByDriver map[string][]float64 `json:"interval_smooth_by_driver" msgpack:"interval_smooth_by_driver"`
+	LapTimeByDriver        map[string][]float64 `json:"lap_time_by_driver" msgpack:"lap_time_by_driver"`
+	Sector1ByDriver        map[string][]float64 `json:"sector1_by_driver" msgpack:"sector1_by_driver"`
+	Sector2ByDriver        map[string][]float64 `json:"sector2_by_driver" msgpack:"sector2_by_driver"`
+	Sector3ByDriver        map[string][]float64 `json:"sector3_by_driver" msgpack:"sector3_by_driver"`
 	AbsTimeline            []float64            `json:"abs_timeline" msgpack:"abs_timeline"`
 }
 

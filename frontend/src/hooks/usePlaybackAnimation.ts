@@ -22,6 +22,16 @@ export const usePlaybackAnimation = () => {
   const startTimeRef = useRef<number | null>(null);
   const startFrameRef = useRef<number>(0);
   const rafIdRef = useRef<number | null>(null);
+  const lastSetFrame = useRef<number>(0);
+
+  // Detect external seeks (user clicking timeline) and re-anchor the animation
+  useEffect(() => {
+    if (isPlaying && frameIndex !== lastSetFrame.current) {
+      // frameIndex changed from outside the animation loop (a seek) — re-anchor
+      startTimeRef.current = performance.now();
+      startFrameRef.current = frameIndex;
+    }
+  }, [frameIndex, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -51,10 +61,14 @@ export const usePlaybackAnimation = () => {
 
       if (newFrameIndex >= totalFrames - 1) {
         // Reached end of race
-        setFrameIndex(totalFrames - 1);
+        const endFrame = totalFrames - 1;
+        lastSetFrame.current = endFrame;
+        setFrameIndex(endFrame);
         pause();
       } else {
-        setFrameIndex(Math.floor(newFrameIndex));
+        const computed = Math.floor(newFrameIndex);
+        lastSetFrame.current = computed;
+        setFrameIndex(computed);
       }
 
       rafIdRef.current = requestAnimationFrame(animate);

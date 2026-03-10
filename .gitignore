@@ -10,6 +10,11 @@ computed_data/
 backend/data/
 legacy/data/
 
+# Go binaries
+go-backend/f1-replay-go
+go-backend/f1-replay-go.exe
+go-backend/*.exe~
+
 # Build and cache
 dist/
 build/

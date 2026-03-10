@@ -1,7 +1,8 @@
 /**
- * Playback controls bar with timeline slider
+ * Playback controls bar with custom timeline slider
  */
 
+import { useRef, useCallback } from "react";
 import {
   Play,
   Pause,
@@ -27,6 +28,9 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLi
     seek,
   } = useReplayStore();
 
+  const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+
   const handlePlayPause = () => {
     if (playback.isPlaying) {
       pause();
@@ -41,10 +45,29 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLi
     setSpeed(speed);
   };
 
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const frameIndex = parseInt(e.target.value);
+  const seekFromPointer = useCallback((clientX: number) => {
+    const track = trackRef.current;
+    if (!track || playback.totalFrames <= 0) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const frameIndex = Math.round(ratio * (playback.totalFrames - 1));
     seek(frameIndex);
-  };
+  }, [playback.totalFrames, seek]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    seekFromPointer(e.clientX);
+  }, [seekFromPointer]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    seekFromPointer(e.clientX);
+  }, [seekFromPointer]);
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   const formatTime = (frameIndex: number) => {
     const seconds = frameIndex / 25; // 25 FPS
@@ -53,18 +76,29 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLi
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const progress = playback.totalFrames > 0
+    ? (playback.frameIndex / (playback.totalFrames - 1)) * 100
+    : 0;
+
   return (
     <div className="playback-controls">
-      {/* Timeline Slider */}
+      {/* Custom Timeline */}
       <div className="playback-timeline">
-        <input
-          type="range"
-          min="0"
-          max={playback.totalFrames - 1}
-          value={playback.frameIndex}
-          onChange={handleSliderChange}
-          className="playback-slider"
-        />
+        <div
+          ref={trackRef}
+          className="timeline-track"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        >
+          {/* Buffer bar (100% - all frames in memory) */}
+          <div className="timeline-buffer" />
+          {/* Progress fill */}
+          <div className="timeline-progress" style={{ width: `${progress}%` }} />
+          {/* Thumb */}
+          <div className="timeline-thumb" style={{ left: `${progress}%` }} />
+        </div>
         <div className="playback-time-display">
           <span className="f1-monospace">{formatTime(playback.frameIndex)}</span>
           <span className="f1-monospace">{formatTime(playback.totalFrames)}</span>

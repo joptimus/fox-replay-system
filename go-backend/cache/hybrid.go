@@ -28,19 +28,19 @@ func NewHybridCacheReader(cachePath string, logger *zap.Logger) *HybridCacheRead
 }
 
 // ReadFrames tries to read from .f1cache first, falls back to .msgpack
-func (h *HybridCacheReader) ReadFrames(year, round int, sessionType string) ([]models.Frame, error) {
+func (h *HybridCacheReader) ReadFrames(year, round int, sessionType string) ([]models.Frame, *F1CacheMetadata, error) {
 	// Try new .f1cache format first
 	f1cacheFilename := GetF1CacheFilename(year, round, sessionType)
 	if h.f1cacheReader.F1CacheExists(f1cacheFilename) {
 		h.logger.Info("Loading from .f1cache",
 			zap.String("filename", f1cacheFilename))
 
-		frames, _, err := h.f1cacheReader.ReadCache(f1cacheFilename)
+		frames, meta, err := h.f1cacheReader.ReadCache(f1cacheFilename)
 		if err == nil {
 			h.logger.Info("Loaded from .f1cache successfully",
 				zap.String("filename", f1cacheFilename),
 				zap.Int("frames", len(frames)))
-			return frames, nil
+			return frames, meta, nil
 		}
 
 		// If .f1cache is corrupted, log and fall through
@@ -60,7 +60,7 @@ func (h *HybridCacheReader) ReadFrames(year, round int, sessionType string) ([]m
 			h.logger.Error("Failed to read .msgpack cache",
 				zap.Error(err),
 				zap.String("filename", msgpackFilename))
-			return nil, err
+			return nil, nil, err
 		}
 
 		h.logger.Info("Loaded from .msgpack successfully",
@@ -70,10 +70,10 @@ func (h *HybridCacheReader) ReadFrames(year, round int, sessionType string) ([]m
 		// Optionally: migrate to new format in background
 		go h.migrateToF1Cache(year, round, sessionType, frames)
 
-		return frames, nil
+		return frames, nil, nil
 	}
 
-	return nil, fmt.Errorf("no cache found for %d R%d %s", year, round, sessionType)
+	return nil, nil, fmt.Errorf("no cache found for %d R%d %s", year, round, sessionType)
 }
 
 // WriteFrames writes frames to new .f1cache format

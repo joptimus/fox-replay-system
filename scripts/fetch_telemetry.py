@@ -198,7 +198,10 @@ def extract_raw_telemetry(session, session_type: str):
             if sample_count == 0:
                 continue
 
-            # Extract raw arrays
+            # Extract raw arrays (FastF1 uses nGear, Brake is boolean)
+            brake_raw = driver_data.get("Brake", [False] * sample_count)
+            brake_list = [1.0 if b else 0.0 for b in (brake_raw.tolist() if hasattr(brake_raw, "tolist") else list(brake_raw))]
+
             drivers_raw[code] = {
                 "t": series_to_float_list(driver_data["Time"], sample_count, 0.0, time_mode=True),
                 "x": series_to_float_list(driver_data.get("X", [0.0] * sample_count), sample_count, 0.0),
@@ -206,9 +209,9 @@ def extract_raw_telemetry(session, session_type: str):
                 "dist": series_to_float_list(driver_data.get("Distance", [0.0] * sample_count), sample_count, 0.0),
                 "rel_dist": series_to_float_list(driver_data.get("RelativeDistance", [0.0] * sample_count), sample_count, 0.0),
                 "speed": series_to_float_list(driver_data.get("Speed", [0.0] * sample_count), sample_count, 0.0),
-                "gear": series_to_int_list(driver_data.get("Gear", [0] * sample_count), sample_count, 0),
+                "gear": series_to_int_list(driver_data.get("nGear", [0] * sample_count), sample_count, 0),
                 "throttle": series_to_float_list(driver_data.get("Throttle", [0.0] * sample_count), sample_count, 0.0),
-                "brake": series_to_float_list(driver_data.get("Brake", [0.0] * sample_count), sample_count, 0.0),
+                "brake": brake_list,
                 "rpm": series_to_int_list(driver_data.get("RPM", [0] * sample_count), sample_count, 0),
                 "drs": series_to_int_list(driver_data.get("DRS", [0] * sample_count), sample_count, 0),
             }
@@ -218,42 +221,146 @@ def extract_raw_telemetry(session, session_type: str):
 
     emit_progress(60, f"Processing {len(drivers_raw)} drivers...")
 
-    # Get lap and tyre data
-    try:
-        laps = session.laps
-        for code in list(drivers_raw.keys()):
-            sample_count = len(drivers_raw[code]["t"])
-            driver_laps = laps[laps["Driver"] == code]
-            drivers_raw[code]["lap"] = [1] * sample_count
-            tyre_code = 0
-            if not driver_laps.empty and "Compound" in driver_laps.columns:
-                compound = str(driver_laps.iloc[0]["Compound"]) if driver_laps.iloc[0]["Compound"] is not None else ""
-                tyre_map = {"SOFT": 0, "MEDIUM": 1, "HARD": 2, "INTERMEDIATE": 3, "WET": 4}
-                tyre_code = tyre_map.get(compound.upper(), 0)
-            drivers_raw[code]["tyre"] = [tyre_code] * sample_count
-    except Exception as e:
-        print(f"Warning: Could not extract lap/tyre data: {e}", file=sys.stderr)
-        for code in list(drivers_raw.keys()):
-            drivers_raw[code]["lap"] = [1] * len(drivers_raw[code]["t"])
-            drivers_raw[code]["tyre"] = [0] * len(drivers_raw[code]["t"])
+    import numpy as np
+    import pandas as pd
 
-    # Get timing data (gap, position, interval)
+    # Get lap data, tyre compounds, positions, and gaps per telemetry sample
+    tyre_map = {"SOFT": 0, "MEDIUM": 1, "HARD": 2, "INTERMEDIATE": 3, "WET": 4}
+    laps = session.laps
+
+    for code in list(drivers_raw.keys()):
+        sample_count = len(drivers_raw[code]["t"])
+        sample_times = np.array(drivers_raw[code]["t"])
+
+        driver_laps = laps[laps["Driver"] == code].sort_values("LapNumber")
+
+        if driver_laps.empty:
+            drivers_raw[code]["lap"] = [1] * sample_count
+            drivers_raw[code]["tyre"] = [0] * sample_count
+            continue
+
+        # Compute time offset: session.laps["Time"] is absolute session time,
+        # but telemetry Time (used for drivers_raw["t"]) starts at 0 (driver-relative).
+        # The offset is the session time of the driver's first telemetry sample.
+        time_offset = 0.0
+        first_lap_start = driver_laps.iloc[0].get("LapStartTime")
+        if pd.notna(first_lap_start):
+            time_offset = to_seconds(first_lap_start)
+
+        # Build lap boundary info: end_time, lap_number, position, gap, interval, tyre
+        lap_boundaries = []
+        for _, lap_row in driver_laps.iterrows():
+            end_time = to_seconds(lap_row.get("Time")) - time_offset
+            lap_num = safe_int(lap_row.get("LapNumber"), 1)
+            pos = safe_int(lap_row.get("Position"), 0)
+
+            # Gap to leader (timedelta -> seconds)
+            gap_val = 0.0
+            raw_gap = lap_row.get("GapToLeader") if "GapToLeader" in driver_laps.columns else None
+            if raw_gap is None and "Gap" in driver_laps.columns:
+                raw_gap = lap_row.get("Gap")
+            if raw_gap is not None:
+                gap_val = to_seconds(raw_gap)
+
+            # Interval to position ahead
+            interval_val = 0.0
+            raw_interval = lap_row.get("IntervalToPositionAhead") if "IntervalToPositionAhead" in driver_laps.columns else None
+            if raw_interval is not None:
+                interval_val = to_seconds(raw_interval)
+
+            # Tyre compound
+            compound = str(lap_row.get("Compound", "")) if lap_row.get("Compound") is not None else ""
+            tyre_code = tyre_map.get(compound.upper(), 0)
+
+            # Lap time and sector times (timedelta -> seconds)
+            lap_time_val = to_seconds(lap_row.get("LapTime")) if pd.notna(lap_row.get("LapTime")) else 0.0
+            sector1_val = to_seconds(lap_row.get("Sector1Time")) if pd.notna(lap_row.get("Sector1Time")) else 0.0
+            sector2_val = to_seconds(lap_row.get("Sector2Time")) if pd.notna(lap_row.get("Sector2Time")) else 0.0
+            sector3_val = to_seconds(lap_row.get("Sector3Time")) if pd.notna(lap_row.get("Sector3Time")) else 0.0
+
+            if end_time > 0:
+                lap_boundaries.append({
+                    "end_time": end_time,
+                    "lap_num": lap_num,
+                    "position": pos,
+                    "gap": gap_val,
+                    "interval": interval_val,
+                    "tyre": tyre_code,
+                    "lap_time": lap_time_val,
+                    "sector1": sector1_val,
+                    "sector2": sector2_val,
+                    "sector3": sector3_val,
+                })
+
+        if not lap_boundaries:
+            drivers_raw[code]["lap"] = [1] * sample_count
+            drivers_raw[code]["tyre"] = [0] * sample_count
+            continue
+
+        # Sort by end time and use searchsorted to assign each sample to a lap
+        lap_boundaries.sort(key=lambda x: x["end_time"])
+        end_times = np.array([lb["end_time"] for lb in lap_boundaries])
+
+        # For each sample, find the lap it belongs to (first lap whose end_time >= sample_time)
+        indices = np.searchsorted(end_times, sample_times, side="left")
+
+        lap_arr = []
+        tyre_arr = []
+        pos_arr = []
+        gap_arr = []
+        interval_arr = []
+        lap_time_arr = []
+        sector1_arr = []
+        sector2_arr = []
+        sector3_arr = []
+
+        for idx in indices:
+            if idx < len(lap_boundaries):
+                lb = lap_boundaries[idx]
+            else:
+                lb = lap_boundaries[-1]
+            lap_arr.append(lb["lap_num"])
+            tyre_arr.append(lb["tyre"])
+            pos_arr.append(lb["position"])
+            gap_arr.append(lb["gap"])
+            interval_arr.append(lb["interval"])
+            lap_time_arr.append(lb["lap_time"])
+            sector1_arr.append(lb["sector1"])
+            sector2_arr.append(lb["sector2"])
+            sector3_arr.append(lb["sector3"])
+
+        drivers_raw[code]["lap"] = lap_arr
+        drivers_raw[code]["tyre"] = tyre_arr
+        drivers_raw[code]["_pos"] = pos_arr
+        drivers_raw[code]["_gap"] = gap_arr
+        drivers_raw[code]["_interval"] = interval_arr
+        drivers_raw[code]["_lap_time"] = lap_time_arr
+        drivers_raw[code]["_sector1"] = sector1_arr
+        drivers_raw[code]["_sector2"] = sector2_arr
+        drivers_raw[code]["_sector3"] = sector3_arr
+
+    # Build timing data from extracted lap-level positions and gaps
     emit_progress(70, "Extracting timing data...")
-    try:
-        timing_data = {
-            "gap_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "pos_by_driver": {code: [1] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "interval_smooth_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "abs_timeline": [t for code in drivers_raw.keys() for t in drivers_raw[code]["t"]]
-        }
-    except Exception as e:
-        print(f"Warning: Could not extract timing data: {e}", file=sys.stderr)
-        timing_data = {
-            "gap_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "pos_by_driver": {code: [1] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "interval_smooth_by_driver": {code: [0.0] * len(drivers_raw[code]["t"]) for code in drivers_raw.keys()},
-            "abs_timeline": [t for code in drivers_raw.keys() for t in drivers_raw[code]["t"]]
-        }
+    timing_data = {
+        "gap_by_driver": {},
+        "pos_by_driver": {},
+        "interval_smooth_by_driver": {},
+        "lap_time_by_driver": {},
+        "sector1_by_driver": {},
+        "sector2_by_driver": {},
+        "sector3_by_driver": {},
+        "abs_timeline": [],
+    }
+    for code in drivers_raw.keys():
+        sample_count = len(drivers_raw[code]["t"])
+        timing_data["pos_by_driver"][code] = drivers_raw[code].pop("_pos", [0] * sample_count)
+        timing_data["gap_by_driver"][code] = drivers_raw[code].pop("_gap", [0.0] * sample_count)
+        timing_data["interval_smooth_by_driver"][code] = drivers_raw[code].pop("_interval", [0.0] * sample_count)
+        timing_data["lap_time_by_driver"][code] = drivers_raw[code].pop("_lap_time", [0.0] * sample_count)
+        timing_data["sector1_by_driver"][code] = drivers_raw[code].pop("_sector1", [0.0] * sample_count)
+        timing_data["sector2_by_driver"][code] = drivers_raw[code].pop("_sector2", [0.0] * sample_count)
+        timing_data["sector3_by_driver"][code] = drivers_raw[code].pop("_sector3", [0.0] * sample_count)
+        timing_data["abs_timeline"].extend(drivers_raw[code]["t"])
 
     # Get track status
     try:
@@ -314,7 +421,7 @@ def extract_raw_telemetry(session, session_type: str):
             "rainfall": []
         },
         "race_start_time_absolute": 0.0,
-        "total_laps": max([max(drivers_raw[code]["lap"]) for code in drivers_raw.keys()] + [1]),
+        "total_laps": int(session.total_laps) if hasattr(session, 'total_laps') and session.total_laps else max([max(drivers_raw[code]["lap"]) for code in drivers_raw.keys()] + [1]),
         "track_geometry": track_geometry if track_geometry else {}
     }
 
