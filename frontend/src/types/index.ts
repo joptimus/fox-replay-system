@@ -196,3 +196,5 @@ export interface QualiResult {
 }
 
 export type QualiSegmentName = "Q1" | "Q2" | "Q3" | "Progressive";
+
+export type SectorId = 1 | 2 | 3;

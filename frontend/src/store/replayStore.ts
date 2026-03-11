@@ -11,6 +11,7 @@ import {
   SessionState,
   SelectedDriver,
   SessionMetadata,
+  SectorId,
 } from "../types";
 
 interface ReplayStore {
@@ -56,6 +57,12 @@ interface ReplayStore {
   // Sector colors visibility
   showSectorColors: boolean;
   toggleSectorColors: () => void;
+
+  selectedSectorId: SectorId | null;
+  cameraMode: 'overview' | 'sector';
+  selectSector: (sectorId: SectorId) => void;
+  clearSectorSelection: () => void;
+  resetCameraView: () => void;
 }
 
 export const useReplayStore = create<ReplayStore>()(
@@ -167,6 +174,18 @@ export const useReplayStore = create<ReplayStore>()(
       set((state) => ({
         showSectorColors: !state.showSectorColors,
       })),
+
+    selectedSectorId: null,
+    cameraMode: 'overview' as const,
+
+    selectSector: (sectorId: SectorId) =>
+      set({ selectedSectorId: sectorId, cameraMode: 'sector' as const }),
+
+    clearSectorSelection: () =>
+      set({ selectedSectorId: null, cameraMode: 'overview' as const }),
+
+    resetCameraView: () =>
+      set({ selectedSectorId: null, cameraMode: 'overview' as const }),
   }))
 );
 
@@ -202,3 +221,9 @@ export const useSectorColors = () =>
     isEnabled: state.showSectorColors,
     toggle: state.toggleSectorColors,
   }));
+
+export const useSelectedSectorId = () =>
+  useReplayStore((state) => state.selectedSectorId);
+
+export const useCameraMode = () =>
+  useReplayStore((state) => state.cameraMode);
