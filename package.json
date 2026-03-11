@@ -4,7 +4,7 @@
   "description": "F1 Race Replay - Formula 1 Race Visualization with Go Backend // Interactive 3D race telemetry and analysis",
   "scripts": {
     "dev": "npm run build:go:quick && node dev.js",
-    "start": "node dev.js",
+    "start": "npm run build:go:quick && node dev.js",
     "dev:go-only": "npm run build:go:quick && node dev.js --go-only",
     "dev:no-go": "node dev.js --no-go",
     "dev:verbose": "npm run build:go:quick && node dev.js --verbose",
