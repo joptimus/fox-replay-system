@@ -6,7 +6,7 @@ import { getTeamLogoPath } from '../../utils/teamLogoMap';
 const SECTOR_COLORS: Record<SectorId, string> = {
   1: '#1a8a8a',
   2: '#8a3d6e',
-  3: '#6e8a1a',
+  3: '#8a7a2e',
 };
 
 export class LabelManager {
