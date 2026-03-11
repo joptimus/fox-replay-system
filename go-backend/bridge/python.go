@@ -47,6 +47,7 @@ type RawDataPayload struct {
 	TotalLaps              int                      `json:"total_laps" msgpack:"total_laps"`
 	TrackGeometryTelemetry TrackGeometryData        `json:"track_geometry_telemetry" msgpack:"track_geometry_telemetry"`
 	TrackGeometry          map[string]interface{}   `json:"track_geometry" msgpack:"track_geometry"`
+	QualiSegments          map[string]interface{}   `json:"quali_segments,omitempty" msgpack:"quali_segments,omitempty"`
 }
 
 // TimingData contains timing information for all drivers

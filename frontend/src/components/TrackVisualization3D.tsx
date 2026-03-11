@@ -4,7 +4,8 @@ import {
   useCurrentFrame,
   useSelectedDriver,
   useSessionMetadata,
-  useSectorColors,
+  useShowSectorColors,
+  useToggleSectorColors,
   useReplayStore,
   useSelectedSectorId,
   useCameraMode,
@@ -41,7 +42,8 @@ export const TrackVisualization3D: React.FC = () => {
   const currentFrame = useCurrentFrame();
   const selectedDriver = useSelectedDriver();
   const sessionMetadata = useSessionMetadata();
-  const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
+  const showSectorColors = useShowSectorColors();
+  const toggleSectorColors = useToggleSectorColors();
   const selectedSectorId = useSelectedSectorId();
   const cameraMode = useCameraMode();
   const { resetCameraView } = useReplayStore();
@@ -59,7 +61,6 @@ export const TrackVisualization3D: React.FC = () => {
 
     const sceneSetup = new SceneSetup(container);
     const cameraController = new CameraController(
-      sceneSetup.scene,
       sceneSetup.renderer,
       container
     );
@@ -221,8 +222,10 @@ export const TrackVisualization3D: React.FC = () => {
       }
     }
 
-    systems.weatherEffects.setRainState(currentFrame.weather?.rain_state ?? null);
-  }, [currentFrame, selectedDriver, sessionMetadata?.driver_colors]);
+    systems.weatherEffects.setRainState(
+      enableWeatherFx ? (currentFrame.weather?.rain_state ?? null) : null
+    );
+  }, [currentFrame, selectedDriver, sessionMetadata?.driver_colors, enableWeatherFx]);
 
   useEffect(() => {
     systemsRef.current?.trackGeometry.setSectorColors(showSectorColors);

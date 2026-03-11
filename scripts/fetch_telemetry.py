@@ -429,12 +429,94 @@ def extract_raw_telemetry(session, session_type: str):
     return payload
 
 
+def extract_quali_segments(session):
+    import pandas as pd
+
+    segments = {}
+    results = session.results
+    laps = session.laps
+
+    for seg_name in ["Q1", "Q2", "Q3"]:
+        seg_data = {"duration": 0.0, "drivers": {}}
+
+        for _, row in results.iterrows():
+            code = row["Abbreviation"]
+            seg_time = row.get(seg_name)
+            if seg_time is None:
+                continue
+            if pd.isna(seg_time):
+                continue
+            if hasattr(seg_time, "total_seconds") and seg_time.total_seconds() == 0:
+                continue
+
+            driver_laps = laps[laps["Driver"] == code]
+            if driver_laps.empty:
+                continue
+
+            try:
+                fastest = driver_laps.pick_fastest()
+            except Exception:
+                continue
+
+            if fastest is None:
+                continue
+
+            try:
+                telem = fastest.get_telemetry()
+            except Exception:
+                continue
+
+            if telem is None or len(telem) == 0:
+                continue
+
+            lap_time = to_seconds(seg_time)
+
+            times = series_to_float_list(telem["Time"], len(telem), 0.0, time_mode=True)
+            t_offset = times[0] if times else 0.0
+
+            xs = series_to_float_list(telem.get("X", [0.0] * len(telem)), len(telem), 0.0)
+            ys = series_to_float_list(telem.get("Y", [0.0] * len(telem)), len(telem), 0.0)
+            dists = series_to_float_list(telem.get("Distance", [0.0] * len(telem)), len(telem), 0.0)
+            speeds = series_to_float_list(telem.get("Speed", [0.0] * len(telem)), len(telem), 0.0)
+            gears = series_to_int_list(telem.get("nGear", [0] * len(telem)), len(telem), 0)
+            throttles = series_to_float_list(telem.get("Throttle", [0.0] * len(telem)), len(telem), 0.0)
+            brake_raw = telem.get("Brake", [False] * len(telem))
+            brakes = [1.0 if b else 0.0 for b in (brake_raw.tolist() if hasattr(brake_raw, "tolist") else list(brake_raw))]
+            drss = series_to_int_list(telem.get("DRS", [0] * len(telem)), len(telem), 0)
+
+            frames = []
+            for i in range(len(times)):
+                frames.append({
+                    "t": times[i] - t_offset,
+                    "x": xs[i],
+                    "y": ys[i],
+                    "dist": dists[i],
+                    "speed": speeds[i],
+                    "gear": gears[i],
+                    "throttle": throttles[i],
+                    "brake": brakes[i],
+                    "drs": drss[i],
+                })
+
+            seg_data["drivers"][code] = {
+                "frames": frames,
+                "lap_time": lap_time,
+            }
+
+            if lap_time > seg_data["duration"]:
+                seg_data["duration"] = lap_time
+
+        segments[seg_name] = seg_data
+
+    return segments
+
+
 def main():
     parser = argparse.ArgumentParser(description="FastF1 Telemetry Extractor for Go Backend")
     parser.add_argument("year", type=int, help="Season year (e.g., 2025)")
     parser.add_argument("round", type=int, help="Round number (e.g., 1)")
-    parser.add_argument("session_type", choices=["R", "S", "Q", "SQ"],
-                       help="Session type: R=Race, S=Sprint, Q=Qualifying, SQ=SprintQuali")
+    parser.add_argument("session_type", choices=["R", "S", "Q", "SQ", "FP1", "FP2", "FP3"],
+                       help="Session type: R=Race, S=Sprint, Q=Qualifying, SQ=SprintQuali, FP1/FP2/FP3=Practice")
     parser.add_argument("--refresh", action="store_true", help="Force refresh data")
 
     args = parser.parse_args()
@@ -443,7 +525,7 @@ def main():
         emit_progress(5, f"Loading FastF1 session {args.year} R{args.round} {args.session_type}...")
 
         # Load session
-        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "SprintQualifying"}
+        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "SprintQualifying", "FP1": "Practice 1", "FP2": "Practice 2", "FP3": "Practice 3"}
         session = fastf1.get_session(args.year, args.round, session_map[args.session_type])
         session.load(telemetry=True, weather=True)
 
@@ -451,6 +533,15 @@ def main():
 
         # Extract raw data
         payload = extract_raw_telemetry(session, args.session_type)
+
+        if args.session_type in ("Q", "SQ"):
+            emit_progress(75, "Extracting qualifying segments...")
+            try:
+                quali_segments = extract_quali_segments(session)
+                payload["quali_segments"] = quali_segments
+            except Exception as e:
+                print(f"Warning: Could not extract qualifying segments: {e}", file=sys.stderr)
+                payload["quali_segments"] = {"Q1": {"duration": 0, "drivers": {}}, "Q2": {"duration": 0, "drivers": {}}, "Q3": {"duration": 0, "drivers": {}}}
 
         # Write to msgpack file
         emit_progress(80, "Writing telemetry to cache file...")

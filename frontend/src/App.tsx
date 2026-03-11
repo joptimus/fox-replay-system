@@ -244,15 +244,12 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
   if (isQualifying) {
     return (
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <VerticalNavMenu />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <ErrorBoundary>
-            <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING QUALIFYING...</div>}>
-              <QualiDashboard />
-            </Suspense>
-          </ErrorBoundary>
-        </div>
+      <>
+        <ErrorBoundary>
+          <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-page)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING QUALIFYING...</div>}>
+            <QualiDashboard onMenuOpen={() => setMenuOpen(true)} />
+          </Suspense>
+        </ErrorBoundary>
         <SidebarMenu
           isOpen={menuOpen}
           onClose={() => setMenuOpen(false)}
@@ -264,7 +261,7 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
           showSectorColors={showSectorColors}
           onToggleSectorColors={toggleSectorColors}
         />
-      </div>
+      </>
     );
   }
 

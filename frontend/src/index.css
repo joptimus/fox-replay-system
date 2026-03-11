@@ -734,6 +734,15 @@ html, body, #root {
   50% { opacity: 0.4; }
 }
 
+@keyframes quali-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.quali-blink {
+  animation: quali-blink 1.5s ease infinite;
+}
+
 /* --- REPLAY BADGE --- */
 .replay-badge {
   font-family: var(--font-mono);

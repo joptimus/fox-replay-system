@@ -1,13 +1,25 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useReplayStore } from "../store/replayStore";
 import { QualiSegmentName, QualiSegment, QualiSegments } from "../types";
 import { useQualiPlayback } from "../hooks/useQualiPlayback";
 import { QualiGhostRace } from "./QualiGhostRace";
 import { QualiLeaderboard } from "./QualiLeaderboard";
 import { QualiPlaybackControls } from "./QualiPlaybackControls";
-import { QualiSegmentTabs } from "./QualiSegmentTabs";
+import { QualiDriverDetailPanel } from "./QualiDriverDetailPanel";
+import { VerticalNavMenu } from "./VerticalNavMenu";
+import { Menu } from "lucide-react";
 
-export const QualiDashboard: React.FC = () => {
+const Q_CONFIG: Record<string, { duration: number; cutoff: number; eliminates: string | null }> = {
+  Q1: { duration: 18 * 60, cutoff: 15, eliminates: "P16\u2013P20" },
+  Q2: { duration: 15 * 60, cutoff: 10, eliminates: "P11\u2013P15" },
+  Q3: { duration: 12 * 60, cutoff: 10, eliminates: null },
+};
+
+interface QualiDashboardProps {
+  onMenuOpen: () => void;
+}
+
+export const QualiDashboard: React.FC<QualiDashboardProps> = ({ onMenuOpen }) => {
   const session = useReplayStore((state) => state.session);
   const metadata = session?.metadata;
 
@@ -43,13 +55,13 @@ export const QualiDashboard: React.FC = () => {
     const q2Drivers = new Set(Object.keys(qualiSegments.Q2?.drivers || {}));
     const q3Drivers = new Set(Object.keys(qualiSegments.Q3?.drivers || {}));
 
-    if (activeSegment === "Q1") {
-      return [];
-    } else if (activeSegment === "Q2") {
+    if (activeSegment === "Q1") return [];
+    if (activeSegment === "Q2") {
       return Object.keys(qualiSegments.Q1?.drivers || {}).filter(
         (code) => !q2Drivers.has(code)
       );
-    } else if (activeSegment === "Q3") {
+    }
+    if (activeSegment === "Q3") {
       return Object.keys(qualiSegments.Q1?.drivers || {}).filter(
         (code) => !q3Drivers.has(code)
       );
@@ -57,14 +69,37 @@ export const QualiDashboard: React.FC = () => {
     return [];
   }, [qualiSegments, activeSegment]);
 
-  const handleDriverClick = (code: string) => {
+  const onTrackDrivers = useMemo(() => {
+    if (!currentSegmentData) return new Set<string>();
+    const onTrack = new Set<string>();
+    for (const [code, data] of Object.entries(currentSegmentData.drivers)) {
+      if (data.frames.length === 0) continue;
+      const first = data.frames[0].t;
+      const last = data.frames[data.frames.length - 1].t;
+      if (currentTime >= first && currentTime <= last) {
+        onTrack.add(code);
+      }
+    }
+    return onTrack;
+  }, [currentSegmentData, currentTime]);
+
+  const handleDriverClick = useCallback((code: string) => {
     setSelectedDriver((prev) => (prev === code ? null : code));
-  };
+  }, []);
 
   if (!metadata || !qualiSegments) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white/50 font-mono">Loading qualifying data...</div>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-page)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '11px',
+        color: 'var(--text-faint)',
+      }}>
+        LOADING QUALIFYING...
       </div>
     );
   }
@@ -72,100 +107,219 @@ export const QualiDashboard: React.FC = () => {
   const hasQ1 = Object.keys(qualiSegments.Q1?.drivers || {}).length > 0;
   const hasQ2 = Object.keys(qualiSegments.Q2?.drivers || {}).length > 0;
   const hasQ3 = Object.keys(qualiSegments.Q3?.drivers || {}).length > 0;
+  const activeQ = activeSegment === "Progressive" ? "Q1" : activeSegment;
+  const qConfig = Q_CONFIG[activeQ];
+  const totalDrivers = currentSegmentData ? Object.keys(currentSegmentData.drivers).length : 0;
+
+  const formatElapsed = (t: number) => {
+    const mins = Math.floor(t / 60);
+    const secs = (t % 60).toFixed(1);
+    return `${mins}:${secs.padStart(4, "0")}`;
+  };
+
+  const segmentTabs: { name: QualiSegmentName; available: boolean }[] = [
+    { name: "Q1", available: hasQ1 },
+    { name: "Q2", available: hasQ2 },
+    { name: "Q3", available: hasQ3 },
+  ];
 
   return (
-    <div className="flex flex-col h-full bg-f1-black">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div>
-          <div className="text-f1-red font-bold font-mono text-sm">
-            QUALIFYING SESSION
-          </div>
-          <div className="text-white/50 text-xs font-mono">
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '48px 320px 1fr 300px',
+      gridTemplateRows: '48px 1fr 56px',
+      height: '100vh',
+      overflow: 'hidden',
+      background: 'var(--bg-page)',
+    }}>
+      {/* Top Bar */}
+      <header style={{
+        gridColumn: '1 / -1',
+        gridRow: '1',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: '#111119',
+        borderBottom: '1px solid rgba(255,255,255,0.055)',
+        padding: '0 16px 0 0',
+        height: '48px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={onMenuOpen}
+            style={{
+              width: '48px',
+              height: '48px',
+              background: 'transparent',
+              border: 'none',
+              color: '#666680',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Menu size={18} />
+          </button>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            color: '#e63946',
+            background: 'rgba(230,57,70,0.07)',
+            border: '1px solid rgba(230,57,70,0.15)',
+            borderRadius: '4px',
+            padding: '4px 10px',
+          }}>
+            QUALIFYING
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '14px',
+            fontWeight: 700,
+            color: '#e8e8ee',
+          }}>
             {metadata.year} Round {metadata.round}
-          </div>
+          </span>
         </div>
-        <QualiSegmentTabs
-          activeSegment={activeSegment}
-          onSegmentChange={setActiveSegment}
-          hasQ1={hasQ1}
-          hasQ2={hasQ2}
-          hasQ3={hasQ3}
+
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {segmentTabs.map((tab) => {
+            const isActive = activeSegment === tab.name;
+            return (
+              <button
+                key={tab.name}
+                onClick={() => tab.available && setActiveSegment(tab.name)}
+                disabled={!tab.available}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '6px',
+                  border: isActive
+                    ? '1px solid rgba(230,57,70,0.31)'
+                    : '1px solid rgba(255,255,255,0.055)',
+                  background: isActive
+                    ? 'rgba(230,57,70,0.09)'
+                    : 'rgba(255,255,255,0.03)',
+                  color: isActive ? '#e63946' : '#666680',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  cursor: tab.available ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s',
+                  opacity: tab.available ? 1 : 0.4,
+                }}
+              >
+                {tab.name}
+              </button>
+            );
+          })}
+        </div>
+      </header>
+
+      {/* Nav Rail */}
+      <div style={{ gridColumn: '1', gridRow: '2 / -1' }}>
+        <VerticalNavMenu />
+      </div>
+
+      {/* Timing Tower */}
+      <div style={{
+        gridColumn: '2',
+        gridRow: '2',
+        borderRight: '1px solid rgba(255,255,255,0.055)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        <QualiLeaderboard
+          drivers={drivers}
+          driverColors={driverColors}
+          selectedDriver={selectedDriver}
+          eliminatedDrivers={eliminatedDrivers}
+          onDriverClick={handleDriverClick}
+          cutoff={qConfig.cutoff}
+          activeSegment={activeQ}
+          eliminatesLabel={qConfig.eliminates}
+          onTrackDrivers={onTrackDrivers}
+          totalDrivers={totalDrivers}
         />
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <div className="w-64 border-r border-white/10 overflow-hidden">
-          <QualiLeaderboard
-            drivers={drivers}
-            driverColors={driverColors}
-            selectedDriver={selectedDriver}
-            eliminatedDrivers={eliminatedDrivers}
-            onDriverClick={handleDriverClick}
-          />
-        </div>
+      {/* Track (Three.js / Canvas) */}
+      <div style={{
+        gridColumn: '3',
+        gridRow: '2',
+        background: '#0a0a10',
+        position: 'relative',
+      }}>
+        <QualiGhostRace
+          trackGeometry={trackGeometry ?? null}
+          drivers={drivers}
+          driverColors={driverColors}
+          selectedDriver={selectedDriver}
+          eliminatedDrivers={eliminatedDrivers}
+          onDriverClick={handleDriverClick}
+        />
 
-        <div className="flex-1 relative h-full">
-          <QualiGhostRace
-            trackGeometry={trackGeometry ?? null}
-            drivers={drivers}
-            driverColors={driverColors}
-            selectedDriver={selectedDriver}
-            eliminatedDrivers={eliminatedDrivers}
-            onDriverClick={handleDriverClick}
-          />
-
-          {selectedDriver && (
-            <div className="absolute top-4 right-4 bg-black/80 border border-white/20 rounded-lg p-4 w-48">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-bold font-mono">{selectedDriver}</span>
-                <button
-                  onClick={() => setSelectedDriver(null)}
-                  className="text-white/50 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-              {(() => {
-                const d = drivers.find((d) => d.code === selectedDriver);
-                if (!d) return null;
-                return (
-                  <div className="space-y-2 text-sm font-mono">
-                    <div className="flex justify-between">
-                      <span className="text-white/50">Speed</span>
-                      <span>{d.speed.toFixed(0)} km/h</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/50">Gear</span>
-                      <span>{d.gear}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/50">Throttle</span>
-                      <span>{d.throttle.toFixed(0)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-white/50">Brake</span>
-                      <span>{d.brake.toFixed(0)}%</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+        {/* Session timer overlay */}
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          padding: '6px 12px',
+          borderRadius: '6px',
+          background: 'rgba(6,6,12,0.8)',
+          border: '1px solid rgba(255,255,255,0.055)',
+          backdropFilter: 'blur(12px)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          color: '#666680',
+          pointerEvents: 'none',
+        }}>
+          {activeQ} &middot; {formatElapsed(currentTime)}
         </div>
       </div>
 
-      <QualiPlaybackControls
-        currentTime={currentTime}
-        duration={duration}
-        isPlaying={isPlaying}
-        speed={speed}
-        onPlay={play}
-        onPause={pause}
-        onSeek={seek}
-        onSpeedChange={setSpeed}
-        onStepForward={stepForward}
-        onStepBackward={stepBackward}
-      />
+      {/* Driver Detail Panel */}
+      <div style={{
+        gridColumn: '4',
+        gridRow: '2',
+        background: '#111119',
+        borderLeft: '1px solid rgba(255,255,255,0.055)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        <QualiDriverDetailPanel
+          selectedDriver={selectedDriver}
+          drivers={drivers}
+          driverColors={driverColors}
+          onTrackDrivers={onTrackDrivers}
+        />
+      </div>
+
+      {/* Playback Bar */}
+      <div style={{
+        gridColumn: '2 / -1',
+        gridRow: '3',
+        borderTop: '1px solid rgba(255,255,255,0.055)',
+        background: 'rgba(12,12,18,0.5)',
+      }}>
+        <QualiPlaybackControls
+          currentTime={currentTime}
+          duration={duration}
+          isPlaying={isPlaying}
+          speed={speed}
+          onPlay={play}
+          onPause={pause}
+          onSeek={seek}
+          onSpeedChange={setSpeed}
+          onStepForward={stepForward}
+          onStepBackward={stepBackward}
+          sessionDuration={qConfig.duration}
+        />
+      </div>
     </div>
   );
 };

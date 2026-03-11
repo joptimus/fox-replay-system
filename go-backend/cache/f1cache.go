@@ -22,11 +22,19 @@ const (
 
 // F1CacheMetadata stores session-level information in the cache file
 type F1CacheMetadata struct {
-	Year        int    `json:"year"`
-	Round       int    `json:"round"`
-	SessionType string `json:"session_type"`
-	TotalFrames int    `json:"total_frames"`
-	TotalLaps   int    `json:"total_laps"`
+	Year          int                         `json:"year"`
+	Round         int                         `json:"round"`
+	SessionType   string                      `json:"session_type"`
+	TotalFrames   int                         `json:"total_frames"`
+	TotalLaps     int                         `json:"total_laps"`
+	DriverNumbers map[string]string           `json:"driver_numbers,omitempty"`
+	DriverTeams   map[string]string           `json:"driver_teams,omitempty"`
+	DriverColors  map[string][3]int           `json:"driver_colors,omitempty"`
+	TrackStatuses []map[string]interface{}    `json:"track_statuses,omitempty"`
+	TrackGeometry map[string]interface{}      `json:"track_geometry,omitempty"`
+	RaceStartTime *float64                    `json:"race_start_time,omitempty"`
+	WeatherData   map[string]interface{}      `json:"weather_data,omitempty"`
+	QualiSegments map[string]interface{}      `json:"quali_segments,omitempty"`
 }
 
 // F1CacheWriter writes frames to .f1cache format (binary + LZ4 compression)

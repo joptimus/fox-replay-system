@@ -210,11 +210,23 @@ export const useSelectedDriver = () =>
 export const useSessionMetadata = () =>
   useReplayStore((state) => state.session.metadata);
 
+export const useLeaderboardVisible = () =>
+  useReplayStore((state) => state.showLeaderboard);
+
+export const useToggleLeaderboard = () =>
+  useReplayStore((state) => state.toggleLeaderboard);
+
 export const useLeaderboard = () =>
   useReplayStore((state) => ({
     isVisible: state.showLeaderboard,
     toggle: state.toggleLeaderboard,
   }));
+
+export const useShowSectorColors = () =>
+  useReplayStore((state) => state.showSectorColors);
+
+export const useToggleSectorColors = () =>
+  useReplayStore((state) => state.toggleSectorColors);
 
 export const useSectorColors = () =>
   useReplayStore((state) => ({

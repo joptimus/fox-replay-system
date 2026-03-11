@@ -26,8 +26,8 @@ func NewHandler(sessionMgr *session.Manager, logger *zap.Logger) *Handler {
 		sessionMgr: sessionMgr,
 		logger:     logger,
 		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:  4096,
+			WriteBufferSize: 4 * 1024 * 1024,
 			CheckOrigin: func(r *http.Request) bool {
 				// Allow all origins for development
 				return true

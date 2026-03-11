@@ -113,10 +113,13 @@ export class SectorInteraction {
       meshArray.push(mesh);
     }
 
-    const intersects = this.raycaster.intersectObjects(meshArray, false);
-
-    for (const mesh of this.meshes.values()) {
-      mesh.visible = false;
+    let intersects: THREE.Intersection[];
+    try {
+      intersects = this.raycaster.intersectObjects(meshArray, false);
+    } finally {
+      for (const mesh of this.meshes.values()) {
+        mesh.visible = false;
+      }
     }
 
     if (intersects.length > 0) {

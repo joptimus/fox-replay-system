@@ -18,7 +18,6 @@ export class CameraController {
   private animEndTarget = new THREE.Vector3();
 
   constructor(
-    _scene: THREE.Scene,
     renderer: THREE.WebGLRenderer,
     container: HTMLElement,
   ) {

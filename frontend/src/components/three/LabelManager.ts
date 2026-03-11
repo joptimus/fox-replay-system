@@ -43,6 +43,7 @@ export class LabelManager {
     driverTeams?: Record<string, string>,
   ): void {
     if (this.driverLabel && this.driverAnchor) {
+      this.driverLabel.element.remove();
       this.driverAnchor.remove(this.driverLabel);
     }
     this.driverLabel = null;
@@ -112,6 +113,7 @@ export class LabelManager {
 
   showSectorLabel(sectorId: SectorId | null, position: THREE.Vector3): void {
     if (this.sectorLabel && this.sectorAnchor) {
+      this.sectorLabel.element.remove();
       this.scene.remove(this.sectorAnchor);
     }
     this.sectorLabel = null;
@@ -147,6 +149,7 @@ export class LabelManager {
 
   clearAll(): void {
     if (this.driverLabel && this.driverAnchor) {
+      this.driverLabel.element.remove();
       this.driverAnchor.remove(this.driverLabel);
     }
     this.driverLabel = null;
@@ -154,6 +157,7 @@ export class LabelManager {
     this.positionSpan = null;
 
     if (this.sectorLabel && this.sectorAnchor) {
+      this.sectorLabel.element.remove();
       this.scene.remove(this.sectorAnchor);
     }
     this.sectorLabel = null;

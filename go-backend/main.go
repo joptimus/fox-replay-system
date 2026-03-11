@@ -153,13 +153,24 @@ func handleCreateSessionRoute(
 
 				sess.SetFrames(frames)
 				sess.SetState(models.StateReady)
-				sess.SetMetadata(models.SessionMetadata{
+				meta := models.SessionMetadata{
 					Year:        req.Year,
 					Round:       req.RoundNum,
 					SessionType: req.SessionType,
 					TotalFrames: len(frames),
 					TotalLaps:   totalLaps,
-				})
+				}
+				if cacheMeta != nil {
+					meta.DriverNumbers = cacheMeta.DriverNumbers
+					meta.DriverTeams = cacheMeta.DriverTeams
+					meta.DriverColors = cacheMeta.DriverColors
+					meta.TrackStatuses = cacheMeta.TrackStatuses
+					meta.TrackGeometry = cacheMeta.TrackGeometry
+					meta.RaceStartTime = cacheMeta.RaceStartTime
+					meta.WeatherData = cacheMeta.WeatherData
+					meta.QualiSegments = cacheMeta.QualiSegments
+				}
+				sess.SetMetadata(meta)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -475,18 +486,6 @@ func generateCacheAsync(
 		return
 	}
 
-	cacheMeta := cache.F1CacheMetadata{
-		Year:        year,
-		Round:       round,
-		SessionType: sessionType,
-		TotalFrames: len(frames),
-		TotalLaps:   rawPayload.TotalLaps,
-	}
-	if writeErr := cacheReader.WriteFrames(year, round, sessionType, frames, cacheMeta); writeErr != nil {
-		logger.Warn("failed to write f1cache", zap.Error(writeErr), zap.String("sessionID", sessionID))
-	}
-
-	// Convert TrackStatuses to map format for frontend
 	trackStatusMaps := make([]map[string]interface{}, len(rawPayload.TrackStatuses))
 	for i, ts := range rawPayload.TrackStatuses {
 		trackStatusMaps[i] = map[string]interface{}{
@@ -496,13 +495,11 @@ func generateCacheAsync(
 		}
 	}
 
-	// Use track geometry computed by Python script
 	trackGeometry := map[string]interface{}{}
 	if rawPayload.TrackGeometry != nil && len(rawPayload.TrackGeometry) > 0 {
 		trackGeometry = rawPayload.TrackGeometry
 	}
 
-	// Convert WeatherData to map format for frontend
 	weatherData := map[string]interface{}{}
 	if rawPayload.WeatherData != nil && len(rawPayload.WeatherData) > 0 {
 		for key, val := range rawPayload.WeatherData {
@@ -510,10 +507,30 @@ func generateCacheAsync(
 		}
 	}
 
-	// RaceStartTime conversion
 	var raceStartTime *float64
 	if rawPayload.RaceStartTimeAbsolute > 0 {
 		raceStartTime = &rawPayload.RaceStartTimeAbsolute
+	}
+
+	cacheMeta := cache.F1CacheMetadata{
+		Year:          year,
+		Round:         round,
+		SessionType:   sessionType,
+		TotalFrames:   len(frames),
+		TotalLaps:     rawPayload.TotalLaps,
+		DriverNumbers: rawPayload.DriverNumbers,
+		DriverTeams:   rawPayload.DriverTeams,
+		DriverColors:  rawPayload.DriverColors,
+		TrackStatuses: trackStatusMaps,
+		TrackGeometry: trackGeometry,
+		RaceStartTime: raceStartTime,
+		WeatherData:   weatherData,
+		QualiSegments: rawPayload.QualiSegments,
+	}
+	if writeErr := cacheReader.WriteFrames(year, round, sessionType, frames, cacheMeta); writeErr != nil {
+		logger.Warn("failed to write f1cache", zap.Error(writeErr), zap.String("sessionID", sessionID))
+	} else if cacheFilePath != "" {
+		os.Remove(cacheFilePath)
 	}
 
 	sessionMeta := models.SessionMetadata{
@@ -529,6 +546,7 @@ func generateCacheAsync(
 		TrackGeometry: trackGeometry,
 		RaceStartTime: raceStartTime,
 		WeatherData:   weatherData,
+		QualiSegments: rawPayload.QualiSegments,
 	}
 
 	// Update session with generated frames
