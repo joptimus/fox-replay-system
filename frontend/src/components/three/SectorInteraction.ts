@@ -1,10 +1,6 @@
 import * as THREE from "three";
 import type { TrackGeometry as TrackGeometryData, SectorId } from "../../types";
-
-export interface SectorBoundaryIndices {
-  s1: number;
-  s2: number;
-}
+import type { SectorBoundaryIndices } from "./TrackGeometry";
 
 const SECTOR_COLORS: Record<SectorId, number> = {
   1: 0x1a8a8a,
