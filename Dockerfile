@@ -69,13 +69,6 @@ server {
         proxy_read_timeout 300s;
     }
 
-    # Proxy debug pages to Go backend
-    location /debug/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
     # Proxy WebSocket connections
     location /ws/ {
         proxy_pass http://127.0.0.1:8000;

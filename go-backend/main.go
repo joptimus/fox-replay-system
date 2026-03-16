@@ -75,8 +75,8 @@ func main() {
 	r.Post("/api/telemetry/sectors", handlePythonTelemetry("scripts/get_sector_times.py", logger))
 	r.Post("/api/telemetry/laps", handlePythonTelemetry("scripts/get_lap_telemetry.py", logger))
 
-	// Debug: FastF1 tester page and API
-	r.Get("/debug/fastf1-tester", handleStaticFile("backend/static/fastf1-tester.html"))
+	// FastF1 tester page and API
+	r.Get("/api/tester/fastf1.html", handleStaticFile("backend/static/fastf1.html"))
 	r.Get("/api/debug/fastf1-test", handleFastF1DebugTest(logger))
 
 	// WebSocket
