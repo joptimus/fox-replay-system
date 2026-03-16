@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Force LF for files used inside Docker containers
+*.sh text eol=lf
+nginx.conf text eol=lf
+entrypoint.sh text eol=lf
