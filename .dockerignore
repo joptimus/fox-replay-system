@@ -1,0 +1,13 @@
+node_modules
+frontend/node_modules
+frontend/dist
+go-backend/f1-replay-go
+go-backend/f1-replay-go.exe
+computed_data
+__pycache__
+*.pyc
+.git
+.vscode
+docs
+tests
+*.md

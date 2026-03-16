@@ -75,6 +75,10 @@ func main() {
 	r.Post("/api/telemetry/sectors", handlePythonTelemetry("scripts/get_sector_times.py", logger))
 	r.Post("/api/telemetry/laps", handlePythonTelemetry("scripts/get_lap_telemetry.py", logger))
 
+	// Debug: FastF1 tester page and API
+	r.Get("/debug/fastf1-tester", handleStaticFile("backend/static/fastf1-tester.html"))
+	r.Get("/api/debug/fastf1-test", handleFastF1DebugTest(logger))
+
 	// WebSocket
 	r.HandleFunc("/ws/replay/{session_id}", wsHandler.Handle)
 
@@ -558,6 +562,62 @@ func generateCacheAsync(
 		zap.String("sessionID", sessionID),
 		zap.Int("frames", len(frames)),
 	)
+}
+
+func handleStaticFile(relativePath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, relativePath)
+	}
+}
+
+func handleFastF1DebugTest(logger *zap.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year := r.URL.Query().Get("year")
+		roundNum := r.URL.Query().Get("round_num")
+		sessionType := r.URL.Query().Get("session_type")
+		method := r.URL.Query().Get("method")
+		driverCode := r.URL.Query().Get("driver_code")
+
+		if year == "" || roundNum == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "year and round_num are required"})
+			return
+		}
+		if sessionType == "" {
+			sessionType = "R"
+		}
+		if method == "" {
+			method = "load_session"
+		}
+
+		args := []string{"scripts/fastf1_debug_test.py", year, roundNum, sessionType, method}
+		if driverCode != "" {
+			args = append(args, driverCode)
+		}
+
+		cmd := exec.Command("python3", args...)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		logger.Info("Running FastF1 debug test",
+			zap.String("method", method),
+			zap.String("year", year),
+			zap.String("round", roundNum),
+		)
+
+		if err := cmd.Run(); err != nil {
+			logger.Error("FastF1 debug test failed", zap.Error(err), zap.String("stderr", stderr.String()))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Script failed: %s", stderr.String())})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(stdout.Bytes())
+	}
 }
 
 // handlePythonTelemetry creates a handler that runs a Python script for telemetry comparison data.

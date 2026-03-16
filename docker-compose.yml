@@ -1,0 +1,12 @@
+services:
+  fox-replay:
+    build: .
+    container_name: fox-replay
+    ports:
+      - "3100:80"
+    volumes:
+      - fox-replay-cache:/app/computed_data
+    restart: unless-stopped
+
+volumes:
+  fox-replay-cache:
