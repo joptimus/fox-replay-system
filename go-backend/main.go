@@ -590,7 +590,13 @@ func handleFastF1DebugTest(logger *zap.Logger) http.HandlerFunc {
 			method = "load_session"
 		}
 
-		args := []string{"scripts/fastf1_debug_test.py", year, roundNum, sessionType, method}
+		noCache := r.URL.Query().Get("no_cache")
+
+		args := []string{"scripts/fastf1_debug_test.py"}
+		if noCache == "true" || noCache == "1" {
+			args = append(args, "--no-cache")
+		}
+		args = append(args, year, roundNum, sessionType, method)
 		if driverCode != "" {
 			args = append(args, driverCode)
 		}

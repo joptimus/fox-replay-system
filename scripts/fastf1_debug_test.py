@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Standalone FastF1 debug tester - called by Go backend.
 
-Usage: python3 fastf1_debug_test.py <year> <round> <session_type> <method> [driver_code]
+Usage: python3 fastf1_debug_test.py <year> <round> <session_type> <method> [--no-cache] [driver_code]
 Outputs JSON to stdout.
 """
 
 import sys
+import os
 import json
 import traceback
 import time
@@ -14,10 +15,19 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from shared.telemetry.f1_data import load_session, enable_cache
+import fastf1
 import pandas as pd
 
-enable_cache()
+# Parse --no-cache before importing anything that triggers cache
+no_cache = "--no-cache" in sys.argv
+if no_cache:
+    sys.argv.remove("--no-cache")
+
+cache_dir = os.path.join(os.path.dirname(__file__), '..', '.fastf1-cache')
+os.makedirs(cache_dir, exist_ok=True)
+fastf1.Cache.enable_cache(cache_dir, force_renew=no_cache)
+
+from shared.telemetry.f1_data import load_session
 
 
 def safe_json(obj):
