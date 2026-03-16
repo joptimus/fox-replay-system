@@ -50,57 +50,10 @@ COPY backend/static/ /app/backend/static/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 
 # Nginx config - serve frontend and proxy API/WS to Go backend
-RUN cat > /etc/nginx/sites-available/default <<'NGINX'
-server {
-    listen 80;
+COPY nginx.conf /etc/nginx/sites-available/default
 
-    # Serve frontend static files
-    location / {
-        root /app/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Proxy API requests to Go backend
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_read_timeout 300s;
-    }
-
-    # Proxy WebSocket connections
-    location /ws/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 86400s;
-    }
-}
-NGINX
-
-# Create entrypoint script
-RUN cat > /app/entrypoint.sh <<'ENTRY'
-#!/bin/bash
-set -e
-
-# Create cache directory
-mkdir -p /app/computed_data
-
-# Start Go backend in background
-cd /app
-./go-backend/f1-replay-go \
-    --port 8000 \
-    --cache-dir /app/computed_data \
-    --python-bridge "http://127.0.0.1:8001" &
-
-# Start nginx in foreground
-nginx -g "daemon off;"
-ENTRY
-
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 WORKDIR /app
