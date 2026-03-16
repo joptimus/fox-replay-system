@@ -9,14 +9,15 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      - name: Fix directory ownership
+        run: git config --global --add safe.directory "${{ github.workspace }}"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix line endings
+      - name: Ensure LF line endings for Docker files
         run: |
-          git config core.autocrlf false
-          git rm --cached -r .
-          git reset --hard HEAD
+          sed -i 's/\r$//' entrypoint.sh nginx.conf
 
       - name: Rebuild and restart container
         run: |
