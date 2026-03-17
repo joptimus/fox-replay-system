@@ -70,6 +70,8 @@ export interface SessionMetadata {
   total_frames: number;
   total_laps: number;
   driver_colors: Record<string, [number, number, number]>;
+  driver_numbers?: Record<string, string>;
+  driver_teams?: Record<string, string>;
   track_geometry?: TrackGeometry;
   track_statuses?: TrackStatus[];
   race_start_time?: number;

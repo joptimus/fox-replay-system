@@ -27,13 +27,7 @@ const QualiDashboard = lazy(() => import("./components/QualiDashboard").then(m =
 const FP1Dashboard = lazy(() => import("./components/FP1Dashboard").then(m => ({ default: m.FP1Dashboard })));
 
 
-const getImageExtension = (year: number, imageType: 'driver' | 'number' = 'driver'): string => {
-  if (imageType === 'number') {
-    if (year >= 2025) return "avif";
-    if (year >= 2022) return "png";
-    return "png";
-  }
-
+const getImageExtension = (year: number): string => {
   if (year >= 2025) return "avif";
   if (year >= 2022) return "png";
   return "jpg";
@@ -67,21 +61,18 @@ const DriverImage = ({ year, code, ext }: { year: number; code: string; ext: str
 
 
 
-const DriverNumberImage = ({ year, number, ext }: { year: number; number: string; ext: string }) => {
-  const [imageError, setImageError] = useState(false);
-  const [tryingFallback, setTryingFallback] = useState(false);
+const NUMBER_EXTENSIONS = ['avif', 'png', 'webp', 'jpg'];
+
+const DriverNumberImage = ({ year, number }: { year: number; number: string }) => {
+  const [extIndex, setExtIndex] = useState(0);
 
   const handleError = () => {
-    if (!tryingFallback && ext !== 'png') {
-      setTryingFallback(true);
-    } else {
-      setImageError(true);
-    }
+    setExtIndex((prev) => prev + 1);
   };
 
-  const imageSrc = imageError
-    ? '/images/numbers/PLACEHOLDER.png'
-    : `/images/numbers/${year}/${number}.${tryingFallback ? 'png' : ext}`;
+  const imageSrc = extIndex < NUMBER_EXTENSIONS.length
+    ? `/images/numbers/${year}/${number}.${NUMBER_EXTENSIONS[extIndex]}`
+    : '/images/numbers/PLACEHOLDER.png';
 
   return (
     <img
@@ -95,6 +86,7 @@ const DriverNumberImage = ({ year, number, ext }: { year: number; number: string
 
 const DriverHero = ({ year }: { year?: number }) => {
   const selected = useSelectedDriver();
+  const metadata = useReplayStore((state) => state.session?.metadata);
 
   if (!selected) return (
     <div style={{
@@ -120,14 +112,13 @@ const DriverHero = ({ year }: { year?: number }) => {
   const teamColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
   const displayYear = year || 2025;
   const driver = year ? dataService.getDriverByCode(year, code) : null;
-  const driverNum = driver?.CarNumber || "0";
+  const driverNum = driver?.CarNumber || metadata?.driver_numbers?.[code] || "0";
   const fullName = year ? dataService.getDriverFullName(year, code) : code;
   const nameParts = fullName.split(' ');
   const lastName = nameParts[nameParts.length - 1] || code;
   const firstName = nameParts.slice(0, -1).join(' ') || code;
   const countryFlag = driver?.Country ? getDriverCountryFlagEmoji(driver.Country) : '';
-  const driverImgExt = getImageExtension(displayYear, 'driver');
-  const numberImgExt = getImageExtension(displayYear, 'number');
+  const driverImgExt = getImageExtension(displayYear);
 
   // Calculate accessible color (darker version) — same as original
   const accessibleColor = `rgb(${Math.max(0, color[0] - 80)}, ${Math.max(0, color[1] - 80)}, ${Math.max(0, color[2] - 80)})`;
@@ -183,7 +174,7 @@ const DriverHero = ({ year }: { year?: number }) => {
         </div>
 
         {/* Driver number image at bottom-left */}
-        <DriverNumberImage year={displayYear} number={driverNum} ext={numberImgExt} />
+        <DriverNumberImage year={displayYear} number={driverNum} />
       </div>
 
       {/* 3. PHOTO CONTENT — unchanged from original */}

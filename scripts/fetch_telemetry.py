@@ -146,6 +146,41 @@ def validate_driver_arrays(drivers_raw: dict):
             raise ValueError(f"driver {code} array length mismatch: expected {expected}, got {bad}")
 
 
+def extract_weather_times(session):
+    """Extract weather sample timestamps as seconds from session start."""
+    try:
+        wd = session.weather_data
+        if wd is None or wd.empty:
+            return []
+        return [to_seconds(t) for t in wd["Time"]]
+    except Exception as e:
+        print(f"Warning: Could not extract weather times: {e}", file=sys.stderr)
+        return []
+
+
+def extract_weather_data(session):
+    """Extract weather data arrays from FastF1 session.weather_data DataFrame."""
+    empty = {
+        "track_temp": [], "air_temp": [], "humidity": [],
+        "wind_speed": [], "wind_direction": [], "rainfall": [],
+    }
+    try:
+        wd = session.weather_data
+        if wd is None or wd.empty:
+            return empty
+        return {
+            "track_temp": [float(v) if not (isinstance(v, float) and v != v) else 0.0 for v in wd["TrackTemp"]],
+            "air_temp": [float(v) if not (isinstance(v, float) and v != v) else 0.0 for v in wd["AirTemp"]],
+            "humidity": [float(v) if not (isinstance(v, float) and v != v) else 0.0 for v in wd["Humidity"]],
+            "wind_speed": [float(v) if not (isinstance(v, float) and v != v) else 0.0 for v in wd["WindSpeed"]],
+            "wind_direction": [float(v) if not (isinstance(v, float) and v != v) else 0.0 for v in wd["WindDirection"]],
+            "rainfall": [1.0 if v else 0.0 for v in wd["Rainfall"]],
+        }
+    except Exception as e:
+        print(f"Warning: Could not extract weather data: {e}", file=sys.stderr)
+        return empty
+
+
 def extract_raw_telemetry(session, session_type: str):
     """
     Extract raw telemetry from FastF1 session.
@@ -441,15 +476,8 @@ def extract_raw_telemetry(session, session_type: str):
         "driver_numbers": driver_numbers,
         "driver_teams": driver_teams,
         "driver_lap_positions": {code: [1] * len(drivers_raw[code]["lap"]) for code in drivers_raw.keys()},
-        "weather_times": [],
-        "weather_data": {
-            "track_temp": [],
-            "air_temp": [],
-            "humidity": [],
-            "wind_speed": [],
-            "wind_direction": [],
-            "rainfall": []
-        },
+        "weather_times": extract_weather_times(session),
+        "weather_data": extract_weather_data(session),
         "race_start_time_absolute": 0.0,
         "total_laps": int(session.total_laps) if hasattr(session, 'total_laps') and session.total_laps else max([max(drivers_raw[code]["lap"]) for code in drivers_raw.keys()] + [1]),
         "track_geometry": track_geometry if track_geometry else {}
@@ -555,8 +583,13 @@ def main():
         emit_progress(5, f"Loading FastF1 session {args.year} R{args.round} {args.session_type}...")
 
         # Load session
-        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "SprintQualifying", "FP1": "Practice 1", "FP2": "Practice 2", "FP3": "Practice 3"}
-        session = fastf1.get_session(args.year, args.round, session_map[args.session_type])
+        session_map = {"R": "R", "S": "S", "Q": "Q", "SQ": "SQ", "FP1": "FP1", "FP2": "FP2", "FP3": "FP3"}
+        session_id = session_map.get(args.session_type, args.session_type)
+        try:
+            session = fastf1.get_session(args.year, args.round, session_id)
+        except ValueError as e:
+            emit_error(f"Session '{args.session_type}' does not exist for {args.year} round {args.round}. This may be a sprint weekend without this session.")
+            sys.exit(1)
         session.load(telemetry=True, weather=True)
 
         emit_progress(20, f"Extracting {args.session_type} telemetry...")
