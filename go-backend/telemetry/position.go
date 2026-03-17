@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"f1-replay-go/bridge"
 	"fmt"
 	"sort"
 	"sync"
@@ -381,9 +382,32 @@ func ApplyPositionSmoothingToFrames(frames []models.Frame, trackStatuses map[int
 func TrackStatusFromFrames(frames []models.Frame) map[int]string {
 	statuses := make(map[int]string)
 	for i := range frames {
-		// Track status would come from Python bridge in RawDataPayload
-		// For now, assume all frames are green (status "1")
 		statuses[i] = "1"
+	}
+	return statuses
+}
+
+// TrackStatusFromPayload builds a per-frame track status map using actual track status data
+func TrackStatusFromPayload(frames []models.Frame, trackStatuses []bridge.TrackStatus) map[int]string {
+	statuses := make(map[int]string)
+	if len(trackStatuses) == 0 {
+		for i := range frames {
+			statuses[i] = "1"
+		}
+		return statuses
+	}
+
+	tsIdx := 0
+	for i, frame := range frames {
+		t := frame.T
+		for tsIdx < len(trackStatuses)-1 && trackStatuses[tsIdx+1].StartTime <= t {
+			tsIdx++
+		}
+		if trackStatuses[tsIdx].StartTime <= t {
+			statuses[i] = trackStatuses[tsIdx].Status
+		} else {
+			statuses[i] = "1"
+		}
 	}
 	return statuses
 }

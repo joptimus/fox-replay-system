@@ -195,6 +195,7 @@ func handleCreateSessionRoute(
 					meta.TrackGeometry = cacheMeta.TrackGeometry
 					meta.RaceStartTime = cacheMeta.RaceStartTime
 					meta.WeatherData = cacheMeta.WeatherData
+					meta.RaceControlMessages = cacheMeta.RaceControlMessages
 					meta.QualiSegments = cacheMeta.QualiSegments
 				}
 				sess.SetMetadata(meta)
@@ -317,13 +318,21 @@ func generateCacheAsync(
 		close(sess.ProgressCh)
 	}()
 
-	logger.Info("Starting cache generation", zap.String("sessionID", sessionID))
+	logger.Info("Starting cache generation",
+		zap.String("sessionID", sessionID),
+		zap.Int("year", year),
+		zap.Int("round", round),
+		zap.String("sessionType", sessionType),
+	)
 
 	// Call Python FastF1 extractor (raw telemetry payload only)
 	args := []string{"scripts/fetch_telemetry.py", fmt.Sprintf("%d", year), fmt.Sprintf("%d", round), sessionType}
 	if refresh {
 		args = append(args, "--refresh")
 	}
+	logger.Info("Executing Python extractor",
+		zap.Strings("args", args),
+	)
 	cmd := exec.Command("python3", args...)
 
 	// Get stdout pipe to read output as it streams
@@ -517,8 +526,24 @@ func generateCacheAsync(
 	for i, ts := range rawPayload.TrackStatuses {
 		trackStatusMaps[i] = map[string]interface{}{
 			"status":     ts.Status,
+			"message":    ts.Message,
 			"start_time": ts.StartTime,
 			"end_time":   ts.EndTime,
+		}
+	}
+
+	raceControlMaps := make([]map[string]interface{}, len(rawPayload.RaceControlMessages))
+	for i, rcm := range rawPayload.RaceControlMessages {
+		raceControlMaps[i] = map[string]interface{}{
+			"time":           rcm.Time,
+			"category":       rcm.Category,
+			"message":        rcm.Message,
+			"flag":           rcm.Flag,
+			"scope":          rcm.Scope,
+			"sector":         rcm.Sector,
+			"racing_number":  rcm.RacingNumber,
+			"lap":            rcm.Lap,
+			"status":         rcm.Status,
 		}
 	}
 
@@ -540,19 +565,20 @@ func generateCacheAsync(
 	}
 
 	cacheMeta := cache.F1CacheMetadata{
-		Year:          year,
-		Round:         round,
-		SessionType:   sessionType,
-		TotalFrames:   len(frames),
-		TotalLaps:     rawPayload.TotalLaps,
-		DriverNumbers: rawPayload.DriverNumbers,
-		DriverTeams:   rawPayload.DriverTeams,
-		DriverColors:  rawPayload.DriverColors,
-		TrackStatuses: trackStatusMaps,
-		TrackGeometry: trackGeometry,
-		RaceStartTime: raceStartTime,
-		WeatherData:   weatherData,
-		QualiSegments: rawPayload.QualiSegments,
+		Year:                year,
+		Round:               round,
+		SessionType:         sessionType,
+		TotalFrames:         len(frames),
+		TotalLaps:           rawPayload.TotalLaps,
+		DriverNumbers:       rawPayload.DriverNumbers,
+		DriverTeams:         rawPayload.DriverTeams,
+		DriverColors:        rawPayload.DriverColors,
+		TrackStatuses:       trackStatusMaps,
+		TrackGeometry:       trackGeometry,
+		RaceStartTime:       raceStartTime,
+		WeatherData:         weatherData,
+		RaceControlMessages: raceControlMaps,
+		QualiSegments:       rawPayload.QualiSegments,
 	}
 	if writeErr := cacheReader.WriteFrames(year, round, sessionType, frames, cacheMeta); writeErr != nil {
 		logger.Warn("failed to write f1cache", zap.Error(writeErr), zap.String("sessionID", sessionID))
@@ -561,19 +587,20 @@ func generateCacheAsync(
 	}
 
 	sessionMeta := models.SessionMetadata{
-		Year:          year,
-		Round:         round,
-		SessionType:   sessionType,
-		TotalLaps:     rawPayload.TotalLaps,
-		TotalFrames:   len(frames),
-		DriverNumbers: rawPayload.DriverNumbers,
-		DriverTeams:   rawPayload.DriverTeams,
-		DriverColors:  rawPayload.DriverColors,
-		TrackStatuses: trackStatusMaps,
-		TrackGeometry: trackGeometry,
-		RaceStartTime: raceStartTime,
-		WeatherData:   weatherData,
-		QualiSegments: rawPayload.QualiSegments,
+		Year:                year,
+		Round:               round,
+		SessionType:         sessionType,
+		TotalLaps:           rawPayload.TotalLaps,
+		TotalFrames:         len(frames),
+		DriverNumbers:       rawPayload.DriverNumbers,
+		DriverTeams:         rawPayload.DriverTeams,
+		DriverColors:        rawPayload.DriverColors,
+		TrackStatuses:       trackStatusMaps,
+		TrackGeometry:       trackGeometry,
+		RaceStartTime:       raceStartTime,
+		WeatherData:         weatherData,
+		RaceControlMessages: raceControlMaps,
+		QualiSegments:       rawPayload.QualiSegments,
 	}
 
 	// Update session with generated frames

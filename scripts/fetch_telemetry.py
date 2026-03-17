@@ -18,15 +18,22 @@ Output:
     - Progress on stdout: JSON-lines with type, pct, msg
 """
 
+import os
 import sys
 import json
 import argparse
 from pathlib import Path
 import msgpack
-import fastf1
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Configure FastF1 cache before importing anything else that triggers it
+_cache_dir = os.path.join(os.path.dirname(__file__), '..', '.fastf1-cache')
+os.makedirs(_cache_dir, exist_ok=True)
+
+import fastf1
+fastf1.Cache.enable_cache(_cache_dir)
 
 
 def emit_progress(pct: int, msg: str):
@@ -144,6 +151,69 @@ def validate_driver_arrays(drivers_raw: dict):
         bad = {k: v for k, v in lengths.items() if v != expected}
         if bad:
             raise ValueError(f"driver {code} array length mismatch: expected {expected}, got {bad}")
+
+
+def extract_track_statuses(session):
+    """Extract track status changes (green, yellow, SC, VSC, red) with proper time ranges."""
+    try:
+        import pandas as pd
+        # Use session.track_status — the actual track condition changes
+        # NOT session.get_session_status() which is session lifecycle (Started/Finished)
+        ts = session.track_status
+        if ts is None or ts.empty:
+            return [{"status": "1", "start_time": 0, "end_time": 999999}]
+
+        statuses = []
+        rows = list(ts.iterrows())
+        for idx, (_, row) in enumerate(rows):
+            start_time = to_seconds(row.get("Time", 0))
+            # End time = start of next status change, or large number for last entry
+            if idx + 1 < len(rows):
+                end_time = to_seconds(rows[idx + 1][1].get("Time", 0))
+            else:
+                end_time = 999999.0
+
+            status_code = str(row.get("Status", "1"))
+            message = str(row.get("Message", "")) if pd.notna(row.get("Message")) else ""
+
+            statuses.append({
+                "status": status_code,
+                "message": message,
+                "start_time": start_time,
+                "end_time": end_time,
+            })
+        return statuses
+    except Exception as e:
+        print(f"Warning: Could not extract track statuses: {e}", file=sys.stderr)
+        return [{"status": "1", "start_time": 0, "end_time": 999999}]
+
+
+def extract_race_control_messages(session):
+    """Extract race control messages: flags, incidents, DRS, penalties."""
+    try:
+        import pandas as pd
+        rcm = session.race_control_messages
+        if rcm is None or rcm.empty:
+            return []
+
+        messages = []
+        for _, row in rcm.iterrows():
+            msg = {
+                "time": to_seconds(row.get("Time", 0)),
+                "category": str(row.get("Category", "")) if pd.notna(row.get("Category")) else "",
+                "message": str(row.get("Message", "")) if pd.notna(row.get("Message")) else "",
+                "flag": str(row.get("Flag", "")) if pd.notna(row.get("Flag")) else "",
+                "scope": str(row.get("Scope", "")) if pd.notna(row.get("Scope")) else "",
+                "sector": int(row["Sector"]) if pd.notna(row.get("Sector")) else 0,
+                "racing_number": str(row.get("RacingNumber", "")) if pd.notna(row.get("RacingNumber")) else "",
+                "lap": int(row["Lap"]) if pd.notna(row.get("Lap")) else 0,
+                "status": str(row.get("Status", "")) if pd.notna(row.get("Status")) else "",
+            }
+            messages.append(msg)
+        return messages
+    except Exception as e:
+        print(f"Warning: Could not extract race control messages: {e}", file=sys.stderr)
+        return []
 
 
 def extract_weather_times(session):
@@ -427,17 +497,11 @@ def extract_raw_telemetry(session, session_type: str):
     if drivers_with_no_sectors:
         print(f"Warning: {len(drivers_with_no_sectors)} drivers have all-zero sector times: {', '.join(drivers_with_no_sectors)}", file=sys.stderr)
 
-    # Get track status
-    try:
-        track_statuses = []
-        for _, row in session.get_session_status().iterrows():
-            track_statuses.append({
-                "status": str(row.get("Status", "1")),
-                "start_time": to_seconds(row.get("Time", 0)),
-                "end_time": to_seconds(row.get("Time", 0))
-            })
-    except Exception:
-        track_statuses = [{"status": "1", "start_time": 0, "end_time": 999999}]
+    # Get track status from session.track_status (NOT session.get_session_status which is lifecycle)
+    track_statuses = extract_track_statuses(session)
+
+    # Get race control messages (flags, incidents, DRS, penalties)
+    race_control_messages = extract_race_control_messages(session)
 
     # Build track geometry from fastest lap
     track_geometry = None
@@ -494,6 +558,7 @@ def extract_raw_telemetry(session, session_type: str):
         "drivers": drivers_raw,
         "timing": timing_data,
         "track_statuses": track_statuses,
+        "race_control_messages": race_control_messages,
         "driver_colors": driver_colors,
         "driver_numbers": driver_numbers,
         "driver_teams": driver_teams,
@@ -601,22 +666,66 @@ def main():
 
     args = parser.parse_args()
 
+    # Re-enable cache with force_renew if --refresh was passed
+    if args.refresh:
+        fastf1.Cache.enable_cache(_cache_dir, force_renew=True)
+
     try:
         emit_progress(5, f"Loading FastF1 session {args.year} R{args.round} {args.session_type}...")
 
-        # Load session
-        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "Sprint Qualifying", "FP1": "Practice 1", "FP2": "Practice 2", "FP3": "Practice 3"}
-        session_name = session_map.get(args.session_type, args.session_type)
+        # Load session — use abbreviations directly (R, S, Q, etc.)
+        # FastF1 accepts these natively and the tester confirms they work
+        session_name = args.session_type
+
+        print(f"DEBUG: args received: year={args.year} round={args.round} session_type='{args.session_type}'", file=sys.stderr)
+        print(f"DEBUG: mapped session_name='{session_name}'", file=sys.stderr)
+
         try:
             session = fastf1.get_session(args.year, args.round, session_name)
         except ValueError as e:
-            emit_error(f"Session '{args.session_type}' does not exist for {args.year} round {args.round}. This may be a sprint weekend without this session.")
+            emit_error(f"Session '{args.session_type}' ({session_name}) does not exist for {args.year} round {args.round}. This may be a sprint weekend without this session.")
             sys.exit(1)
-        session.load(telemetry=True, weather=True)
 
-        # Verify that telemetry data actually loaded (future/unavailable races won't have data)
-        if session.laps is None or session.laps.empty:
-            emit_error(f"No lap data available for {args.year} round {args.round} {args.session_type}. The session may not have occurred yet.")
+        print(f"DEBUG: fastf1.get_session({args.year}, {args.round}, '{session_name}') returned: {session}", file=sys.stderr)
+        print(f"DEBUG: session.event.EventName: {session.event.EventName if hasattr(session.event, 'EventName') else 'N/A'}", file=sys.stderr)
+        print(f"DEBUG: session.name: {session.name if hasattr(session, 'name') else 'N/A'}", file=sys.stderr)
+        print(f"DEBUG: session.f1_api_support: {session.f1_api_support if hasattr(session, 'f1_api_support') else 'N/A'}", file=sys.stderr)
+        print(f"DEBUG: calling session.load(telemetry=True, weather=True)...", file=sys.stderr)
+
+        # Try loading with retries — FastF1 car data fetch can be flaky
+        max_load_attempts = 2
+        telemetry_ok = False
+        for attempt in range(max_load_attempts):
+            session.load(telemetry=True, weather=True)
+
+            print(f"DEBUG: session.load() attempt {attempt + 1} complete. laps count: {len(session.laps) if session.laps is not None else 'None'}", file=sys.stderr)
+
+            if session.laps is None or session.laps.empty:
+                emit_error(f"No lap data available for {args.year} round {args.round} {args.session_type}. The session may not have occurred yet.")
+                sys.exit(1)
+
+            print(f"DEBUG: drivers: {list(session.laps['Driver'].unique())}", file=sys.stderr)
+
+            # Verify telemetry is actually accessible
+            try:
+                test_lap = session.laps.iloc[0]
+                test_tel = test_lap.get_telemetry()
+                if test_tel is not None and not test_tel.empty:
+                    print(f"DEBUG: telemetry check passed, {len(test_tel)} samples for first lap", file=sys.stderr)
+                    telemetry_ok = True
+                    break
+            except Exception:
+                pass
+
+            if attempt < max_load_attempts - 1:
+                print(f"DEBUG: telemetry not available, enabling force_renew and retrying...", file=sys.stderr)
+                # Force FastF1 to re-download all data (same as tester's no_cache mode)
+                fastf1.Cache.enable_cache(_cache_dir, force_renew=True)
+                # Re-create the session object to get a fresh state
+                session = fastf1.get_session(args.year, args.round, session_name)
+
+        if not telemetry_ok:
+            emit_error(f"Telemetry data is not available for {args.year} round {args.round} {args.session_type}. FastF1 reports: 'Failed to load telemetry data'. The data may not have been published yet, or try clearing the FastF1 cache.")
             sys.exit(1)
 
         emit_progress(20, f"Extracting {args.session_type} telemetry...")

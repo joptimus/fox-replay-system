@@ -251,10 +251,10 @@ func (fg *FrameGenerator) Generate(
 	// Attach weather data to frames
 	attachWeatherToFrames(frames, timeline, payload.WeatherTimes, payload.WeatherData)
 
-	// Apply smoothing
+	// Apply smoothing using actual track status data
 	t5 := time.Now()
-	trackStatuses := TrackStatusFromFrames(frames)
-	fg.logger.Info("[TIMING] TrackStatusFromFrames",
+	trackStatuses := TrackStatusFromPayload(frames, payload.TrackStatuses)
+	fg.logger.Info("[TIMING] TrackStatusFromPayload",
 		zap.Float64("durationSec", time.Since(t5).Seconds()),
 	)
 

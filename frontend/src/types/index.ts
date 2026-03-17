@@ -70,8 +70,21 @@ export interface TrackGeometry {
 
 export interface TrackStatus {
   status: string;
+  message?: string;
   start_time: number;
   end_time: number | null;
+}
+
+export interface RaceControlMessage {
+  time: number;
+  category: string;  // "Flag", "Drs", "CarEvent", "Other"
+  message: string;
+  flag?: string;     // "GREEN", "YELLOW", "DOUBLE YELLOW", "RED", "BLUE", "CLEAR", "CHEQUERED", "BLACK AND WHITE"
+  scope?: string;    // "Track", "Sector", "Driver"
+  sector?: number;   // 1, 2, or 3 (when scope is "Sector")
+  racing_number?: string;  // driver number (for CarEvent/Driver scope)
+  lap?: number;
+  status?: string;   // e.g. "DISABLED" for DRS
 }
 
 export interface SessionMetadata {
@@ -85,6 +98,7 @@ export interface SessionMetadata {
   driver_teams?: Record<string, string>;
   track_geometry?: TrackGeometry;
   track_statuses?: TrackStatus[];
+  race_control_messages?: RaceControlMessage[];
   race_start_time?: number;
   quali_segments?: QualiSegments;
   error?: string;

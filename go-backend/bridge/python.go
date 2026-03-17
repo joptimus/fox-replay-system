@@ -37,6 +37,7 @@ type RawDataPayload struct {
 	Drivers                map[string]RawDriverData `json:"drivers" msgpack:"drivers"`
 	Timing                 TimingData               `json:"timing" msgpack:"timing"`
 	TrackStatuses          []TrackStatus            `json:"track_statuses" msgpack:"track_statuses"`
+	RaceControlMessages    []RaceControlMessage     `json:"race_control_messages,omitempty" msgpack:"race_control_messages,omitempty"`
 	DriverColors           map[string][3]int        `json:"driver_colors" msgpack:"driver_colors"`
 	DriverLapPositions     map[string][]int         `json:"driver_lap_positions" msgpack:"driver_lap_positions"`
 	DriverNumbers          map[string]string        `json:"driver_numbers" msgpack:"driver_numbers"`
@@ -71,8 +72,22 @@ type TrackGeometryData struct {
 // TrackStatus represents track status information
 type TrackStatus struct {
 	Status    string  `json:"status" msgpack:"status"`
+	Message   string  `json:"message,omitempty" msgpack:"message,omitempty"`
 	StartTime float64 `json:"start_time" msgpack:"start_time"`
 	EndTime   float64 `json:"end_time" msgpack:"end_time"`
+}
+
+// RaceControlMessage represents a single race control event
+type RaceControlMessage struct {
+	Time          float64 `json:"time" msgpack:"time"`
+	Category      string  `json:"category" msgpack:"category"`
+	Message       string  `json:"message" msgpack:"message"`
+	Flag          string  `json:"flag,omitempty" msgpack:"flag,omitempty"`
+	Scope         string  `json:"scope,omitempty" msgpack:"scope,omitempty"`
+	Sector        int     `json:"sector,omitempty" msgpack:"sector,omitempty"`
+	RacingNumber  string  `json:"racing_number,omitempty" msgpack:"racing_number,omitempty"`
+	Lap           int     `json:"lap,omitempty" msgpack:"lap,omitempty"`
+	Status        string  `json:"status,omitempty" msgpack:"status,omitempty"`
 }
 
 // ProgressMessage represents a progress update from Python

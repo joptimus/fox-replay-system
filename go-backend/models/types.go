@@ -111,8 +111,9 @@ type SessionMetadata struct {
 	TrackStatuses     []map[string]interface{}    `json:"track_statuses,omitempty"`
 	TrackGeometry     map[string]interface{}      `json:"track_geometry,omitempty"`
 	RaceStartTime     *float64                    `json:"race_start_time,omitempty"`
-	WeatherData       map[string]interface{}      `json:"weather_data,omitempty"`
-	QualiSegments     map[string]interface{}      `json:"quali_segments,omitempty"`
+	WeatherData          map[string]interface{}      `json:"weather_data,omitempty"`
+	RaceControlMessages  []map[string]interface{}   `json:"race_control_messages,omitempty"`
+	QualiSegments        map[string]interface{}      `json:"quali_segments,omitempty"`
 }
 
 // GetState returns the current session state
