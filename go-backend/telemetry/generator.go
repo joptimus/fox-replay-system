@@ -7,16 +7,18 @@ import (
 
 	"f1-replay-go/bridge"
 	"f1-replay-go/models"
+
+	"go.uber.org/zap"
 )
 
 // FrameGenerator orchestrates frame generation from raw telemetry data
 type FrameGenerator struct {
-	logger interface{} // Would be *zap.Logger in production
+	logger *zap.Logger
 }
 
 // NewFrameGenerator creates a new frame generator
-func NewFrameGenerator() *FrameGenerator {
-	return &FrameGenerator{}
+func NewFrameGenerator(logger *zap.Logger) *FrameGenerator {
+	return &FrameGenerator{logger: logger}
 }
 
 // Generate creates frames from raw telemetry payload
@@ -25,7 +27,12 @@ func (fg *FrameGenerator) Generate(
 	sessionType string,
 ) ([]models.Frame, error) {
 	startTime := time.Now()
-	fmt.Printf("\n[TIMING] Generate() starting...\n")
+	fg.logger.Info("[TIMING] Generate() starting",
+		zap.String("sessionType", sessionType),
+		zap.Int("driverCount", len(payload.Drivers)),
+		zap.Float64("globalTMin", payload.GlobalTMin),
+		zap.Float64("globalTMax", payload.GlobalTMax),
+	)
 
 	if err := payload.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -35,9 +42,16 @@ func (fg *FrameGenerator) Generate(
 	t1 := time.Now()
 	timeline := CreateTimeline(payload.GlobalTMin, payload.GlobalTMax)
 	if len(timeline) == 0 {
-		return nil, fmt.Errorf("empty timeline")
+		fg.logger.Error("empty timeline",
+			zap.Float64("globalTMin", payload.GlobalTMin),
+			zap.Float64("globalTMax", payload.GlobalTMax),
+		)
+		return nil, fmt.Errorf("empty timeline (tMin=%.2f, tMax=%.2f)", payload.GlobalTMin, payload.GlobalTMax)
 	}
-	fmt.Printf("[TIMING] CreateTimeline: %.2fs (frames: %d)\n", time.Since(t1).Seconds(), len(timeline))
+	fg.logger.Info("[TIMING] CreateTimeline",
+		zap.Float64("durationSec", time.Since(t1).Seconds()),
+		zap.Int("frames", len(timeline)),
+	)
 
 	// Resample all driver data to timeline
 	t2 := time.Now()
@@ -63,7 +77,11 @@ func (fg *FrameGenerator) Generate(
 		resampled, err := ResampleDriverData(code, origT, driverData, timeline)
 		driverTime := time.Since(driverStartTime).Seconds()
 		if driverTime > 1.0 {
-			fmt.Printf("[TIMING]   ResampleDriverData(%s): %.2fs\n", code, driverTime)
+			fg.logger.Warn("[TIMING] slow ResampleDriverData",
+				zap.String("driver", code),
+				zap.Float64("durationSec", driverTime),
+				zap.Int("sampleCount", len(origT)),
+			)
 		}
 
 		if err != nil {
@@ -72,7 +90,10 @@ func (fg *FrameGenerator) Generate(
 
 		resampledDrivers[code] = resampled
 	}
-	fmt.Printf("[TIMING] ResampleAllDrivers: %.2fs (%d drivers)\n", time.Since(t2).Seconds(), len(resampledDrivers))
+	fg.logger.Info("[TIMING] ResampleAllDrivers",
+		zap.Float64("durationSec", time.Since(t2).Seconds()),
+		zap.Int("driverCount", len(resampledDrivers)),
+	)
 
 	// Extract and resample timing data (gap, position, sectors) to uniform timeline
 	// Timing arrays are aligned to each driver's original time base, so they must
@@ -83,13 +104,58 @@ func (fg *FrameGenerator) Generate(
 		origT := payload.Drivers[code].T
 
 		// Resample each timing array to the uniform timeline using step interpolation
-		resGap, _ := ResampleFloat64Step(timeline, origT, payload.Timing.GapByDriver[code])
-		resPosRaw, _ := ResampleInt(timeline, origT, payload.Timing.PosByDriver[code])
-		resInterval, _ := ResampleFloat64Step(timeline, origT, payload.Timing.IntervalSmoothByDriver[code])
-		resLapTime, _ := ResampleFloat64Step(timeline, origT, payload.Timing.LapTimeByDriver[code])
-		resSector1, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector1ByDriver[code])
-		resSector2, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector2ByDriver[code])
-		resSector3, _ := ResampleFloat64Step(timeline, origT, payload.Timing.Sector3ByDriver[code])
+		// Log warnings for any timing fields that have no data
+		resGap, errGap := ResampleFloat64Step(timeline, origT, payload.Timing.GapByDriver[code])
+		resPosRaw, errPos := ResampleInt(timeline, origT, payload.Timing.PosByDriver[code])
+		resInterval, errInt := ResampleFloat64Step(timeline, origT, payload.Timing.IntervalSmoothByDriver[code])
+		resLapTime, errLT := ResampleFloat64Step(timeline, origT, payload.Timing.LapTimeByDriver[code])
+		resSector1, errS1 := ResampleFloat64Step(timeline, origT, payload.Timing.Sector1ByDriver[code])
+		resSector2, errS2 := ResampleFloat64Step(timeline, origT, payload.Timing.Sector2ByDriver[code])
+		resSector3, errS3 := ResampleFloat64Step(timeline, origT, payload.Timing.Sector3ByDriver[code])
+
+		// Log which timing fields are missing or failed for this driver
+		missingFields := []string{}
+		if len(payload.Timing.GapByDriver[code]) == 0 {
+			missingFields = append(missingFields, "gap")
+		} else if errGap != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "gap"), zap.Error(errGap))
+		}
+		if len(payload.Timing.PosByDriver[code]) == 0 {
+			missingFields = append(missingFields, "pos")
+		} else if errPos != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "pos"), zap.Error(errPos))
+		}
+		if len(payload.Timing.IntervalSmoothByDriver[code]) == 0 {
+			missingFields = append(missingFields, "interval")
+		} else if errInt != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "interval"), zap.Error(errInt))
+		}
+		if len(payload.Timing.LapTimeByDriver[code]) == 0 {
+			missingFields = append(missingFields, "lap_time")
+		} else if errLT != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "lap_time"), zap.Error(errLT))
+		}
+		if len(payload.Timing.Sector1ByDriver[code]) == 0 {
+			missingFields = append(missingFields, "sector1")
+		} else if errS1 != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "sector1"), zap.Error(errS1))
+		}
+		if len(payload.Timing.Sector2ByDriver[code]) == 0 {
+			missingFields = append(missingFields, "sector2")
+		} else if errS2 != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "sector2"), zap.Error(errS2))
+		}
+		if len(payload.Timing.Sector3ByDriver[code]) == 0 {
+			missingFields = append(missingFields, "sector3")
+		} else if errS3 != nil {
+			fg.logger.Warn("timing resample error", zap.String("driver", code), zap.String("field", "sector3"), zap.Error(errS3))
+		}
+		if len(missingFields) > 0 {
+			fg.logger.Warn("driver missing timing data",
+				zap.String("driver", code),
+				zap.Strings("missingFields", missingFields),
+			)
+		}
 
 		timing := make([]map[string]interface{}, len(timeline))
 		for i := 0; i < len(timeline); i++ {
@@ -105,7 +171,9 @@ func (fg *FrameGenerator) Generate(
 		}
 		timingByDriver[code] = timing
 	}
-	fmt.Printf("[TIMING] ExtractTimingData: %.2fs\n", time.Since(t3).Seconds())
+	fg.logger.Info("[TIMING] ExtractTimingData",
+		zap.Float64("durationSec", time.Since(t3).Seconds()),
+	)
 
 	// Generate frames
 	t4 := time.Now()
@@ -175,18 +243,30 @@ func (fg *FrameGenerator) Generate(
 
 		frames[i] = frame
 	}
-	fmt.Printf("[TIMING] GenerateFrames (loop): %.2fs (%d frames)\n", time.Since(t4).Seconds(), len(frames))
+	fg.logger.Info("[TIMING] GenerateFrames (loop)",
+		zap.Float64("durationSec", time.Since(t4).Seconds()),
+		zap.Int("frames", len(frames)),
+	)
 
 	// Apply smoothing
 	t5 := time.Now()
 	trackStatuses := TrackStatusFromFrames(frames)
-	fmt.Printf("[TIMING] TrackStatusFromFrames: %.2fs\n", time.Since(t5).Seconds())
+	fg.logger.Info("[TIMING] TrackStatusFromFrames",
+		zap.Float64("durationSec", time.Since(t5).Seconds()),
+	)
 
 	t6 := time.Now()
 	ApplyPositionSmoothingToFrames(frames, trackStatuses)
-	fmt.Printf("[TIMING] ApplyPositionSmoothingToFrames: %.2fs\n", time.Since(t6).Seconds())
+	fg.logger.Info("[TIMING] ApplyPositionSmoothingToFrames",
+		zap.Float64("durationSec", time.Since(t6).Seconds()),
+	)
 
-	fmt.Printf("[TIMING] Total Generate(): %.2fs\n\n", time.Since(startTime).Seconds())
+	fg.logger.Info("[TIMING] Total Generate()",
+		zap.Float64("durationSec", time.Since(startTime).Seconds()),
+		zap.Int("totalFrames", len(frames)),
+		zap.Int("driverCount", len(resampledDrivers)),
+		zap.String("sessionType", sessionType),
+	)
 
 	return frames, nil
 }

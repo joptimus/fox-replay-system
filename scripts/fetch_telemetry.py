@@ -235,8 +235,16 @@ def extract_raw_telemetry(session, session_type: str):
         driver_laps = laps[laps["Driver"] == code].sort_values("LapNumber")
 
         if driver_laps.empty:
+            print(f"Warning: No laps found for driver {code} ({sample_count} samples) — timing data will be zeros", file=sys.stderr)
             drivers_raw[code]["lap"] = [1] * sample_count
             drivers_raw[code]["tyre"] = [0] * sample_count
+            drivers_raw[code]["_pos"] = [0] * sample_count
+            drivers_raw[code]["_gap"] = [0.0] * sample_count
+            drivers_raw[code]["_interval"] = [0.0] * sample_count
+            drivers_raw[code]["_lap_time"] = [0.0] * sample_count
+            drivers_raw[code]["_sector1"] = [0.0] * sample_count
+            drivers_raw[code]["_sector2"] = [0.0] * sample_count
+            drivers_raw[code]["_sector3"] = [0.0] * sample_count
             continue
 
         # Compute time offset: session.laps["Time"] is absolute session time,
@@ -293,8 +301,16 @@ def extract_raw_telemetry(session, session_type: str):
                 })
 
         if not lap_boundaries:
+            print(f"Warning: No lap boundaries for driver {code} ({sample_count} samples) — timing data will be zeros", file=sys.stderr)
             drivers_raw[code]["lap"] = [1] * sample_count
             drivers_raw[code]["tyre"] = [0] * sample_count
+            drivers_raw[code]["_pos"] = [0] * sample_count
+            drivers_raw[code]["_gap"] = [0.0] * sample_count
+            drivers_raw[code]["_interval"] = [0.0] * sample_count
+            drivers_raw[code]["_lap_time"] = [0.0] * sample_count
+            drivers_raw[code]["_sector1"] = [0.0] * sample_count
+            drivers_raw[code]["_sector2"] = [0.0] * sample_count
+            drivers_raw[code]["_sector3"] = [0.0] * sample_count
             continue
 
         # Sort by end time and use searchsorted to assign each sample to a lap
@@ -361,6 +377,20 @@ def extract_raw_telemetry(session, session_type: str):
         timing_data["sector2_by_driver"][code] = drivers_raw[code].pop("_sector2", [0.0] * sample_count)
         timing_data["sector3_by_driver"][code] = drivers_raw[code].pop("_sector3", [0.0] * sample_count)
         timing_data["abs_timeline"].extend(drivers_raw[code]["t"])
+
+    # Log summary of timing data quality
+    drivers_with_no_gap = [c for c in timing_data["gap_by_driver"] if all(v == 0.0 for v in timing_data["gap_by_driver"][c])]
+    drivers_with_no_pos = [c for c in timing_data["pos_by_driver"] if all(v == 0 for v in timing_data["pos_by_driver"][c])]
+    drivers_with_no_sectors = [c for c in timing_data["sector1_by_driver"]
+                               if all(v == 0.0 for v in timing_data["sector1_by_driver"][c])
+                               and all(v == 0.0 for v in timing_data["sector2_by_driver"][c])
+                               and all(v == 0.0 for v in timing_data["sector3_by_driver"][c])]
+    if drivers_with_no_gap:
+        print(f"Warning: {len(drivers_with_no_gap)} drivers have all-zero gap data: {', '.join(drivers_with_no_gap)}", file=sys.stderr)
+    if drivers_with_no_pos:
+        print(f"Warning: {len(drivers_with_no_pos)} drivers have all-zero position data: {', '.join(drivers_with_no_pos)}", file=sys.stderr)
+    if drivers_with_no_sectors:
+        print(f"Warning: {len(drivers_with_no_sectors)} drivers have all-zero sector times: {', '.join(drivers_with_no_sectors)}", file=sys.stderr)
 
     # Get track status
     try:

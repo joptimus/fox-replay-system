@@ -11,6 +11,7 @@ import (
 	"f1-replay-go/session"
 	"f1-replay-go/telemetry"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 // Integration tests validate end-to-end workflows
@@ -87,7 +88,8 @@ func TestFullFrameGenerationPipeline(t *testing.T) {
 	assert.NoError(t, err, "Payload should be valid")
 
 	// Generate frames
-	generator := telemetry.NewFrameGenerator()
+	logger, _ := zap.NewDevelopment()
+	generator := telemetry.NewFrameGenerator(logger)
 	frames, err := generator.Generate(payload, "R")
 	assert.NoError(t, err, "Frame generation should succeed")
 

@@ -232,8 +232,12 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 			lastFrameSent = requestedFrame
 
 		case err := <-doneCh:
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived, websocket.CloseNormalClosure) {
 				h.logger.Error("websocket error",
+					zap.Error(err),
+					zap.String("sessionID", sess.ID))
+			} else {
+				h.logger.Debug("websocket closed",
 					zap.Error(err),
 					zap.String("sessionID", sess.ID))
 			}

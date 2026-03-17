@@ -474,7 +474,7 @@ func generateCacheAsync(
 	}
 
 	sess.ProgressCh <- &models.ProgressMessage{Pct: 92, Msg: "Generating frames in Go..."}
-	generator := telemetry.NewFrameGenerator()
+	generator := telemetry.NewFrameGenerator(logger)
 	frames, err := generator.Generate(rawPayload, sessionType)
 	if err != nil || len(frames) == 0 {
 		logger.Error("go frame generation failed",
