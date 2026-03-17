@@ -248,6 +248,9 @@ func (fg *FrameGenerator) Generate(
 		zap.Int("frames", len(frames)),
 	)
 
+	// Attach weather data to frames
+	attachWeatherToFrames(frames, timeline, payload.WeatherTimes, payload.WeatherData)
+
 	// Apply smoothing
 	t5 := time.Now()
 	trackStatuses := TrackStatusFromFrames(frames)
@@ -438,5 +441,63 @@ func computeGaps(frame *models.Frame) {
 			prevDist = entry.dist
 			frame.Drivers[entry.code] = data
 		}
+	}
+}
+
+// attachWeatherToFrames looks up weather data for each frame time using step interpolation
+// (weather is sampled ~once per minute, so we use the most recent sample)
+func attachWeatherToFrames(
+	frames []models.Frame,
+	timeline []float64,
+	weatherTimes []float64,
+	weatherData map[string][]float64,
+) {
+	if len(weatherTimes) == 0 || len(weatherData) == 0 {
+		return
+	}
+
+	trackTemp := weatherData["track_temp"]
+	airTemp := weatherData["air_temp"]
+	humidity := weatherData["humidity"]
+	windSpeed := weatherData["wind_speed"]
+	windDir := weatherData["wind_direction"]
+	rainfall := weatherData["rainfall"]
+
+	// All arrays should be the same length as weatherTimes
+	n := len(weatherTimes)
+	if len(trackTemp) != n || len(airTemp) != n {
+		return
+	}
+
+	// For each frame, find the most recent weather sample (step interpolation)
+	wIdx := 0
+	for i := range frames {
+		t := timeline[i]
+		// Advance weather index to the latest sample at or before frame time
+		for wIdx < n-1 && weatherTimes[wIdx+1] <= t {
+			wIdx++
+		}
+
+		rainState := "DRY"
+		if wIdx < len(rainfall) && rainfall[wIdx] > 0.5 {
+			rainState = "WET"
+		}
+
+		sample := models.WeatherSample{
+			TrackTemp: trackTemp[wIdx],
+			AirTemp:   airTemp[wIdx],
+			RainState: rainState,
+		}
+		if wIdx < len(humidity) {
+			sample.Humidity = humidity[wIdx]
+		}
+		if wIdx < len(windSpeed) {
+			sample.WindSpeed = windSpeed[wIdx]
+		}
+		if wIdx < len(windDir) {
+			sample.WindDirection = windDir[wIdx]
+		}
+
+		frames[i].Weather = &sample
 	}
 }

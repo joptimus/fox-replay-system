@@ -32,12 +32,23 @@ type SessionResponse struct {
 	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// WeatherSample represents weather conditions at a point in time
+type WeatherSample struct {
+	TrackTemp     float64 `json:"track_temp" msgpack:"track_temp"`
+	AirTemp       float64 `json:"air_temp" msgpack:"air_temp"`
+	Humidity      float64 `json:"humidity" msgpack:"humidity"`
+	WindSpeed     float64 `json:"wind_speed" msgpack:"wind_speed"`
+	WindDirection float64 `json:"wind_direction" msgpack:"wind_direction"`
+	RainState     string  `json:"rain_state" msgpack:"rain_state"`
+}
+
 // Frame represents a single frame of telemetry data
 type Frame struct {
 	FrameIndex int                   `json:"frame_index" msgpack:"frame_index"`
 	T          float64               `json:"t" msgpack:"t"`
 	Lap        int                   `json:"lap" msgpack:"lap"`
 	Drivers    map[string]DriverData `json:"drivers" msgpack:"drivers"`
+	Weather    *WeatherSample        `json:"weather,omitempty" msgpack:"weather,omitempty"`
 }
 
 // DriverData represents telemetry data for a single driver in a frame

@@ -467,41 +467,49 @@ function AppRoutes() {
 
   const loadSession = async (year: number, round: number, sessionType: string, refresh: boolean, shouldNavigate: boolean) => {
     try {
-      if (session.sessionId) {
-        pause();
-      }
-
-      setSessionLoading(true);
+      // Stop current playback and reset state
+      pause();
 
       const store = useReplayStore.getState();
+      store.setSelectedDriver(null);
       store.setLoadingProgress(0);
       store.setLoadingError(null);
       store.setLoadingComplete(false);
 
+      // Clear the old session ID first — this disconnects the old WebSocket cleanly
+      // before we create the new session on the backend
+      setSession('', { year, round, session_type: sessionType } as any);
+      setSessionLoading(true);
+
+      // Navigate immediately so the loading modal shows on /replay
+      if (shouldNavigate) navigate("/replay");
+
       const drivers = dataService.getAllDriversForYear(year);
-      const driverCodes = drivers.map(d => d.Code);
+      const driverInfo = drivers.map(d => ({ code: d.Code, carNumber: d.CarNumber }));
 
-      Promise.all([
-        preloadDriverImages(driverCodes, year),
-        preloadTeamLogos(),
-        preloadTyreIcons(),
-        preloadCommonImages(),
-      ]).catch(err => console.warn("Image preloading failed:", err));
+      // Preload images and create session in parallel — wait for both
+      const [, response] = await Promise.all([
+        Promise.all([
+          preloadDriverImages(driverInfo, year),
+          preloadTeamLogos(),
+          preloadTyreIcons(),
+          preloadCommonImages(),
+        ]).catch(err => console.warn("Image preloading failed:", err)),
+        fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ year, round, session_type: sessionType, refresh })
+        }),
+      ]);
+      const data = await response!.json();
 
-      const response = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ year, round, session_type: sessionType, refresh })
-      });
-      const data = await response.json();
-
+      // Set new session ID — this triggers a fresh WebSocket connection
       setSession(data.session_id, {
         year,
         round,
         session_type: sessionType,
       } as any);
       setSessionLoading(true);
-      if (shouldNavigate) navigate("/replay");
     } catch (err) {
       console.error("Failed to load session:", err);
       setSessionLoading(false);
@@ -525,7 +533,7 @@ function AppRoutes() {
   };
 
   const handleSessionTypeChange = (year: number, round: number, sessionType: string) => {
-    loadSession(year, round, sessionType, false, false);
+    loadSession(year, round, sessionType, false, true);
   };
 
   return (
@@ -533,7 +541,7 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage onSessionSelect={handleSessionSelect} isLoading={session.isLoading} />} />
       <Route
         path="/replay"
-        element={session.sessionId ? <ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} /> : <Navigate to="/" replace />}
+        element={(session.sessionId || session.isLoading) ? <ReplayView onSessionSelect={handleSessionSelect} onRefreshData={handleRefreshData} /> : <Navigate to="/" replace />}
       />
       <Route path="/comparison" element={<ErrorBoundary><Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>LOADING COMPARISON...</div>}><ComparisonPage /></Suspense></ErrorBoundary>} />
       <Route path="*" element={<Navigate to="/" replace />} />

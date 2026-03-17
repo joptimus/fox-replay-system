@@ -78,17 +78,24 @@ def build_track_from_example_lap(example_lap, track_width=300, lap_obj=None):
     Build track geometry (inner, outer, centerline) from an example lap telemetry.
 
     Args:
-        example_lap: FastF1 telemetry dataframe with 'X' and 'Y' columns
+        example_lap: FastF1 telemetry dataframe with 'X', 'Y', and optionally 'Z' columns
         track_width: Width of the track in meters (default 300)
         lap_obj: Optional FastF1 lap object for sector data
 
     Returns:
-        Tuple of (centerline_x, centerline_y, inner_x, inner_y, outer_x, outer_y,
-                  x_min, x_max, y_min, y_max, sectors)
-        sectors is None if lap_obj not provided or sector data unavailable
+        dict with centerline, inner, outer coordinates (including Z elevation),
+        bounding box, and sector data
     """
     plot_x_ref = example_lap["X"].values
     plot_y_ref = example_lap["Y"].values
+
+    # Extract Z (elevation) if available
+    if "Z" in example_lap.columns:
+        plot_z_ref = example_lap["Z"].values.astype(float)
+        # Replace NaN with 0
+        plot_z_ref = np.nan_to_num(plot_z_ref, nan=0.0)
+    else:
+        plot_z_ref = np.zeros(len(plot_x_ref))
 
     dx = np.gradient(plot_x_ref)
     dy = np.gradient(plot_y_ref)
@@ -115,5 +122,17 @@ def build_track_from_example_lap(example_lap, track_width=300, lap_obj=None):
     if lap_obj is not None:
         sectors = compute_sector_boundaries(example_lap, lap_obj)
 
-    return (plot_x_ref, plot_y_ref, x_inner, y_inner, x_outer, y_outer,
-            x_min, x_max, y_min, y_max, sectors)
+    return {
+        "centerline_x": plot_x_ref,
+        "centerline_y": plot_y_ref,
+        "centerline_z": plot_z_ref,
+        "inner_x": x_inner,
+        "inner_y": y_inner,
+        "outer_x": x_outer,
+        "outer_y": y_outer,
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+        "sectors": sectors,
+    }

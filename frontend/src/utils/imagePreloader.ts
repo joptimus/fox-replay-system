@@ -8,11 +8,28 @@ const getImageExtension = (year: number): string => {
   return "jpg";
 };
 
+const IMAGE_EXTENSIONS = ['avif', 'png', 'webp', 'jpg'];
+
+/** Preload an image, trying multiple extensions until one succeeds. */
+const preloadImageWithFallback = (basePath: string): Promise<void> => {
+  return new Promise((resolve) => {
+    let idx = 0;
+    const tryNext = () => {
+      if (idx >= IMAGE_EXTENSIONS.length) { resolve(); return; }
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => { idx++; tryNext(); };
+      img.src = `${basePath}.${IMAGE_EXTENSIONS[idx]}`;
+    };
+    tryNext();
+  });
+};
+
 const preloadImage = (src: string): Promise<void> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => resolve();
-    img.onerror = () => resolve(); // Treat errors as success to not block preloading
+    img.onerror = () => resolve();
     img.src = src;
   });
 };
@@ -21,15 +38,17 @@ const preloadImage = (src: string): Promise<void> => {
  * Preload all driver images for a given year
  * Loads driver photos and number images in parallel
  */
-export const preloadDriverImages = async (drivers: string[], year: number): Promise<void> => {
+export const preloadDriverImages = async (
+  drivers: { code: string; carNumber: string }[],
+  year: number,
+): Promise<void> => {
   const ext = getImageExtension(year);
-  const numberExt = year >= 2025 ? "avif" : "png";
 
-  const preloadPromises = drivers.flatMap((code) => [
+  const preloadPromises = drivers.flatMap(({ code, carNumber }) => [
     // Preload driver photo
     preloadImage(`/images/drivers/${year}/${code.toUpperCase()}.${ext}`),
-    // Preload driver number
-    preloadImage(`/images/numbers/${year}/${code}.${numberExt}`),
+    // Preload driver number image (try all extensions)
+    preloadImageWithFallback(`/images/numbers/${year}/${carNumber}`),
   ]);
 
   await Promise.all(preloadPromises);

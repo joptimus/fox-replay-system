@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { TrackGeometry as TrackGeometryData } from '../../types';
 import type { SectorId } from '../../types';
+import { TerrainMesh } from './TerrainMesh';
+import { TurnMarkers } from './TurnMarkers';
 
 export interface SectorBoundaryIndices {
   s1: number;
@@ -21,6 +23,29 @@ const SECTOR_HEX: Record<number, number> = {
 
 const ROAD_BASE = { r: 0.067, g: 0.067, b: 0.094 };
 const TINT_STRENGTH = 0.07;
+
+// Z values from FastF1 are in 1/10 meter units, same as X/Y — use 1:1 scale.
+const ELEVATION_SCALE = 1.0;
+
+// Cache the min Z per track data reference so we don't recompute every call
+let _cachedZMin: number | null = null;
+let _cachedZRef: number[] | null = null;
+
+function getElevation(trackData: TrackGeometryData, i: number): number {
+  if (!trackData.centerline_z || trackData.centerline_z.length === 0 || i >= trackData.centerline_z.length) return 0;
+
+  // Compute min Z once and cache it, so all elevation is relative (lowest point = 0)
+  if (_cachedZRef !== trackData.centerline_z) {
+    let min = Infinity;
+    for (let j = 0; j < trackData.centerline_z.length; j++) {
+      if (trackData.centerline_z[j] < min) min = trackData.centerline_z[j];
+    }
+    _cachedZMin = min;
+    _cachedZRef = trackData.centerline_z;
+  }
+
+  return (trackData.centerline_z[i] - (_cachedZMin ?? 0)) * ELEVATION_SCALE;
+}
 
 function blendColor(base: { r: number; g: number; b: number }, tint: { r: number; g: number; b: number }, strength: number) {
   return {
@@ -61,6 +86,9 @@ export class TrackGeometry {
   private sectorVertexColors: Float32Array | null = null;
   private uniformVertexColors: Float32Array | null = null;
   private trackMesh: THREE.Mesh | null = null;
+  private terrainMesh: TerrainMesh | null = null;
+  private turnMarkers: TurnMarkers | null = null;
+  private trackData: TrackGeometryData | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -70,6 +98,9 @@ export class TrackGeometry {
 
   build(trackData: TrackGeometryData, showSectorColors: boolean): void {
     this.disposeChildren();
+    _cachedZMin = null;
+    _cachedZRef = null;
+    this.trackData = trackData;
 
     if (!trackData.centerline_x?.length || !trackData.outer_x?.length || !trackData.inner_x?.length) {
       return;
@@ -78,9 +109,9 @@ export class TrackGeometry {
     this.buildTrackSurface(trackData, showSectorColors);
     this.buildEdgeTubes(trackData);
     this.buildCenterline(trackData);
-    this.buildGroundPlane();
-    this.buildGrid();
+    this.buildTerrain(trackData);
     this.buildSectorBoundaries(trackData);
+    this.buildTurnMarkers(trackData);
     this.precomputeSpatialData(trackData);
   }
 
@@ -112,6 +143,39 @@ export class TrackGeometry {
     return this.cachedSectorBounds.get(sectorId) ?? new THREE.Box3();
   }
 
+  /** Look up elevation at a given X/Z world position by finding the nearest centerline point. */
+  getElevationAt(x: number, z: number): number {
+    const td = this.trackData;
+    if (!td || !td.centerline_z || td.centerline_z.length === 0) return 0;
+
+    let bestDist = Infinity;
+    let bestIdx = 0;
+    // Sample every 4th point for performance (centerline can have 500+ points)
+    const step = Math.max(1, Math.floor(td.centerline_x.length / 150));
+    for (let i = 0; i < td.centerline_x.length; i += step) {
+      const dx = td.centerline_x[i] - x;
+      const dz = td.centerline_y[i] - z;
+      const d = dx * dx + dz * dz;
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    // Refine around the best index
+    const lo = Math.max(0, bestIdx - step);
+    const hi = Math.min(td.centerline_x.length - 1, bestIdx + step);
+    for (let i = lo; i <= hi; i++) {
+      const dx = td.centerline_x[i] - x;
+      const dz = td.centerline_y[i] - z;
+      const d = dx * dx + dz * dz;
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return getElevation(td, bestIdx);
+  }
+
   dispose(): void {
     this.disposeChildren();
     this.scene.remove(this.trackGroup);
@@ -122,6 +186,11 @@ export class TrackGeometry {
     this.sectorVertexColors = null;
     this.uniformVertexColors = null;
     this.trackMesh = null;
+    this.terrainMesh?.dispose();
+    this.terrainMesh = null;
+    this.turnMarkers?.dispose();
+    this.turnMarkers = null;
+    this.trackData = null;
   }
 
   private disposeChildren(): void {
@@ -147,8 +216,9 @@ export class TrackGeometry {
     const uniformColors: number[] = [];
 
     for (let i = 0; i < numPoints; i++) {
-      positions.push(trackData.inner_x[i], 0, trackData.inner_y[i]);
-      positions.push(trackData.outer_x[i], 0, trackData.outer_y[i]);
+      const elev = getElevation(trackData, i);
+      positions.push(trackData.inner_x[i], elev, trackData.inner_y[i]);
+      positions.push(trackData.outer_x[i], elev, trackData.outer_y[i]);
 
       const sectorIndex = trackData.sector?.[i] || 1;
       const tint = SECTOR_COLORS[sectorIndex] || SECTOR_COLORS[3];
@@ -189,7 +259,6 @@ export class TrackGeometry {
     });
 
     const mesh = new THREE.Mesh(geom, material);
-    mesh.position.z = -1;
     this.trackGroup.add(mesh);
     this.trackMesh = mesh;
   }
@@ -204,7 +273,7 @@ export class TrackGeometry {
     };
 
     if (trackData.outer_x.length > 1) {
-      const points = trackData.outer_x.map((x, i) => new THREE.Vector3(x, 0.5, trackData.outer_y[i]));
+      const points = trackData.outer_x.map((x, i) => new THREE.Vector3(x, getElevation(trackData, i) + 0.5, trackData.outer_y[i]));
       const curve = new THREE.CatmullRomCurve3(points);
       const geom = new THREE.TubeGeometry(curve, trackData.outer_x.length - 1, 4, 4, false);
       const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial(tubeMaterialProps));
@@ -212,7 +281,7 @@ export class TrackGeometry {
     }
 
     if (trackData.inner_x.length > 1) {
-      const points = trackData.inner_x.map((x, i) => new THREE.Vector3(x, 0.5, trackData.inner_y[i]));
+      const points = trackData.inner_x.map((x, i) => new THREE.Vector3(x, getElevation(trackData, i) + 0.5, trackData.inner_y[i]));
       const curve = new THREE.CatmullRomCurve3(points);
       const geom = new THREE.TubeGeometry(curve, trackData.inner_x.length - 1, 4, 4, false);
       const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial(tubeMaterialProps));
@@ -227,7 +296,7 @@ export class TrackGeometry {
     const lineColors: number[] = [];
 
     for (let i = 0; i < trackData.centerline_x.length; i++) {
-      linePositions.push(trackData.centerline_x[i], 2, trackData.centerline_y[i]);
+      linePositions.push(trackData.centerline_x[i], getElevation(trackData, i) + 2, trackData.centerline_y[i]);
       const sector = trackData.sector?.[i] || 1;
       const color = new THREE.Color(SECTOR_HEX[sector] || SECTOR_HEX[1]);
       lineColors.push(color.r, color.g, color.b);
@@ -248,23 +317,11 @@ export class TrackGeometry {
     this.trackGroup.add(line);
   }
 
-  private buildGroundPlane(): void {
-    const geom = new THREE.PlaneGeometry(60000, 60000);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x080812,
-      roughness: 0.95,
-      metalness: 0.1,
-    });
-    const ground = new THREE.Mesh(geom, material);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -15;
-    this.trackGroup.add(ground);
-  }
-
-  private buildGrid(): void {
-    const grid = new THREE.GridHelper(60000, 60, 0x151525, 0x0c0c1a);
-    grid.position.y = -14;
-    this.trackGroup.add(grid);
+  private buildTerrain(trackData: TrackGeometryData): void {
+    this.terrainMesh = new TerrainMesh();
+    const terrainGroup = this.terrainMesh.build(trackData, (i) => getElevation(trackData, i));
+    this.terrainMesh.buildEmbankments(trackData, (i) => getElevation(trackData, i));
+    this.trackGroup.add(terrainGroup);
   }
 
   private buildSectorBoundaries(trackData: TrackGeometryData): void {
@@ -272,8 +329,9 @@ export class TrackGeometry {
     if (!boundaries) return;
 
     const createBoundaryTube = (innerIdx: number, outerIdx: number, isStartFinish: boolean): THREE.Mesh => {
-      const innerPos = new THREE.Vector3(trackData.inner_x[innerIdx], 0, trackData.inner_y[innerIdx]);
-      const outerPos = new THREE.Vector3(trackData.outer_x[outerIdx], 0, trackData.outer_y[outerIdx]);
+      const elev = getElevation(trackData, innerIdx);
+      const innerPos = new THREE.Vector3(trackData.inner_x[innerIdx], elev, trackData.inner_y[innerIdx]);
+      const outerPos = new THREE.Vector3(trackData.outer_x[outerIdx], elev, trackData.outer_y[outerIdx]);
 
       const direction = new THREE.Vector3().subVectors(outerPos, innerPos);
       const distance = direction.length();
@@ -303,15 +361,43 @@ export class TrackGeometry {
     this.trackGroup.add(createBoundaryTube(0, 0, true));
   }
 
+  private buildTurnMarkers(trackData: TrackGeometryData): void {
+    if (!trackData.corners || trackData.corners.length === 0) return;
+
+    this.turnMarkers = new TurnMarkers();
+    const markerGroup = this.turnMarkers.build(
+      trackData.corners,
+      (x, z) => this.getElevationAt(x, z),
+      trackData,
+    );
+    this.trackGroup.add(markerGroup);
+  }
+
+  updateTurnMarkerVisibility(camera: THREE.Camera): void {
+    this.turnMarkers?.updateVisibility(camera);
+  }
+
+  highlightTurnMarkersForSector(sectorId: SectorId | null): void {
+    this.turnMarkers?.setSectorHighlight(sectorId);
+  }
+
   private precomputeSpatialData(trackData: TrackGeometryData): void {
     this.cachedBounds = new THREE.Box3(
-      new THREE.Vector3(trackData.x_min, -15, trackData.y_min),
-      new THREE.Vector3(trackData.x_max, 5000, trackData.y_max),
+      new THREE.Vector3(trackData.x_min - 2000, -100, trackData.y_min - 2000),
+      new THREE.Vector3(trackData.x_max + 2000, 5000, trackData.y_max + 2000),
     );
+
+    // Compute average elevation for the center point
+    let avgElev = 0;
+    if (trackData.centerline_z && trackData.centerline_z.length > 0) {
+      let sum = 0;
+      for (let i = 0; i < trackData.centerline_z.length; i++) sum += trackData.centerline_z[i];
+      avgElev = (sum / trackData.centerline_z.length) * ELEVATION_SCALE;
+    }
 
     this.cachedCenter = new THREE.Vector3(
       (trackData.x_min + trackData.x_max) / 2,
-      0,
+      avgElev,
       (trackData.y_min + trackData.y_max) / 2,
     );
 
@@ -339,12 +425,13 @@ export class TrackGeometry {
       const idx = Math.min(startIdx, trackData.inner_x.length - 1);
       return new THREE.Vector3(
         (trackData.inner_x[idx] + trackData.outer_x[idx]) / 2,
-        0,
+        getElevation(trackData, idx),
         (trackData.inner_y[idx] + trackData.outer_y[idx]) / 2,
       );
     }
 
     let sumX = 0;
+    let sumY = 0;
     let sumZ = 0;
     let count = 0;
 
@@ -353,16 +440,18 @@ export class TrackGeometry {
     for (let i = startIdx; i < endIdx; i += sampleInterval) {
       const idx = Math.min(i, trackData.inner_x.length - 1);
       sumX += (trackData.inner_x[idx] + trackData.outer_x[idx]) / 2;
+      sumY += getElevation(trackData, idx);
       sumZ += (trackData.inner_y[idx] + trackData.outer_y[idx]) / 2;
       count++;
     }
 
     const lastIdx = Math.min(endIdx - 1, trackData.inner_x.length - 1);
     sumX += (trackData.inner_x[lastIdx] + trackData.outer_x[lastIdx]) / 2;
+    sumY += getElevation(trackData, lastIdx);
     sumZ += (trackData.inner_y[lastIdx] + trackData.outer_y[lastIdx]) / 2;
     count++;
 
-    return new THREE.Vector3(sumX / count, 0, sumZ / count);
+    return new THREE.Vector3(sumX / count, sumY / count, sumZ / count);
   }
 
   private computeSectorBounds(startIdx: number, endIdx: number, trackData: TrackGeometryData): THREE.Box3 {
@@ -370,8 +459,9 @@ export class TrackGeometry {
 
     for (let i = startIdx; i < endIdx; i++) {
       const idx = Math.min(i, trackData.inner_x.length - 1);
-      box.expandByPoint(new THREE.Vector3(trackData.inner_x[idx], 0, trackData.inner_y[idx]));
-      box.expandByPoint(new THREE.Vector3(trackData.outer_x[idx], 0, trackData.outer_y[idx]));
+      const elev = getElevation(trackData, idx);
+      box.expandByPoint(new THREE.Vector3(trackData.inner_x[idx], elev, trackData.inner_y[idx]));
+      box.expandByPoint(new THREE.Vector3(trackData.outer_x[idx], elev, trackData.outer_y[idx]));
     }
 
     return box;

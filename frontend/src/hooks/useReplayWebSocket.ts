@@ -121,13 +121,17 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
             if (message.type === 'loading_error') {
               console.error("[WS Client] Loading error:", message.message);
-              setLoadingError(message.message || "Unknown error");
+              if (!intentionalCloseRef.current) {
+                setLoadingError(message.message || "Unknown error");
+              }
               return;
             }
 
             if (message.type === 'error') {
               console.error("[WS Client] Session/WebSocket error:", message.message);
-              setLoadingError(message.message || "Session error");
+              if (!intentionalCloseRef.current) {
+                setLoadingError(message.message || "Session error");
+              }
               return;
             }
 

@@ -101,7 +101,7 @@ const TelemetryPanel: React.FC<{
 
             <div>
               <div className="f1-monospace" style={{ fontSize: "0.65rem", color: "#6b7280", marginBottom: "6px" }}>GEAR</div>
-              <div className="f1-monospace" style={{ fontSize: "1.5rem", fontWeight: 700 }}>{driver.data.gear}</div>
+              <div className="f1-monospace" style={{ fontSize: "1.5rem", fontWeight: 700 }}>{driver.data.gear === 0 ? 'N' : driver.data.gear}</div>
             </div>
 
             <div>

@@ -25,11 +25,11 @@ export class SceneSetup {
     this.renderer.domElement.style.zIndex = '1';
     container.appendChild(this.renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0x252535, 0.6);
+    const ambientLight = new THREE.AmbientLight(0x404055, 0.9);
     this.scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    directionalLight.position.set(10, 20, 10);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(12, 15, 8);
     this.scene.add(directionalLight);
 
     const redFill = new THREE.PointLight(0xe63946, 0.15, 30000);

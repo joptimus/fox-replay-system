@@ -70,7 +70,9 @@ export const TrackVisualization3D: React.FC = () => {
       cameraController.camera,
       container
     );
+    sectorInteraction.setTrackGeometry(trackGeometry);
     const driverMarkers = new DriverMarkers(sceneSetup.scene);
+    driverMarkers.setTrackGeometry(trackGeometry);
     const weatherEffects = new WeatherEffects(sceneSetup.scene, sceneSetup.renderer);
     const labelManager = new LabelManager(
       sceneSetup.renderer,
@@ -110,13 +112,32 @@ export const TrackVisualization3D: React.FC = () => {
         if (frame?.drivers?.[driverCode]) {
           const driver = frame.drivers[driverCode];
           const teamColor = metadata?.driver_colors?.[driverCode] || [220, 38, 38];
-          store.setSelectedDriver({
-            code: driverCode,
-            data: driver,
-            color: teamColor as [number, number, number],
-          });
+          const currentSelected = store.selectedDriver;
+
+          if (currentSelected?.code === driverCode) {
+            // Clicking same driver — deselect and reset camera
+            store.setSelectedDriver(null);
+            cameraController.stopFollowing();
+          } else {
+            store.setSelectedDriver({
+              code: driverCode,
+              data: driver,
+              color: teamColor as [number, number, number],
+            });
+            // Start camera follow
+            const driverObj = driverMarkers.getDriverObject(driverCode);
+            if (driverObj) {
+              cameraController.startFollowing(driverObj);
+            }
+          }
         }
         return;
+      }
+
+      // Clicked empty space — deselect and reset camera
+      if (useReplayStore.getState().selectedDriver) {
+        useReplayStore.getState().setSelectedDriver(null);
+        cameraController.stopFollowing();
       }
 
       const sectorId = sectorInteraction.onPointerDown(event);
@@ -126,11 +147,49 @@ export const TrackVisualization3D: React.FC = () => {
     };
 
     const handlePointerMove = (event: PointerEvent) => {
+      // Check driver hover
+      const hoveredDriver = driverMarkers.pick(
+        event,
+        cameraController.camera,
+        sceneSetup.renderer.domElement
+      );
+
+      if (hoveredDriver !== driverMarkers.getHoveredCode()) {
+        const store = useReplayStore.getState();
+        const metadata = store.session.metadata;
+
+        driverMarkers.setHovered(hoveredDriver, metadata?.driver_colors);
+
+        // Don't show hover label if this driver is already selected (avoid duplicate badges)
+        const isAlreadySelected = store.selectedDriver?.code === hoveredDriver;
+
+        if (hoveredDriver && !isAlreadySelected) {
+          const frame = store.currentFrame;
+          const driverData = frame?.drivers?.[hoveredDriver];
+          const color = metadata?.driver_colors?.[hoveredDriver] as [number, number, number] | undefined;
+          const anchor = driverMarkers.getDriverObject(hoveredDriver);
+
+          labelManager.attachHoverLabel(
+            hoveredDriver,
+            anchor,
+            driverData?.position ?? null,
+            color ?? null,
+            (metadata as any)?.driver_teams,
+          );
+          sceneSetup.renderer.domElement.style.cursor = 'pointer';
+        } else {
+          labelManager.attachHoverLabel(null, null, null, null);
+          sceneSetup.renderer.domElement.style.cursor = hoveredDriver ? 'pointer' : '';
+        }
+      }
+
+      // Check sector hover
       const sectorId = sectorInteraction.onPointerMove(event);
 
       if (sectorId !== hoveredSectorIdRef.current) {
         hoveredSectorIdRef.current = sectorId;
         sectorInteraction.setHighlight(sectorId);
+        trackGeometry.highlightTurnMarkersForSector(sectorId);
 
         if (sectorId) {
           const centroid = trackGeometry.getSectorCentroid(sectorId);
@@ -148,6 +207,7 @@ export const TrackVisualization3D: React.FC = () => {
       rafIdRef.current = requestAnimationFrame(animate);
       cameraController.update();
       weatherEffects.update();
+      driverMarkers.interpolate();
       sceneSetup.renderer.render(sceneSetup.scene, cameraController.camera);
       labelManager.render();
     };
@@ -203,6 +263,8 @@ export const TrackVisualization3D: React.FC = () => {
       sessionMetadata?.driver_colors
     );
 
+    systems.trackGeometry.updateTurnMarkerVisibility(systems.cameraController.camera);
+
     if (selectedDriver) {
       if (selectedDriver.code !== prevDriverRef.current) {
         const anchor = systems.driverMarkers.getDriverObject(selectedDriver.code);
@@ -218,6 +280,10 @@ export const TrackVisualization3D: React.FC = () => {
     } else {
       if (prevDriverRef.current !== null) {
         systems.labelManager.attachDriverLabel(null, null);
+        // Stop following if camera was in follow mode
+        if (systems.cameraController.isFollowing()) {
+          systems.cameraController.stopFollowing();
+        }
         prevDriverRef.current = null;
       }
     }

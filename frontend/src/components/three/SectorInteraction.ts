@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { TrackGeometry as TrackGeometryData, SectorId } from "../../types";
 import type { SectorBoundaryIndices } from "./TrackGeometry";
+import type { TrackGeometry } from "./TrackGeometry";
 
 const SECTOR_COLORS: Record<SectorId, number> = {
   1: 0x1a8a8a,
@@ -15,12 +16,17 @@ export class SectorInteraction {
   private raycaster: THREE.Raycaster;
   private meshes: Map<SectorId, THREE.Mesh> = new Map();
   private highlightedSector: SectorId | null = null;
+  private trackGeometry: TrackGeometry | null = null;
 
   constructor(scene: THREE.Scene, camera: THREE.Camera, container: HTMLElement) {
     this.scene = scene;
     this.camera = camera;
     this.container = container;
     this.raycaster = new THREE.Raycaster();
+  }
+
+  setTrackGeometry(trackGeometry: TrackGeometry): void {
+    this.trackGeometry = trackGeometry;
   }
 
   build(trackData: TrackGeometryData, boundaries: SectorBoundaryIndices): void {
@@ -49,7 +55,7 @@ export class SectorInteraction {
     const count = endIdx - startIdx;
     if (count < 2) {
       const geometry = new THREE.BufferGeometry();
-      const material = new THREE.MeshBasicMaterial({
+      const material = new THREE.MeshStandardMaterial({
         transparent: true,
         opacity: 0,
         side: THREE.DoubleSide,
@@ -64,8 +70,9 @@ export class SectorInteraction {
     const indices: number[] = [];
 
     for (let i = startIdx; i < endIdx; i++) {
-      vertices.push(trackData.inner_x[i], 5, trackData.inner_y[i]);
-      vertices.push(trackData.outer_x[i], 5, trackData.outer_y[i]);
+      const elev = this.trackGeometry?.getElevationAt(trackData.inner_x[i], trackData.inner_y[i]) ?? 0;
+      vertices.push(trackData.inner_x[i], elev + 5, trackData.inner_y[i]);
+      vertices.push(trackData.outer_x[i], elev + 5, trackData.outer_y[i]);
     }
 
     for (let i = 0; i < count - 1; i++) {
@@ -86,11 +93,16 @@ export class SectorInteraction {
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
-    const material = new THREE.MeshBasicMaterial({
+    const color = new THREE.Color(SECTOR_COLORS[sectorId]);
+    const material = new THREE.MeshStandardMaterial({
       transparent: true,
       opacity: 0,
       side: THREE.DoubleSide,
-      color: SECTOR_COLORS[sectorId],
+      color,
+      emissive: color,
+      emissiveIntensity: 1.5,
+      roughness: 0.5,
+      metalness: 0.0,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -107,8 +119,11 @@ export class SectorInteraction {
 
     this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
 
+    // Save visibility state, enable all for raycasting, then restore
+    const prevVisible = new Map<SectorId, boolean>();
     const meshArray: THREE.Mesh[] = [];
-    for (const mesh of this.meshes.values()) {
+    for (const [id, mesh] of this.meshes.entries()) {
+      prevVisible.set(id, mesh.visible);
       mesh.visible = true;
       meshArray.push(mesh);
     }
@@ -117,8 +132,8 @@ export class SectorInteraction {
     try {
       intersects = this.raycaster.intersectObjects(meshArray, false);
     } finally {
-      for (const mesh of this.meshes.values()) {
-        mesh.visible = false;
+      for (const [id, mesh] of this.meshes.entries()) {
+        mesh.visible = prevVisible.get(id) ?? false;
       }
     }
 
@@ -141,7 +156,7 @@ export class SectorInteraction {
     if (this.highlightedSector !== null) {
       const prev = this.meshes.get(this.highlightedSector);
       if (prev) {
-        (prev.material as THREE.MeshBasicMaterial).opacity = 0;
+        (prev.material as THREE.MeshStandardMaterial).opacity = 0;
         prev.visible = false;
       }
     }
@@ -151,9 +166,10 @@ export class SectorInteraction {
     if (sectorId !== null) {
       const mesh = this.meshes.get(sectorId);
       if (mesh) {
-        const mat = mesh.material as THREE.MeshBasicMaterial;
-        mat.opacity = 0.08;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.opacity = 0.35;
         mat.color.setHex(SECTOR_COLORS[sectorId]);
+        mat.emissive.setHex(SECTOR_COLORS[sectorId]);
         mesh.visible = true;
       }
     }

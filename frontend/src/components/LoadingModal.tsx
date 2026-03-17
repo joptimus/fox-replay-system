@@ -23,11 +23,39 @@ const STEP_NAMES = [
   "Preparing visualization",
 ];
 
+/** Hook that smoothly interpolates toward a target value */
+function useSmoothedValue(target: number, lerpSpeed = 0.03): number {
+  const currentRef = useRef(target);
+  const targetRef = useRef(target);
+  const rafRef = useRef<number | null>(null);
+  const [smoothed, setSmoothed] = useState(target);
+
+  targetRef.current = target;
+
+  useEffect(() => {
+    const tick = () => {
+      const diff = targetRef.current - currentRef.current;
+      if (Math.abs(diff) < 0.1) {
+        currentRef.current = targetRef.current;
+      } else {
+        currentRef.current += diff * lerpSpeed;
+      }
+      setSmoothed(currentRef.current);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [lerpSpeed]);
+
+  return smoothed;
+}
+
 // Track ring canvas for progress visualization
 const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const dotOffsetRef = useRef(0);
+  const smoothProgress = useSmoothedValue(progress);
 
   const getTrackPoints = useCallback((cx: number, cy: number, r: number) => {
     const pts: number[][] = [];
@@ -90,7 +118,7 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
       ctx.restore();
 
       // Progress fill
-      const progressPts = Math.max(2, Math.round(allPts.length * (progress / 100)));
+      const progressPts = Math.max(2, Math.round(allPts.length * (smoothProgress / 100)));
       const filledPts = allPts.slice(0, progressPts);
 
       if (filledPts.length >= 2) {
@@ -136,7 +164,7 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
 
     animRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animRef.current);
-  }, [progress, getTrackPoints, drawPath]);
+  }, [smoothProgress, getTrackPoints, drawPath]);
 
   return (
     <div style={{ position: "relative", width: "200px", height: "200px", margin: "0 auto 20px" }}>
@@ -153,13 +181,13 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
           fontFamily: "var(--font-mono)",
           fontSize: "32px",
           fontWeight: 700,
-          color: progress >= 100 ? "#00e676" : "#e8e8ee",
+          color: smoothProgress >= 100 ? "#00e676" : "#e8e8ee",
           transition: "color 0.3s",
         }}>
-          {Math.round(progress)}
+          {Math.round(smoothProgress)}
           <span style={{
             fontSize: "16px",
-            color: progress >= 100 ? "#00e676" : "#666680",
+            color: smoothProgress >= 100 ? "#00e676" : "#666680",
           }}>%</span>
         </span>
       </div>
@@ -227,6 +255,7 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
   const trackName = dataService.getTrackName(year, round);
   const sessionType = session.metadata?.session_type || "R";
   const sessionLabel = { R: "Race", Q: "Qualifying", S: "Sprint", SQ: "Sprint Qualifying", FP1: "FP1", FP2: "FP2", FP3: "FP3" }[sessionType] || sessionType;
+  const smoothProgress = useSmoothedValue(progress);
   const activeStep = Math.min(Math.floor(progress / 20), 4);
   const isComplete = progress >= 100;
 
@@ -419,7 +448,7 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
                 overflow: "hidden",
               }}>
                 <div style={{
-                  width: `${progress}%`,
+                  width: `${smoothProgress}%`,
                   height: "100%",
                   borderRadius: "4px",
                   background: isComplete
@@ -428,7 +457,7 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
                   boxShadow: isComplete
                     ? "0 0 12px rgba(0,230,118,0.25)"
                     : "0 0 12px rgba(230,57,70,0.25)",
-                  transition: "width 0.15s linear, background 0.4s",
+                  transition: "background 0.4s",
                   position: "relative",
                   overflow: "hidden",
                 }}>

@@ -43,9 +43,19 @@ export interface WeatherData {
   rain_state: string;
 }
 
+export interface TrackCorner {
+  number: number;
+  letter: string;
+  x: number;
+  y: number;
+  angle: number;
+  distance: number;
+}
+
 export interface TrackGeometry {
   centerline_x: number[];
   centerline_y: number[];
+  centerline_z?: number[];
   inner_x: number[];
   inner_y: number[];
   outer_x: number[];
@@ -55,6 +65,7 @@ export interface TrackGeometry {
   y_min: number;
   y_max: number;
   sector?: number[];
+  corners?: TrackCorner[];
 }
 
 export interface TrackStatus {

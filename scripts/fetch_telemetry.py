@@ -448,22 +448,44 @@ def extract_raw_telemetry(session, session_type: str):
         track_data = build_track_from_example_lap(fastest_telem, lap_obj=fastest_lap)
         if track_data:
             track_geometry = {
-                "centerline_x": [float(x) for x in track_data[0]],
-                "centerline_y": [float(y) for y in track_data[1]],
-                "inner_x": [float(x) for x in track_data[2]],
-                "inner_y": [float(y) for y in track_data[3]],
-                "outer_x": [float(x) for x in track_data[4]],
-                "outer_y": [float(y) for y in track_data[5]],
-                "x_min": float(track_data[6]),
-                "x_max": float(track_data[7]),
-                "y_min": float(track_data[8]),
-                "y_max": float(track_data[9]),
+                "centerline_x": [float(x) for x in track_data["centerline_x"]],
+                "centerline_y": [float(y) for y in track_data["centerline_y"]],
+                "centerline_z": [float(z) for z in track_data["centerline_z"]],
+                "inner_x": [float(x) for x in track_data["inner_x"]],
+                "inner_y": [float(y) for y in track_data["inner_y"]],
+                "outer_x": [float(x) for x in track_data["outer_x"]],
+                "outer_y": [float(y) for y in track_data["outer_y"]],
+                "x_min": float(track_data["x_min"]),
+                "x_max": float(track_data["x_max"]),
+                "y_min": float(track_data["y_min"]),
+                "y_max": float(track_data["y_max"]),
             }
-            if track_data[10] is not None:
-                track_geometry["sector"] = [int(s) for s in track_data[10]]
+            if track_data["sectors"] is not None:
+                track_geometry["sector"] = [int(s) for s in track_data["sectors"]]
     except Exception as e:
         print(f"Warning: Could not build track geometry: {e}", file=sys.stderr)
         track_geometry = None
+
+    # Extract circuit corner/turn data
+    corners = []
+    try:
+        circuit_info = session.get_circuit_info()
+        if circuit_info is not None and circuit_info.corners is not None and not circuit_info.corners.empty:
+            for _, corner in circuit_info.corners.iterrows():
+                corners.append({
+                    "number": int(corner["Number"]),
+                    "letter": str(corner.get("Letter", "")),
+                    "x": float(corner["X"]),
+                    "y": float(corner["Y"]),
+                    "angle": float(corner.get("Angle", 0)),
+                    "distance": float(corner["Distance"]) if "Distance" in corner and not (isinstance(corner["Distance"], float) and corner["Distance"] != corner["Distance"]) else 0.0,
+                })
+    except Exception as e:
+        print(f"Warning: Could not extract circuit corners: {e}", file=sys.stderr)
+        corners = []
+
+    if track_geometry is not None and corners:
+        track_geometry["corners"] = corners
 
     # Build payload
     payload = {
@@ -583,14 +605,19 @@ def main():
         emit_progress(5, f"Loading FastF1 session {args.year} R{args.round} {args.session_type}...")
 
         # Load session
-        session_map = {"R": "R", "S": "S", "Q": "Q", "SQ": "SQ", "FP1": "FP1", "FP2": "FP2", "FP3": "FP3"}
-        session_id = session_map.get(args.session_type, args.session_type)
+        session_map = {"R": "Race", "S": "Sprint", "Q": "Qualifying", "SQ": "Sprint Qualifying", "FP1": "Practice 1", "FP2": "Practice 2", "FP3": "Practice 3"}
+        session_name = session_map.get(args.session_type, args.session_type)
         try:
-            session = fastf1.get_session(args.year, args.round, session_id)
+            session = fastf1.get_session(args.year, args.round, session_name)
         except ValueError as e:
             emit_error(f"Session '{args.session_type}' does not exist for {args.year} round {args.round}. This may be a sprint weekend without this session.")
             sys.exit(1)
         session.load(telemetry=True, weather=True)
+
+        # Verify that telemetry data actually loaded (future/unavailable races won't have data)
+        if session.laps is None or session.laps.empty:
+            emit_error(f"No lap data available for {args.year} round {args.round} {args.session_type}. The session may not have occurred yet.")
+            sys.exit(1)
 
         emit_progress(20, f"Extracting {args.session_type} telemetry...")
 

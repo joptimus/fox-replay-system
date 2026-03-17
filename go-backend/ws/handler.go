@@ -255,5 +255,8 @@ func marshalFrame(frame *models.Frame) ([]byte, error) {
 		"lap":         frame.Lap,
 		"drivers":     frame.Drivers,
 	}
+	if frame.Weather != nil {
+		data["weather"] = frame.Weather
+	}
 	return msgpack.Marshal(data)
 }
