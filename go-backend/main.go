@@ -3,15 +3,18 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"f1-replay-go/bridge"
 	"f1-replay-go/cache"
@@ -82,12 +85,32 @@ func main() {
 	// WebSocket
 	r.HandleFunc("/ws/replay/{session_id}", wsHandler.Handle)
 
-	// Start server
+	// Start server with graceful shutdown
 	addr := fmt.Sprintf(":%d", *port)
+	srv := &http.Server{Addr: addr, Handler: r}
+
+	// Listen for shutdown signals in background
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		sig := <-shutdownCh
+		logger.Info("Shutdown signal received, stopping server...", zap.String("signal", sig.String()))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			logger.Error("Server forced to shutdown", zap.Error(err))
+		}
+	}()
+
 	logger.Info("Server listening", zap.String("addr", addr))
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatal(err)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Fatal("Server failed", zap.Error(err))
 	}
+
+	logger.Info("Server stopped")
 }
 
 func corsMiddleware() func(next http.Handler) http.Handler {
