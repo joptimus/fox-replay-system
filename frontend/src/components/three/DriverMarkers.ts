@@ -53,6 +53,7 @@ export class DriverMarkers {
   private targetHeadings: Map<string, number> = new Map();
   private hoverRing: THREE.Mesh | null = null;
   private hoveredCode: string | null = null;
+  private appliedColors: Map<string, number> = new Map();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -169,6 +170,7 @@ export class DriverMarkers {
         this.scene.remove(group);
         this.disposeGroup(group);
         this.meshes.delete(code);
+        this.appliedColors.delete(code);
       }
     });
 
@@ -186,6 +188,7 @@ export class DriverMarkers {
           this.scene.remove(existing);
           this.disposeGroup(existing);
           this.meshes.delete(code);
+          this.appliedColors.delete(code);
         }
         continue;
       }
@@ -201,6 +204,19 @@ export class DriverMarkers {
         group = this.createDriverGroup(color, hexColor, code);
         this.scene.add(group);
         this.meshes.set(code, group);
+        this.appliedColors.set(code, hexColor);
+      } else if (this.appliedColors.get(code) !== hexColor) {
+        // Color changed (e.g. driverColors arrived after initial creation) — update materials
+        const color = new THREE.Color(hexColor);
+        group.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial && !child.userData.isHitTarget) {
+            child.material.color.copy(color);
+            child.material.emissive.copy(color);
+          }
+        });
+        const pointLight = group.children.find(c => c instanceof THREE.PointLight) as THREE.PointLight | undefined;
+        if (pointLight) pointLight.color.set(hexColor);
+        this.appliedColors.set(code, hexColor);
       }
 
       // Set target position (interpolation happens in interpolate())
@@ -385,6 +401,7 @@ export class DriverMarkers {
     this.smoothedHeadings.clear();
     this.targetPositions.clear();
     this.targetHeadings.clear();
+    this.appliedColors.clear();
   }
 
   private disposeGroup(group: THREE.Group): void {
