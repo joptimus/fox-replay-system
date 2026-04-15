@@ -12,6 +12,7 @@ export interface RoundData {
   raceName: string;
   track: string;
   location: string;
+  date?: string; // ISO date string (YYYY-MM-DD) of race day
 }
 
 export interface TeamData {

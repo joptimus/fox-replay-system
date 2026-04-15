@@ -170,19 +170,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onSessionSelect,
   isLoading,
 }) => {
-  const [selectedYear, setSelectedYear] = useState<number>(2025);
+  const years = dataService.getAvailableYears();
+  const currentYear = new Date().getFullYear();
+  const defaultYear = years.includes(currentYear) ? currentYear : years[0];
+  const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
   const [selectedRound, setSelectedRound] = useState<number>(1);
   const [selectedSessionType, setSelectedSessionType] = useState<string>("R");
   const [availableRounds, setAvailableRounds] = useState<any[]>([]);
-  const years = dataService.getAvailableYears();
 
   useEffect(() => {
     const rounds = dataService.getRoundsForYear(selectedYear);
     setAvailableRounds(rounds);
     if (rounds.length > 0) {
-      setSelectedRound(rounds[0].round);
+      // Default to the most recent past race, or the first round if all are past/no dates
+      const todayStr = new Date().toISOString().split('T')[0];
+      const pastRounds = rounds.filter((r: any) => !r.date || r.date <= todayStr);
+      const defaultRound = pastRounds.length > 0
+        ? pastRounds[pastRounds.length - 1].round
+        : rounds[0].round;
+      setSelectedRound(defaultRound);
     }
   }, [selectedYear]);
+
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+  const isRaceFuture = (roundData: any): boolean => {
+    if (!roundData.date) return false;
+    return roundData.date > today;
+  };
 
   const currentRoundData = availableRounds.find(
     (r) => r.round === selectedRound
@@ -367,11 +382,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 disabled={isLoading}
                 style={selectStyle}
               >
-                {availableRounds.map((roundData) => (
-                  <option key={roundData.round} value={roundData.round}>
-                    R{roundData.round} — {roundData.raceName}
-                  </option>
-                ))}
+                {availableRounds.map((roundData) => {
+                  const future = isRaceFuture(roundData);
+                  return (
+                    <option
+                      key={roundData.round}
+                      value={roundData.round}
+                      disabled={future}
+                      style={{ color: future ? '#3a3a50' : undefined }}
+                    >
+                      R{roundData.round} — {roundData.raceName}{future ? ' (Upcoming)' : ''}
+                    </option>
+                  );
+                })}
               </select>
               <ChevronIcon />
             </div>
