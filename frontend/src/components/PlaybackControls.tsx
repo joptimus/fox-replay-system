@@ -70,14 +70,15 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLi
   }, []);
 
   const formatTime = (frameIndex: number) => {
-    const seconds = frameIndex / 25; // 25 FPS
+    const safeIndex = Math.max(0, frameIndex);
+    const seconds = safeIndex / 25; // 25 FPS
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const progress = playback.totalFrames > 0
-    ? (playback.frameIndex / (playback.totalFrames - 1)) * 100
+  const progress = playback.totalFrames > 1
+    ? Math.max(0, (playback.frameIndex / (playback.totalFrames - 1)) * 100)
     : 0;
 
   return (

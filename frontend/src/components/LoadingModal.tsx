@@ -23,29 +23,36 @@ const STEP_NAMES = [
   "Preparing visualization",
 ];
 
-/** Hook that smoothly interpolates toward a target value */
-function useSmoothedValue(target: number, lerpSpeed = 0.03): number {
-  const currentRef = useRef(target);
+/** Hook that smoothly interpolates toward a target value using time-based lerp */
+function useSmoothedValue(target: number, smoothingMs = 600): number {
+  const currentRef = useRef(0);
   const targetRef = useRef(target);
+  const prevTimeRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
-  const [smoothed, setSmoothed] = useState(target);
+  const [smoothed, setSmoothed] = useState(0);
 
   targetRef.current = target;
 
   useEffect(() => {
-    const tick = () => {
+    const tick = (time: number) => {
+      if (prevTimeRef.current === null) prevTimeRef.current = time;
+      const dt = time - prevTimeRef.current;
+      prevTimeRef.current = time;
+
       const diff = targetRef.current - currentRef.current;
-      if (Math.abs(diff) < 0.1) {
+      if (Math.abs(diff) < 0.05) {
         currentRef.current = targetRef.current;
       } else {
-        currentRef.current += diff * lerpSpeed;
+        // Time-based exponential smoothing — framerate independent
+        const alpha = 1 - Math.exp((-dt / smoothingMs) * 4);
+        currentRef.current += diff * alpha;
       }
       setSmoothed(currentRef.current);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [lerpSpeed]);
+  }, [smoothingMs]);
 
   return smoothed;
 }
@@ -56,6 +63,8 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
   const animRef = useRef<number>(0);
   const dotOffsetRef = useRef(0);
   const smoothProgress = useSmoothedValue(progress);
+  const smoothProgressRef = useRef(smoothProgress);
+  smoothProgressRef.current = smoothProgress;
 
   const getTrackPoints = useCallback((cx: number, cy: number, r: number) => {
     const pts: number[][] = [];
@@ -117,8 +126,8 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
       ctx.stroke();
       ctx.restore();
 
-      // Progress fill
-      const progressPts = Math.max(2, Math.round(allPts.length * (smoothProgress / 100)));
+      // Progress fill (read from ref to avoid restarting the animation loop)
+      const progressPts = Math.max(2, Math.round(allPts.length * (smoothProgressRef.current / 100)));
       const filledPts = allPts.slice(0, progressPts);
 
       if (filledPts.length >= 2) {
@@ -164,7 +173,7 @@ const TrackRing: React.FC<{ progress: number }> = ({ progress }) => {
 
     animRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animRef.current);
-  }, [smoothProgress, getTrackPoints, drawPath]);
+  }, [getTrackPoints, drawPath]);
 
   return (
     <div style={{ position: "relative", width: "200px", height: "200px", margin: "0 auto 20px" }}>
@@ -457,7 +466,7 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
                   boxShadow: isComplete
                     ? "0 0 12px rgba(0,230,118,0.25)"
                     : "0 0 12px rgba(230,57,70,0.25)",
-                  transition: "background 0.4s",
+                  transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s",
                   position: "relative",
                   overflow: "hidden",
                 }}>
