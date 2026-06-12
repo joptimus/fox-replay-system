@@ -1,8 +1,6 @@
 package tests
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"f1-replay-go/bridge"
@@ -110,7 +108,7 @@ func TestFullFrameGenerationPipeline(t *testing.T) {
 	verData := firstFrame.Drivers["VER"]
 	assert.Equal(t, 250.0, verData.Speed)
 	assert.Equal(t, 1, verData.Lap)
-	assert.Equal(t, 0, verData.Gear) // Wait, this should be 3, let me check
+	assert.Equal(t, 3, verData.Gear)
 }
 
 func TestCacheWriteReadIntegration(t *testing.T) {
@@ -192,6 +190,9 @@ func TestHybridCacheReaderFallback(t *testing.T) {
 	// Create a mock msgpack file manually (for testing fallback)
 	t.Logf("Testing hybrid cache reader fallback (would need msgpack file)")
 	// In real scenario, this would use existing .msgpack file
+	_ = frames
+	_ = msgpackWriter
+	_ = msgpackFilename
 
 	// Hybrid reader should handle both formats
 	hybridReader := cache.NewHybridCacheReader(tmpDir, nil) // nil logger for test

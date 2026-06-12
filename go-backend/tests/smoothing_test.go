@@ -52,11 +52,11 @@ func TestSavitzkyGolayEdgeCases(t *testing.T) {
 	result = sg.Apply(short)
 	assert.Equal(t, short, result, "Should return unchanged if too few points")
 
-	// Test with constant data
+	// Test with constant data (InDelta — coefficient sums carry float rounding)
 	constant := []float64{5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0}
 	result = sg.Apply(constant)
 	for _, v := range result {
-		assert.Equal(t, 5.0, v, "Should preserve constant data")
+		assert.InDelta(t, 5.0, v, 1e-9, "Should preserve constant data")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestSavitzkyGolayRamp(t *testing.T) {
 	// Filtered ramp should be close to original ramp
 	// (SG filter preserves polynomials up to order 2)
 	for i := 3; i < 17; i++ {
-		assert.AlmostEqual(t, data[i], result[i], 0.1,
+		assert.InDelta(t, data[i], result[i], 0.1,
 			"Filtered ramp should match original at position %d", i)
 	}
 }
@@ -92,10 +92,11 @@ func TestExponentialMovingAverage(t *testing.T) {
 	// First value should be unchanged
 	assert.Equal(t, 0.0, result[0])
 
-	// Should gradually approach step value
-	assert.Less(t, result[0], result[1], "EMA should increase")
-	assert.Less(t, result[1], result[2], "EMA should continue increasing")
-	assert.Less(t, result[2], result[3], "EMA should approach step")
+	// EMA stays at 0 until the step at index 3, then rises toward 1
+	assert.Equal(t, 0.0, result[2])
+	assert.Less(t, result[2], result[3], "EMA should increase after step")
+	assert.Less(t, result[3], result[4], "EMA should continue increasing")
+	assert.Less(t, result[4], result[5], "EMA should approach step value")
 }
 
 func TestEMABoundary(t *testing.T) {
@@ -105,8 +106,9 @@ func TestEMABoundary(t *testing.T) {
 
 	result := emaZero.Apply(data)
 
-	// Alpha=0 means no smoothing (keep original)
-	assert.Equal(t, result, data)
+	// Alpha=0 means maximum smoothing — output holds the first value
+	// (alpha is responsiveness: output[i] = alpha*data[i] + (1-alpha)*output[i-1])
+	assert.Equal(t, []float64{1.0, 1.0, 1.0, 1.0}, result)
 
 	emaOne := telemetry.NewEMA(1.0)
 	result = emaOne.Apply(data)

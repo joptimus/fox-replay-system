@@ -32,7 +32,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   const playback = useReplayStore((state) => state.playback);
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
   const sendCommandRef = useRef<(message: WebSocketMessage) => void>();
-  const initialFrameReceivedRef = useRef(false);
 
   // Create sendCommand function (store in ref to avoid dependency issues)
   const sendCommand = useCallback((message: WebSocketMessage) => {
@@ -156,13 +155,9 @@ export const useReplayWebSocket = (sessionId: string | null) => {
           const decoded = decoder.unpack(data) as FrameData;
 
           if (!decoded.error) {
-            // Only process frames if: (a) it's the initial seek response, or (b) playback is active
-            if (!initialFrameReceivedRef.current) {
-              initialFrameReceivedRef.current = true;
-              setCurrentFrame(decoded);
-            } else if (useReplayStore.getState().playback.isPlaying) {
-              setCurrentFrame(decoded);
-            }
+            // Accept frames whether playing or paused — seeks while paused
+            // (timeline scrub, skip buttons) must still update the display.
+            setCurrentFrame(decoded);
           } else {
             console.error("[WS Client] Frame has error property:", decoded.error);
           }
@@ -194,7 +189,6 @@ export const useReplayWebSocket = (sessionId: string | null) => {
 
     intentionalCloseRef.current = false;
     reconnectAttemptRef.current = 0;
-    initialFrameReceivedRef.current = false;
     connect();
 
     return () => {

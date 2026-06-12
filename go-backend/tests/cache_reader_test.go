@@ -53,11 +53,13 @@ func TestMsgpackCacheReader(t *testing.T) {
 
 	file, err := os.Create(testFilePath)
 	assert.NoError(t, err)
-	defer file.Close()
 
 	enc := msgpack.NewEncoder(file)
 	err = enc.Encode(testFrames)
 	assert.NoError(t, err)
+
+	// Close before reading/deleting — Windows cannot delete an open file
+	assert.NoError(t, file.Close())
 
 	// Test cache reader
 	reader := cache.NewMsgpackCacheReader(tmpDir)

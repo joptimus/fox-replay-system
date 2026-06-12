@@ -1,16 +1,8 @@
 package bridge
 
 import (
-	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
-	"strconv"
-	"sync"
-	"time"
-
-	"go.uber.org/zap"
 )
 
 // RawDriverData represents raw telemetry arrays from Python bridge
@@ -90,147 +82,9 @@ type RaceControlMessage struct {
 	Status        string  `json:"status,omitempty" msgpack:"status,omitempty"`
 }
 
-// ProgressMessage represents a progress update from Python
-type ProgressMessage struct {
-	Pct int    `json:"pct"`
-	Msg string `json:"msg"`
-}
-
-// BridgeOutput represents output from Python bridge (JSON-line)
-type BridgeOutput struct {
-	Type     string           `json:"type"` // "progress" or "data"
-	Progress *ProgressMessage `json:"progress,omitempty"`
-	Pct      *int             `json:"pct,omitempty"`
-	Msg      string           `json:"msg,omitempty"`
-	Data     *RawDataPayload  `json:"payload,omitempty"`
-}
-
-// PythonBridge manages communication with Python telemetry extraction script
-type PythonBridge struct {
-	scriptPath string
-	logger     *zap.Logger
-}
-
-// NewPythonBridge creates a new Python bridge
-func NewPythonBridge(scriptPath string, logger *zap.Logger) *PythonBridge {
-	return &PythonBridge{
-		scriptPath: scriptPath,
-		logger:     logger,
-	}
-}
-
-// Execute runs the Python bridge script and returns telemetry data
-// progressCh receives progress updates from the Python process
-func (b *PythonBridge) Execute(
-	year int,
-	round int,
-	sessionType string,
-	refresh bool,
-) (*RawDataPayload, <-chan *ProgressMessage, error) {
-	progressCh := make(chan *ProgressMessage, 10)
-	const firstMessageTimeout = 30 * time.Second
-	const maxStdoutLineBytes = 512 * 1024 * 1024 // 512MB JSON line budget
-
-	// Build command
-	args := []string{b.scriptPath, strconv.Itoa(year), strconv.Itoa(round), sessionType}
-	if refresh {
-		args = append(args, "--refresh")
-	}
-
-	cmd := exec.Command("python3", args...)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, nil, fmt.Errorf("failed to start Python bridge: %w", err)
-	}
-
-	// Read JSON lines from stdout in goroutine
-	var finalData *RawDataPayload
-	var readErr error
-	var mu sync.Mutex
-	firstMessageCh := make(chan struct{}, 1)
-	signalFirstMessage := func() {
-		select {
-		case firstMessageCh <- struct{}{}:
-		default:
-		}
-	}
-
-	go func() {
-		defer close(progressCh)
-
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 1024*1024), maxStdoutLineBytes)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-
-			var output BridgeOutput
-			if err := json.Unmarshal(line, &output); err != nil {
-				b.logger.Error("failed to unmarshal bridge output",
-					zap.Error(err),
-					zap.String("line", string(line)))
-				continue
-			}
-
-			if output.Type == "progress" {
-				progress := output.Progress
-				if progress == nil && output.Pct != nil {
-					progress = &ProgressMessage{
-						Pct: *output.Pct,
-						Msg: output.Msg,
-					}
-				}
-				if progress == nil {
-					continue
-				}
-				select {
-				case progressCh <- progress:
-				default:
-					// Channel full, skip this message
-				}
-				signalFirstMessage()
-			} else if output.Type == "data" && output.Data != nil {
-				mu.Lock()
-				finalData = output.Data
-				mu.Unlock()
-				signalFirstMessage()
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			mu.Lock()
-			readErr = fmt.Errorf("scanner error: %w", err)
-			mu.Unlock()
-		}
-
-		// Wait for process to complete
-		if err := cmd.Wait(); err != nil {
-			mu.Lock()
-			if readErr == nil {
-				readErr = fmt.Errorf("process error: %w", err)
-			}
-			mu.Unlock()
-		}
-	}()
-
-	// Wait for at least one progress or data message, but never block indefinitely.
-	timer := time.NewTimer(firstMessageTimeout)
-	defer timer.Stop()
-	select {
-	case <-firstMessageCh:
-	case <-timer.C:
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		return nil, nil, fmt.Errorf("python bridge timeout waiting for first message after %s", firstMessageTimeout)
-	}
-
-	return finalData, progressCh, nil
-}
+// NOTE: The former PythonBridge/Execute subprocess runner was removed — it had
+// no callers (main.go runs the extractor itself in generateCacheAsync) and it
+// returned before the data payload arrived, yielding a nil result.
 
 // ValidatePayload checks that the payload has required data
 func (p *RawDataPayload) Validate() error {

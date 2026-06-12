@@ -180,6 +180,13 @@ func (s *Session) UpdateAccessTime() {
 	s.LastAccessedAt = time.Now()
 }
 
+// GetLastAccessed returns the last accessed time
+func (s *Session) GetLastAccessed() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.LastAccessedAt
+}
+
 // TrackStatus represents track status information
 type TrackStatus struct {
 	Status    string  `json:"status"`

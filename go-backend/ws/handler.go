@@ -3,6 +3,7 @@ package ws
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"f1-replay-go/models"
@@ -48,11 +49,25 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// gorilla/websocket permits only one concurrent writer per connection.
+	// All writes (progress goroutine + streaming loop) must go through these helpers.
+	var writeMu sync.Mutex
+	writeJSON := func(v interface{}) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteJSON(v)
+	}
+	writeBinary := func(data []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteMessage(websocket.BinaryMessage, data)
+	}
+
 	// Get session
 	sess, err := h.sessionMgr.Get(sessionID)
 	if err != nil {
 		h.logger.Error("session not found", zap.String("sessionID", sessionID), zap.Error(err))
-		conn.WriteJSON(map[string]string{
+		writeJSON(map[string]string{
 			"type":    "error",
 			"message": "session not found",
 		})
@@ -64,15 +79,27 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.String("status", string(sess.GetState())),
 	)
 
-	// Start listening for progress updates immediately
+	// Start listening for progress updates immediately.
+	// Exits when ProgressCh closes or when this handler returns (done) — cache-hit
+	// sessions may never close ProgressCh, so done prevents a goroutine leak.
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		for progressMsg := range sess.ProgressCh {
-			if progressMsg != nil {
-				conn.WriteJSON(map[string]interface{}{
-					"type":     "generation_progress",
-					"progress": progressMsg.Pct,
-					"message":  progressMsg.Msg,
-				})
+		for {
+			select {
+			case progressMsg, ok := <-sess.ProgressCh:
+				if !ok {
+					return
+				}
+				if progressMsg != nil {
+					writeJSON(map[string]interface{}{
+						"type":     "generation_progress",
+						"progress": progressMsg.Pct,
+						"message":  progressMsg.Msg,
+					})
+				}
+			case <-done:
+				return
 			}
 		}
 	}()
@@ -106,7 +133,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 				zap.String("error", errMsg),
 			)
 
-			conn.WriteJSON(map[string]interface{}{
+			writeJSON(map[string]interface{}{
 				"type":    "error",
 				"message": errMsg,
 			})
@@ -118,7 +145,7 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 			h.logger.Error("timeout waiting for session to be ready",
 				zap.String("sessionID", sessionID),
 			)
-			conn.WriteJSON(map[string]interface{}{
+			writeJSON(map[string]interface{}{
 				"type":    "error",
 				"message": "session loading timeout",
 			})
@@ -130,21 +157,26 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Phase 2: Stream frames at 60 Hz (to be implemented)
-	h.streamFrames60Hz(conn, sess)
+	h.streamFrames60Hz(conn, sess, writeJSON, writeBinary)
 }
 
-func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
+func (h *Handler) streamFrames60Hz(
+	conn *websocket.Conn,
+	sess *models.Session,
+	writeJSON func(v interface{}) error,
+	writeBinary func(data []byte) error,
+) {
 	frames := sess.GetFrames()
 	if len(frames) == 0 {
 		h.logger.Error("no frames in session",
 			zap.String("sessionID", sess.ID))
-		conn.WriteJSON(map[string]string{"type": "error", "message": "no frames"})
+		writeJSON(map[string]string{"type": "error", "message": "no frames"})
 		return
 	}
 
 	// Signal to frontend that loading is complete
 	metadata := sess.GetMetadata()
-	conn.WriteJSON(map[string]interface{}{
+	writeJSON(map[string]interface{}{
 		"type":     "loading_complete",
 		"frames":   len(frames),
 		"metadata": metadata,
@@ -222,7 +254,7 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 				return
 			}
 
-			if err := conn.WriteMessage(websocket.BinaryMessage, frameBytes); err != nil {
+			if err := writeBinary(frameBytes); err != nil {
 				h.logger.Info("WebSocket write error",
 					zap.Error(err),
 					zap.String("sessionID", sess.ID))
@@ -230,6 +262,10 @@ func (h *Handler) streamFrames60Hz(conn *websocket.Conn, sess *models.Session) {
 			}
 
 			lastFrameSent = requestedFrame
+
+			// Keep the session alive while actively streaming so the manager's
+			// stale-session cleanup doesn't evict it mid-replay.
+			sess.UpdateAccessTime()
 
 		case err := <-doneCh:
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived, websocket.CloseNormalClosure) {

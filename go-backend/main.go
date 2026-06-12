@@ -180,6 +180,9 @@ func handleCreateSessionRoute(
 
 				sess.SetFrames(frames)
 				sess.SetState(models.StateReady)
+				// No generation will run for this session — close ProgressCh so the
+				// WebSocket progress forwarder terminates instead of leaking.
+				close(sess.ProgressCh)
 				meta := models.SessionMetadata{
 					Year:        req.Year,
 					Round:       req.RoundNum,
@@ -291,6 +294,16 @@ func handleDeleteCacheRoute(
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "cache deleted"})
+	}
+}
+
+// sendProgress delivers a progress update without blocking. ProgressCh is only
+// drained while a WebSocket client is connected; a blocking send here would stall
+// the extractor's stdout scanner and deadlock generation if no client attaches.
+func sendProgress(sess *models.Session, pct int, msg string) {
+	select {
+	case sess.ProgressCh <- &models.ProgressMessage{Pct: pct, Msg: msg}:
+	default:
 	}
 }
 
@@ -421,10 +434,7 @@ func generateCacheAsync(
 						pct = v
 					}
 				}
-				sess.ProgressCh <- &models.ProgressMessage{
-					Pct: pct,
-					Msg: message,
-				}
+				sendProgress(sess, pct, message)
 				logger.Debug("telemetry progress",
 					zap.String("message", message),
 					zap.Int("pct", pct),
@@ -476,7 +486,7 @@ func generateCacheAsync(
 	}
 
 	// Read msgpack file written by Python
-	sess.ProgressCh <- &models.ProgressMessage{Pct: 85, Msg: "Reading telemetry cache..."}
+	sendProgress(sess, 85, "Reading telemetry cache...")
 	msgpackData, err := os.ReadFile(cacheFilePath)
 	if err != nil {
 		logger.Error("failed to read msgpack cache", zap.Error(err), zap.String("sessionID", sessionID))
@@ -505,7 +515,7 @@ func generateCacheAsync(
 		return
 	}
 
-	sess.ProgressCh <- &models.ProgressMessage{Pct: 92, Msg: "Generating frames in Go..."}
+	sendProgress(sess, 92, "Generating frames in Go...")
 	generator := telemetry.NewFrameGenerator(logger)
 	frames, err := generator.Generate(rawPayload, sessionType)
 	if err != nil || len(frames) == 0 {

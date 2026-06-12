@@ -35,20 +35,22 @@ func (m *Manager) Create(sessionID string) (*models.Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if len(m.sessions) >= m.maxSize {
-		return nil, ErrTooManySessions
-	}
-
 	if sessionID == "" {
 		return nil, ErrInvalidSessionID
 	}
 
-	// Clean up old inactive sessions (older than 1 hour)
+	// Clean up old inactive sessions (older than 1 hour) BEFORE the capacity
+	// check — otherwise a map full of stale sessions rejects all new creates
+	// forever, since cleanup only runs inside Create.
 	now := time.Now()
 	for id, sess := range m.sessions {
-		if now.Sub(sess.LastAccessedAt) > time.Hour {
+		if now.Sub(sess.GetLastAccessed()) > time.Hour {
 			delete(m.sessions, id)
 		}
+	}
+
+	if len(m.sessions) >= m.maxSize {
+		return nil, ErrTooManySessions
 	}
 
 	s := &models.Session{

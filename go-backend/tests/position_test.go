@@ -15,21 +15,24 @@ func TestSortPositions(t *testing.T) {
 		Lap: 1,
 		Drivers: map[string]models.DriverData{
 			"NOR": {
-				Speed: 250.0,
-				Dist:  1000.0,
+				Speed:        250.0,
+				Dist:         1000.0,
+				RaceProgress: 0.20,
 			},
 			"LEC": {
-				Speed: 249.0,
-				Dist:  900.0,
+				Speed:        249.0,
+				Dist:         900.0,
+				RaceProgress: 0.18,
 			},
 			"VER": {
-				Speed: 251.0,
-				Dist:  1100.0,
+				Speed:        251.0,
+				Dist:         1100.0,
+				RaceProgress: 0.22,
 			},
 		},
 	}
 
-	// Simple test: sort by distance
+	// No pos_raw/interval data — sorting falls through to race progress (tier 3)
 	sortedCodes := telemetry.SortPositions(&frame)
 
 	assert.Equal(t, 3, len(sortedCodes), "Should have 3 drivers")
@@ -164,7 +167,7 @@ func TestCalculateGaps(t *testing.T) {
 
 	// NOR gap to VER should be same as gap to leader
 	norGapToPrev := frame.Drivers["NOR"].GapToPrevious
-	assert.AlmostEqual(t, norGap, norGapToPrev, 0.01)
+	assert.InDelta(t, norGap, norGapToPrev, 0.01)
 
 	// LEC gap to previous (NOR) should be smaller than gap to leader
 	lecGapToPrev := frame.Drivers["LEC"].GapToPrevious

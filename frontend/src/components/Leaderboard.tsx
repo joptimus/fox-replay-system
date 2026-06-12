@@ -234,7 +234,7 @@ export const Leaderboard: React.FC = () => {
                   </div>
 
                   <img
-                    src={`/images/tyres/${TYRE_MAP[data.tyre] || '2.png'}`}
+                    src={`/images/tyres/${TYRE_MAP[data.tyre] || '2.0.png'}`}
                     style={{
                       marginLeft: '8px',
                       height: '16px',
