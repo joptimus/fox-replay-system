@@ -191,7 +191,9 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
   const [menuOpen, setMenuOpen] = useState(false);
   const [hasPlayedLights, setHasPlayedLights] = useState(false);
   const lightsBoardRef = useRef<LightsBoardHandle>(null);
-  const { session, setTotalFrames, play } = useReplayStore();
+  const session = useReplayStore((state) => state.session);
+  const setTotalFrames = useReplayStore((state) => state.setTotalFrames);
+  const play = useReplayStore((state) => state.play);
   const { isConnected } = useReplayWebSocket(session.sessionId);
   const { isEnabled: showSectorColors, toggle: toggleSectorColors } = useSectorColors();
 
@@ -453,7 +455,10 @@ const ReplayView = ({ onSessionSelect, onRefreshData }: { onSessionSelect: (year
 
 function AppRoutes() {
   const navigate = useNavigate();
-  const { session, setSession, setSessionLoading, pause } = useReplayStore();
+  const session = useReplayStore((state) => state.session);
+  const setSession = useReplayStore((state) => state.setSession);
+  const setSessionLoading = useReplayStore((state) => state.setSessionLoading);
+  const pause = useReplayStore((state) => state.pause);
 
   useEffect(() => {
     const handleSessionTypeChangeEvent = (event: any) => {
@@ -487,21 +492,29 @@ function AppRoutes() {
       const drivers = dataService.getAllDriversForYear(year);
       const driverInfo = drivers.map(d => ({ code: d.Code, carNumber: d.CarNumber }));
 
-      // Preload images and create session in parallel — wait for both
-      const [, response] = await Promise.all([
-        Promise.all([
-          preloadDriverImages(driverInfo, year),
-          preloadTeamLogos(),
-          preloadTyreIcons(),
-          preloadCommonImages(),
-        ]).catch(err => console.warn("Image preloading failed:", err)),
-        fetch("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ year, round, session_type: sessionType, refresh })
-        }),
-      ]);
-      const data = await response!.json();
+      // Warm the image cache in the background — these are decorative and must
+      // not delay the session/WebSocket connection.
+      void Promise.all([
+        preloadDriverImages(driverInfo, year),
+        preloadTeamLogos(),
+        preloadTyreIcons(),
+        preloadCommonImages(),
+      ]).catch(err => console.warn("Image preloading failed:", err));
+
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, round, session_type: sessionType, refresh })
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.session_id) {
+        const message =
+          data?.error || data?.message ||
+          `Failed to create session (HTTP ${response.status})`;
+        useReplayStore.getState().setLoadingError(message);
+        return;
+      }
 
       // Set new session ID — this triggers a fresh WebSocket connection
       setSession(data.session_id, {
@@ -512,7 +525,9 @@ function AppRoutes() {
       setSessionLoading(true);
     } catch (err) {
       console.error("Failed to load session:", err);
-      setSessionLoading(false);
+      useReplayStore.getState().setLoadingError(
+        "Could not reach the server — is the backend running?"
+      );
     }
   };
 
@@ -550,7 +565,7 @@ function AppRoutes() {
 }
 
 function App() {
-  const { session } = useReplayStore();
+  const session = useReplayStore((state) => state.session);
 
   return (
     <BrowserRouter>

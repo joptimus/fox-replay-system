@@ -95,7 +95,72 @@ const CustomTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: strin
 
 
 const TelemetryLineChart: React.FC<ChartProps> = ({ title, dataKey, unit, yAxisDomain }) => {
-  const { lapTelemetry, selectedDrivers } = useComparisonStore();
+  const lapTelemetry = useComparisonStore((state) => state.lapTelemetry);
+  const selectedDrivers = useComparisonStore((state) => state.selectedDrivers);
+
+  const { chartData, sector1End, sector2End } = React.useMemo(() => {
+    if (lapTelemetry.length === 0) {
+      return { chartData: [] as any[], sector1End: 0, sector2End: 0 };
+    }
+
+    const allDistances = lapTelemetry.flatMap(lap => lap.telemetry.map(t => t.distance));
+    const minDist = Math.min(...allDistances);
+    const maxDist = Math.max(...allDistances);
+
+    const step = (maxDist - minDist) / 500;
+    const distances = Array.from({ length: 500 }, (_, i) => minDist + i * step);
+
+    // Calculate sector boundaries based on distance (approximate thirds of the track)
+    const trackLength = maxDist - minDist;
+    const sector1End = minDist + trackLength / 3;
+    const sector2End = minDist + (trackLength * 2) / 3;
+
+    const chartData: any[] = distances.map(distance => ({ distance: distance.toFixed(0) }));
+
+    lapTelemetry.forEach(lap => {
+      const driver = selectedDrivers.find(d => d.code === lap.driver_code);
+      if (!driver) return;
+
+      const telemetry = lap.telemetry;
+      const key = `${lap.driver_code}-L${lap.lap_number}`;
+
+      // Sampled distances increase monotonically, so a single advancing
+      // cursor replaces a findIndex linear scan per sample.
+      let idx = 0;
+      distances.forEach((distance, i) => {
+        while (idx < telemetry.length && telemetry[idx].distance < distance) {
+          idx++;
+        }
+
+        if (idx >= telemetry.length) return;
+
+        const point = chartData[i];
+
+        if (idx > 0) {
+          const prev = telemetry[idx - 1];
+          const next = telemetry[idx];
+          const ratio = (distance - prev.distance) / (next.distance - prev.distance);
+          let prevVal = prev[dataKey] as number;
+          let nextVal = next[dataKey] as number;
+
+          if (dataKey === 'brake') {
+            prevVal *= 100;
+            nextVal *= 100;
+          }
+
+          point[key] = prevVal + ratio * (nextVal - prevVal);
+        } else {
+          let val = telemetry[0][dataKey] as number;
+          if (dataKey === 'brake') {
+            val *= 100;
+          }
+          point[key] = val;
+        }
+      });
+    });
+
+    return { chartData, sector1End, sector2End };
+  }, [lapTelemetry, selectedDrivers, dataKey]);
 
   if (lapTelemetry.length === 0) {
     return (
@@ -104,55 +169,6 @@ const TelemetryLineChart: React.FC<ChartProps> = ({ title, dataKey, unit, yAxisD
       </div>
     );
   }
-
-  const allDistances = lapTelemetry.flatMap(lap => lap.telemetry.map(t => t.distance));
-  const minDist = Math.min(...allDistances);
-  const maxDist = Math.max(...allDistances);
-
-  const step = (maxDist - minDist) / 500;
-  const distances = Array.from({ length: 500 }, (_, i) => minDist + i * step);
-
-  // Calculate sector boundaries based on distance (approximate thirds of the track)
-  const trackLength = maxDist - minDist;
-  const sector1End = minDist + trackLength / 3;
-  const sector2End = minDist + (trackLength * 2) / 3;
-
-  const chartData = distances.map(distance => {
-    const point: any = { distance: distance.toFixed(0) };
-
-    lapTelemetry.forEach(lap => {
-      const driver = selectedDrivers.find(d => d.code === lap.driver_code);
-      if (!driver) return;
-
-      const telemetry = lap.telemetry;
-      const idx = telemetry.findIndex(t => t.distance >= distance);
-
-      const key = `${lap.driver_code}-L${lap.lap_number}`;
-
-      if (idx > 0) {
-        const prev = telemetry[idx - 1];
-        const next = telemetry[idx];
-        const ratio = (distance - prev.distance) / (next.distance - prev.distance);
-        let prevVal = prev[dataKey] as number;
-        let nextVal = next[dataKey] as number;
-
-        if (dataKey === 'brake') {
-          prevVal *= 100;
-          nextVal *= 100;
-        }
-
-        point[key] = prevVal + ratio * (nextVal - prevVal);
-      } else if (idx === 0 && telemetry.length > 0) {
-        let val = telemetry[0][dataKey] as number;
-        if (dataKey === 'brake') {
-          val *= 100;
-        }
-        point[key] = val;
-      }
-    });
-
-    return point;
-  });
 
   return (
     <div>
@@ -221,7 +237,7 @@ const TelemetryLineChart: React.FC<ChartProps> = ({ title, dataKey, unit, yAxisD
                 strokeWidth={2}
                 dot={false}
                 name={`${lap.driver_code} (Lap ${lap.lap_number})`}
-                animationDuration={600}
+                isAnimationActive={false}
               />
             );
           })}

@@ -25,6 +25,17 @@ export function useLightsBoard() {
 
     return () => {
       clearAllTimeouts();
+      // Stop any playing audio on unmount so it doesn't continue over the next screen
+      if (beepAudioRef.current) {
+        beepAudioRef.current.pause();
+        beepAudioRef.current.currentTime = 0;
+        beepAudioRef.current = null;
+      }
+      if (mainAudioRef.current) {
+        mainAudioRef.current.pause();
+        mainAudioRef.current.currentTime = 0;
+        mainAudioRef.current = null;
+      }
     };
   }, []);
 

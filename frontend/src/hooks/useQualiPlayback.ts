@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { QualiSegment, QualiDriverFrame } from "../types";
 
 interface InterpolatedDriver {
@@ -117,11 +117,12 @@ export function useQualiPlayback(
     [segment]
   );
 
-  const [drivers, setDrivers] = useState<InterpolatedDriver[]>([]);
-
-  useEffect(() => {
-    setDrivers(interpolateAllDrivers(currentTime));
-  }, [currentTime, interpolateAllDrivers]);
+  // Derive positions in the same render as the time update — a state+effect
+  // here doubled every animation tick's render and lagged the clock by a pass.
+  const drivers = useMemo(
+    () => interpolateAllDrivers(currentTime),
+    [currentTime, interpolateAllDrivers]
+  );
 
   useEffect(() => {
     if (!isPlaying) {

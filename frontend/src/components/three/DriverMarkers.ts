@@ -54,20 +54,25 @@ export class DriverMarkers {
   private hoverRing: THREE.Mesh | null = null;
   private hoveredCode: string | null = null;
   private appliedColors: Map<string, number> = new Map();
+  private hitTargets: THREE.Mesh[] = [];
+  private driverRefs: Map<string, { pointLight: THREE.PointLight; materials: THREE.MeshStandardMaterial[] }> = new Map();
+  private selectedFlags: Map<string, boolean> = new Map();
+  private pickedThisFrame = false;
+  private lastPickResult: string | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     // Pre-load car model
     loadCarModel(() => {
       // Create car meshes for any drivers that were added before model loaded
-      for (const [code, { hexColor, color }] of this.pendingDrivers.entries()) {
+      for (const [code, { color }] of this.pendingDrivers.entries()) {
         const existing = this.meshes.get(code);
         if (existing) {
           // Reset group state before upgrading — sphere phase may have accumulated rotation
           existing.rotation.set(0, 0, 0);
           this.prevHeadings.delete(code);
           this.prevPositions.delete(code);
-          this.upgradeToCarModel(existing, color, hexColor);
+          this.upgradeToCarModel(existing, color, code);
         }
       }
       this.pendingDrivers.clear();
@@ -80,6 +85,7 @@ export class DriverMarkers {
 
   private createDriverGroup(color: THREE.Color, hexColor: number, code: string): THREE.Group {
     const group = new THREE.Group();
+    const materials: THREE.MeshStandardMaterial[] = [];
 
     if (_carModelTemplate) {
       const car = _carModelTemplate.clone(true);
@@ -90,6 +96,9 @@ export class DriverMarkers {
           mat.emissive.copy(color);
           mat.emissiveIntensity = 0.5;
           child.material = mat;
+          // Geometry is shared with the GLTF template — never dispose per driver
+          child.userData.sharedGeometry = true;
+          materials.push(mat);
         }
       });
       // 1 Blender unit = 1 car length. Scale to 56 track units (5.6m in 1/10m)
@@ -109,6 +118,7 @@ export class DriverMarkers {
       const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
       sphere.userData.isFallback = true;
       group.add(sphere);
+      materials.push(sphereMaterial);
       this.pendingDrivers.set(code, { hexColor, color: color.clone() });
     }
 
@@ -116,17 +126,21 @@ export class DriverMarkers {
     pointLight.position.set(0, 30, 0);
     group.add(pointLight);
 
+    this.driverRefs.set(code, { pointLight, materials });
+
     // Invisible hit target sphere for easier clicking/hovering
     const hitGeo = new THREE.SphereGeometry(150, 8, 8);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false });
     const hitSphere = new THREE.Mesh(hitGeo, hitMat);
     hitSphere.userData.isHitTarget = true;
+    hitSphere.userData.code = code;
     group.add(hitSphere);
+    this.hitTargets.push(hitSphere);
 
     return group;
   }
 
-  private upgradeToCarModel(group: THREE.Group, color: THREE.Color, _hexColor: number): void {
+  private upgradeToCarModel(group: THREE.Group, color: THREE.Color, code: string): void {
     if (!_carModelTemplate) return;
 
     // Remove fallback sphere
@@ -145,6 +159,7 @@ export class DriverMarkers {
     }
 
     // Add car model
+    const materials: THREE.MeshStandardMaterial[] = [];
     const car = _carModelTemplate.clone(true);
     car.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -153,11 +168,17 @@ export class DriverMarkers {
         mat.emissive.copy(color);
         mat.emissiveIntensity = 0.5;
         child.material = mat;
+        // Geometry is shared with the GLTF template — never dispose per driver
+        child.userData.sharedGeometry = true;
+        materials.push(mat);
       }
     });
     car.scale.set(200, 200, 200);
     car.userData.isCar = true;
     group.add(car);
+
+    const refs = this.driverRefs.get(code);
+    if (refs) refs.materials = materials;
   }
 
   update(
@@ -167,28 +188,19 @@ export class DriverMarkers {
   ): void {
     this.meshes.forEach((group, code) => {
       if (!frame.drivers[code]) {
-        this.scene.remove(group);
-        this.disposeGroup(group);
-        this.meshes.delete(code);
-        this.appliedColors.delete(code);
+        this.removeDriver(code, group);
       }
     });
 
     const time = performance.now() / 1000;
 
     for (const [code, driver] of Object.entries(frame.drivers)) {
-      const isRetired =
-        driver.status === "Retired" ||
-        driver.status === "DNF" ||
-        driver.rel_dist >= 0.99;
+      const isRetired = driver.status === "Retired" || driver.status === "DNF";
 
       if (isRetired) {
         const existing = this.meshes.get(code);
         if (existing) {
-          this.scene.remove(existing);
-          this.disposeGroup(existing);
-          this.meshes.delete(code);
-          this.appliedColors.delete(code);
+          this.removeDriver(code, existing);
         }
         continue;
       }
@@ -208,20 +220,25 @@ export class DriverMarkers {
       } else if (this.appliedColors.get(code) !== hexColor) {
         // Color changed (e.g. driverColors arrived after initial creation) — update materials
         const color = new THREE.Color(hexColor);
-        group.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial && !child.userData.isHitTarget) {
-            child.material.color.copy(color);
-            child.material.emissive.copy(color);
+        const refs = this.driverRefs.get(code);
+        if (refs) {
+          for (const mat of refs.materials) {
+            mat.color.copy(color);
+            mat.emissive.copy(color);
           }
-        });
-        const pointLight = group.children.find(c => c instanceof THREE.PointLight) as THREE.PointLight | undefined;
-        if (pointLight) pointLight.color.set(hexColor);
+          refs.pointLight.color.set(hexColor);
+        }
         this.appliedColors.set(code, hexColor);
       }
 
       // Set target position (interpolation happens in interpolate())
       const elev = this.trackGeometry?.getElevationAt(driver.x, driver.y) ?? 0;
-      this.targetPositions.set(code, new THREE.Vector3(driver.x, elev + 50, driver.y));
+      let target = this.targetPositions.get(code);
+      if (!target) {
+        target = new THREE.Vector3();
+        this.targetPositions.set(code, target);
+      }
+      target.set(driver.x, elev + 50, driver.y);
 
       // Initialize smoothed position if first time
       if (!this.smoothedPositions.has(code)) {
@@ -241,38 +258,45 @@ export class DriverMarkers {
             this.smoothedHeadings.set(code, heading);
           }
         }
+        prev.x = driver.x;
+        prev.z = driver.y;
+      } else {
+        this.prevPositions.set(code, { x: driver.x, z: driver.y });
       }
-      this.prevPositions.set(code, { x: driver.x, z: driver.y });
 
       const isSelected = code === selectedDriver?.code;
-
-      // Find car sub-group and point light
-      const pointLight = group.children.find(c => c instanceof THREE.PointLight) as THREE.PointLight | undefined;
+      const wasSelected = this.selectedFlags.get(code) ?? false;
+      const refs = this.driverRefs.get(code);
 
       if (isSelected) {
         const scalePulse = 1.0 + Math.sin(time * 4) * 0.1;
         group.scale.set(scalePulse, scalePulse, scalePulse);
-        if (pointLight) pointLight.intensity = 0.8;
-        // Boost emissive on car meshes
-        group.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-            child.material.emissiveIntensity = 0.9 + Math.sin(time * 6) * 0.2;
+        if (refs) {
+          if (!wasSelected) refs.pointLight.intensity = 0.8;
+          // Boost emissive on car meshes (animated, so written every frame while selected)
+          const emissive = 0.9 + Math.sin(time * 6) * 0.2;
+          for (const mat of refs.materials) {
+            mat.emissiveIntensity = emissive;
           }
-        });
-      } else {
+        }
+      } else if (wasSelected) {
         group.scale.set(1.0, 1.0, 1.0);
-        if (pointLight) pointLight.intensity = 0.5;
-        group.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-            child.material.emissiveIntensity = 0.5;
+        if (refs) {
+          refs.pointLight.intensity = 0.5;
+          for (const mat of refs.materials) {
+            mat.emissiveIntensity = 0.5;
           }
-        });
+        }
       }
+      this.selectedFlags.set(code, isSelected);
     }
   }
 
   /** Run every render frame to smoothly interpolate position and heading */
   interpolate(): void {
+    // New animation frame — allow the next pointermove to run a fresh hover raycast
+    this.pickedThisFrame = false;
+
     const POS_LERP = 0.07;
     const HDG_LERP = 0.06;
 
@@ -358,6 +382,13 @@ export class DriverMarkers {
     camera: THREE.Camera,
     domElement: HTMLElement
   ): string | null {
+    // Throttle hover raycasting to at most once per animation frame — extra
+    // pointermove events between frames reuse the last result. Clicks always
+    // get a fresh raycast.
+    if (event.type === "pointermove" && this.pickedThisFrame) {
+      return this.lastPickResult;
+    }
+
     const rect = domElement.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -367,21 +398,16 @@ export class DriverMarkers {
 
     this.raycaster.setFromCamera(this.mouse, camera);
 
-    const groupsArray = Array.from(this.meshes.values());
-    const intersects = this.raycaster.intersectObjects(groupsArray, true);
+    // Raycast only the flat list of invisible hit spheres (non-recursive) —
+    // each carries its driver code in userData for direct hit-to-code mapping.
+    const intersects = this.raycaster.intersectObjects(this.hitTargets, false);
+    const result = intersects.length > 0
+      ? ((intersects[0].object.userData.code as string) ?? null)
+      : null;
 
-    if (intersects.length === 0) return null;
-
-    const hit = intersects[0].object;
-    for (const [code, group] of this.meshes.entries()) {
-      let found = false;
-      group.traverse((child) => {
-        if (child === hit) found = true;
-      });
-      if (found) return code;
-    }
-
-    return null;
+    this.pickedThisFrame = true;
+    this.lastPickResult = result;
+    return result;
   }
 
   getDriverObject(code: string): THREE.Object3D | null {
@@ -389,6 +415,7 @@ export class DriverMarkers {
   }
 
   dispose(): void {
+    this.setHovered(null);
     this.meshes.forEach((group) => {
       this.scene.remove(group);
       this.disposeGroup(group);
@@ -402,12 +429,56 @@ export class DriverMarkers {
     this.targetPositions.clear();
     this.targetHeadings.clear();
     this.appliedColors.clear();
+    this.driverRefs.clear();
+    this.selectedFlags.clear();
+    this.hitTargets = [];
+    this.lastPickResult = null;
+
+    // Dispose the shared GLTF template geometry/materials once on unmount.
+    // (If a new instance mounts later, Three.js re-uploads buffers lazily.)
+    if (_carModelTemplate) {
+      _carModelTemplate.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose();
+          }
+        }
+      });
+    }
+  }
+
+  /** Remove a single driver, disposing only resources uniquely owned by it. */
+  private removeDriver(code: string, group: THREE.Group): void {
+    if (this.hoveredCode === code) {
+      this.setHovered(null);
+    }
+    this.scene.remove(group);
+    this.disposeGroup(group);
+    this.meshes.delete(code);
+    this.appliedColors.delete(code);
+    this.driverRefs.delete(code);
+    this.selectedFlags.delete(code);
+    this.pendingDrivers.delete(code);
+    this.prevPositions.delete(code);
+    this.prevHeadings.delete(code);
+    this.smoothedPositions.delete(code);
+    this.smoothedHeadings.delete(code);
+    this.targetPositions.delete(code);
+    this.targetHeadings.delete(code);
+    this.hitTargets = this.hitTargets.filter((m) => m.userData.code !== code);
+    if (this.lastPickResult === code) this.lastPickResult = null;
   }
 
   private disposeGroup(group: THREE.Group): void {
     group.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
+        // Car geometry is shared across all drivers (cloned from the GLTF
+        // template) — only dispose geometry this driver uniquely owns.
+        if (!child.userData.sharedGeometry) {
+          child.geometry.dispose();
+        }
+        // Materials are always cloned per driver — safe to dispose.
         if (child.material instanceof THREE.Material) {
           child.material.dispose();
         }

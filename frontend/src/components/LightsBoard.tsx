@@ -1,4 +1,4 @@
-import { useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useLightsBoard, LightState, Phase } from '../hooks/useLightsBoard';
 import { useReplayStore } from '../store/replayStore';
 import { dataService } from '../services/dataService';
@@ -102,15 +102,22 @@ const LightsBoardComponent = ({ onSequenceComplete }: LightsBoardProps, ref: Rea
     ? `${year} ${dataService.getRaceName(year, round)}`
     : 'Grand Prix';
 
+  // Only report completion after a sequence actually ran — the initial mount
+  // state is also (!isVisible && 'idle'), and firing there would auto-start
+  // playback whenever the replay view is (re)entered.
+  const hasRunRef = useRef(false);
+
   useImperativeHandle(ref, () => ({
     startSequence: () => {
+      hasRunRef.current = true;
       startSequence();
     },
   }));
 
   // Notify parent when sequence completes (dismiss transition done)
   useEffect(() => {
-    if (!isVisible && currentPhase === 'idle') {
+    if (!isVisible && currentPhase === 'idle' && hasRunRef.current) {
+      hasRunRef.current = false;
       onSequenceComplete();
     }
   }, [isVisible, currentPhase, onSequenceComplete]);

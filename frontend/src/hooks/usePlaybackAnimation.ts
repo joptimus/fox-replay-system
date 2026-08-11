@@ -4,17 +4,23 @@
  */
 
 import { useEffect, useRef } from "react";
+import { shallow } from "zustand/shallow";
 import { useReplayStore } from "../store/replayStore";
 
 const FPS = 25; // Frames per second
 
 export const usePlaybackAnimation = () => {
-  const { isPlaying, speed, frameIndex, totalFrames } = useReplayStore((state) => ({
-    isPlaying: state.playback.isPlaying,
-    speed: state.playback.speed,
-    frameIndex: state.playback.frameIndex,
-    totalFrames: state.playback.totalFrames,
-  }));
+  // Note: frameIndex is intentionally NOT subscribed here — it changes at
+  // animation rate and would re-render the host component every tick. Seeks
+  // are detected via a store subscription below instead.
+  const { isPlaying, speed, totalFrames } = useReplayStore(
+    (state) => ({
+      isPlaying: state.playback.isPlaying,
+      speed: state.playback.speed,
+      totalFrames: state.playback.totalFrames,
+    }),
+    shallow
+  );
 
   const setFrameIndex = useReplayStore((state) => state.setFrameIndex);
   const pause = useReplayStore((state) => state.pause);
@@ -26,15 +32,22 @@ export const usePlaybackAnimation = () => {
 
   // Detect external seeks (user clicking timeline) and re-anchor the animation
   useEffect(() => {
-    if (isPlaying && frameIndex !== lastSetFrame.current) {
-      // frameIndex changed from outside the animation loop (a seek) — re-anchor
-      startTimeRef.current = performance.now();
-      startFrameRef.current = frameIndex;
-    }
-  }, [frameIndex, isPlaying]);
+    const unsubscribe = useReplayStore.subscribe(
+      (state) => state.playback.frameIndex,
+      (frameIndex) => {
+        if (frameIndex !== lastSetFrame.current) {
+          // frameIndex changed from outside the animation loop (a seek) — re-anchor
+          startTimeRef.current = performance.now();
+          startFrameRef.current = frameIndex;
+          lastSetFrame.current = frameIndex;
+        }
+      }
+    );
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || totalFrames <= 0) {
       startTimeRef.current = null;
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -43,11 +56,13 @@ export const usePlaybackAnimation = () => {
       return;
     }
 
-    // Initialize start time and frame on first play
-    if (startTimeRef.current === null) {
-      startTimeRef.current = performance.now();
-      startFrameRef.current = frameIndex;
-    }
+    // Anchor at the current frame whenever the loop (re)starts — including on
+    // speed changes, so changing speed mid-play continues from the current
+    // position instead of jumping.
+    const currentFrame = useReplayStore.getState().playback.frameIndex;
+    startTimeRef.current = performance.now();
+    startFrameRef.current = currentFrame;
+    lastSetFrame.current = currentFrame;
 
     const animate = (currentTime: number) => {
       if (startTimeRef.current === null) return;
@@ -67,8 +82,12 @@ export const usePlaybackAnimation = () => {
         pause();
       } else {
         const computed = Math.floor(newFrameIndex);
-        lastSetFrame.current = computed;
-        setFrameIndex(computed);
+        // Only write to the store when the frame actually advances (25 FPS),
+        // not on every display refresh tick.
+        if (computed !== lastSetFrame.current) {
+          lastSetFrame.current = computed;
+          setFrameIndex(computed);
+        }
       }
 
       rafIdRef.current = requestAnimationFrame(animate);

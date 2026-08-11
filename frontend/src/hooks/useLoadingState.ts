@@ -24,21 +24,13 @@ export const useLoadingState = (sessionId: string | null, isOpen: boolean) => {
     }
   }, [isOpen, sessionId]);
 
-  const shouldClose = useCallback(() => {
-    if (!openedAt) return false;
-    if (error) return false; // Keep open on error
-    if (!isLoadingComplete) return false;
-    const elapsed = performance.now() - openedAt;
-    return elapsed >= MIN_DISPLAY_MS;
-  }, [openedAt, error, isLoadingComplete]);
-
+  // How long to keep the modal up once loading completes, so fast loads still
+  // show it for MIN_DISPLAY_MS instead of never scheduling a close.
   const getCloseDelayMs = useCallback(() => {
     if (!openedAt) return 0;
-    if (error) return Infinity;
-    if (!isLoadingComplete) return Infinity;
     const elapsed = performance.now() - openedAt;
     return Math.max(0, MIN_DISPLAY_MS - elapsed);
-  }, [openedAt, error, isLoadingComplete]);
+  }, [openedAt]);
 
-  return { progress, error, shouldClose, getCloseDelayMs };
+  return { progress, error, isLoadingComplete, getCloseDelayMs };
 };

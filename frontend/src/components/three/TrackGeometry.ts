@@ -97,6 +97,12 @@ export class TrackGeometry {
   }
 
   build(trackData: TrackGeometryData, showSectorColors: boolean): void {
+    // Dispose previous turn markers (sprite materials + canvas textures) and
+    // terrain before clearing children — disposeChildren doesn't know about them
+    this.turnMarkers?.dispose();
+    this.turnMarkers = null;
+    this.terrainMesh?.dispose();
+    this.terrainMesh = null;
     this.disposeChildren();
     _cachedZMin = null;
     _cachedZRef = null;
@@ -195,7 +201,10 @@ export class TrackGeometry {
 
   private disposeChildren(): void {
     this.trackGroup.traverse((obj) => {
-      if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+      if (obj instanceof THREE.Sprite) {
+        obj.material.map?.dispose();
+        obj.material.dispose();
+      } else if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
         obj.geometry?.dispose();
         if (obj.material instanceof THREE.Material) {
           obj.material.dispose();

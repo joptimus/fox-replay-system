@@ -6,18 +6,139 @@ const TYRE_MAP: Record<number, string> = {
   0: '0.0.png', 1: '1.0.png', 2: '2.0.png', 3: '3.0.png', 4: '4.0.png'
 };
 
+const formatGap = (gapSeconds: number): string => {
+  if (gapSeconds === 0) return "-";
+  return `+${gapSeconds.toFixed(3)}`;
+};
+
+interface DriverRowProps {
+  code: string;
+  position: number;
+  gapToPrevious: string;
+  gapToLeader: string;
+  tyre: number;
+  isOut: boolean;
+  isSelected: boolean;
+  hexColor: string;
+  selectedBg: string;
+  onSelect: (code: string) => void;
+}
+
+// Memoized so unchanged rows skip re-render (and framer-motion skips their
+// layout measurement) on every store tick.
+const DriverRow = React.memo<DriverRowProps>(({
+  code,
+  position,
+  gapToPrevious,
+  gapToLeader,
+  tyre,
+  isOut,
+  isSelected,
+  hexColor,
+  selectedBg,
+  onSelect,
+}) => (
+  <motion.div
+    layout
+    onClick={() => onSelect(code)}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      height: '38px',
+      minHeight: '38px',
+      padding: '0 14px',
+      cursor: 'pointer',
+      borderLeft: `3px solid ${isOut ? 'var(--text-faint)' : hexColor}`,
+      borderBottom: '1px solid var(--border-color)',
+      opacity: isOut ? 0.4 : 1,
+      background: isSelected ? selectedBg : 'transparent',
+      transition: 'background 0.15s',
+      flexShrink: 0,
+    }}
+    onMouseEnter={(e) => {
+      if (!isSelected) {
+        (e.currentTarget as any).style.background = 'rgba(255,255,255,0.02)';
+      }
+    }}
+    onMouseLeave={(e) => {
+      if (!isSelected) {
+        (e.currentTarget as any).style.background = 'transparent';
+      }
+    }}
+  >
+    <span style={{
+      fontFamily: 'var(--font-mono)',
+      width: '24px',
+      fontWeight: 700,
+      fontSize: '13px',
+      color: isOut ? 'var(--text-faint)' : (isSelected ? 'var(--text-primary)' : 'var(--text-dimmed)'),
+    }}>{position}</span>
+    <span style={{
+      fontFamily: 'var(--font-mono)',
+      fontWeight: 700,
+      width: '40px',
+      fontSize: '13px',
+      letterSpacing: '0.03em',
+      color: isOut ? 'var(--text-faint)' : 'var(--text-primary)',
+    }}>{code}</span>
+
+    <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+      {!isOut && (
+        <>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--text-dimmed)',
+            width: '40px',
+            textAlign: 'right',
+          }}>{gapToPrevious}</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--text-dimmed)',
+            width: '40px',
+            textAlign: 'right',
+          }}>{gapToLeader}</span>
+        </>
+      )}
+    </div>
+
+    <img
+      src={`/images/tyres/${TYRE_MAP[tyre] || '2.0.png'}`}
+      style={{
+        marginLeft: '8px',
+        height: '16px',
+        width: 'auto',
+        opacity: isOut ? 0.3 : 1,
+      }}
+      onError={(e) => (e.currentTarget.style.opacity = '0')}
+    />
+  </motion.div>
+));
+
 export const Leaderboard: React.FC = () => {
   const currentFrame = useCurrentFrame();
   const selectedDriver = useSelectedDriver();
-  const { setSelectedDriver } = useReplayStore();
   const session = useReplayStore((state) => state.session);
   const metadata = session?.metadata;
+
+  const handleRowSelect = React.useCallback((code: string) => {
+    const state = useReplayStore.getState();
+    if (state.selectedDriver?.code === code) {
+      state.setSelectedDriver(null);
+      return;
+    }
+    const data = state.currentFrame?.drivers?.[code];
+    if (!data) return;
+    const color = state.session?.metadata?.driver_colors?.[code] ?? [255, 255, 255];
+    state.setSelectedDriver({ code, data, color });
+  }, []);
 
   const drivers = React.useMemo(() => {
     if (!currentFrame?.drivers) return [];
     return Object.entries(currentFrame.drivers)
       .map(([code, data]) => {
-        const isRetired = data.status === "Retired" || data.status === "+1L" || data.status?.includes("DNF");
+        const isRetired = data.status === "Retired" || data.status === "+1L" || (data.status?.includes("DNF") ?? false);
         const isOut = isRetired;
         return {
           code,
@@ -131,17 +252,6 @@ export const Leaderboard: React.FC = () => {
             const hexColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
             const isFirstOutDriver = isOut && (index === 0 || !drivers[index - 1]?.isOut);
 
-            const gap_to_previous = data.gap_to_previous || 0;
-            const gap_to_leader = data.gap_to_leader || 0;
-
-            const formatGap = (gapSeconds: number): string => {
-              if (gapSeconds === 0) return "-";
-              return `+${gapSeconds.toFixed(3)}`;
-            };
-
-            const gapToPrevious = formatGap(gap_to_previous);
-            const gapToLeader = formatGap(gap_to_leader);
-
             return (
               <React.Fragment key={code}>
                 {isFirstOutDriver && currentLap > 1 && (
@@ -160,90 +270,18 @@ export const Leaderboard: React.FC = () => {
                     }}>RETIRED</span>
                   </div>
                 )}
-                <motion.div
-                  layout
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelectedDriver(null);
-                    } else {
-                      setSelectedDriver({ code, data, color });
-                    }
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    height: '38px',
-                    minHeight: '38px',
-                    padding: '0 14px',
-                    cursor: 'pointer',
-                    borderLeft: `3px solid ${isOut ? 'var(--text-faint)' : hexColor}`,
-                    borderBottom: '1px solid var(--border-color)',
-                    opacity: isOut ? 0.4 : 1,
-                    background: isSelected
-                      ? `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.05)`
-                      : 'transparent',
-                    transition: 'background 0.15s',
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      (e.currentTarget as any).style.background = 'rgba(255,255,255,0.02)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      (e.currentTarget as any).style.background = 'transparent';
-                    }
-                  }}
-                >
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    width: '24px',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    color: isOut ? 'var(--text-faint)' : (isSelected ? 'var(--text-primary)' : 'var(--text-dimmed)'),
-                  }}>{position}</span>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    width: '40px',
-                    fontSize: '13px',
-                    letterSpacing: '0.03em',
-                    color: isOut ? 'var(--text-faint)' : 'var(--text-primary)',
-                  }}>{code}</span>
-
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    {!isOut && (
-                      <>
-                        <span style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          color: 'var(--text-dimmed)',
-                          width: '40px',
-                          textAlign: 'right',
-                        }}>{gapToPrevious}</span>
-                        <span style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          color: 'var(--text-dimmed)',
-                          width: '40px',
-                          textAlign: 'right',
-                        }}>{gapToLeader}</span>
-                      </>
-                    )}
-                  </div>
-
-                  <img
-                    src={`/images/tyres/${TYRE_MAP[data.tyre] || '2.0.png'}`}
-                    style={{
-                      marginLeft: '8px',
-                      height: '16px',
-                      width: 'auto',
-                      opacity: isOut ? 0.3 : 1,
-                    }}
-                    onError={(e) => (e.currentTarget.style.opacity = '0')}
-                  />
-                </motion.div>
+                <DriverRow
+                  code={code}
+                  position={position}
+                  gapToPrevious={formatGap(data.gap_to_previous || 0)}
+                  gapToLeader={formatGap(data.gap_to_leader || 0)}
+                  tyre={data.tyre}
+                  isOut={isOut}
+                  isSelected={isSelected}
+                  hexColor={hexColor}
+                  selectedBg={`rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.05)`}
+                  onSelect={handleRowSelect}
+                />
               </React.Fragment>
             );
           })}

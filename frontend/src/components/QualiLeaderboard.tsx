@@ -19,6 +19,181 @@ interface QualiLeaderboardProps {
   totalDrivers: number;
 }
 
+const formatLapTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
+};
+
+interface QualiRowProps {
+  code: string;
+  pos: number;
+  lapTime: number;
+  gap: number | null;
+  positionColor: string;
+  colorRgb: string;
+  isFastest: boolean;
+  isSelected: boolean;
+  isEliminated: boolean;
+  knockout: boolean;
+  isOnTrack: boolean;
+  onSelect: (code: string) => void;
+}
+
+// Memoized so rows only re-render when their own standing, lap time, or
+// on-track state changes rather than at animation rate.
+const QualiRow = React.memo<QualiRowProps>(({
+  code,
+  pos,
+  lapTime,
+  gap,
+  positionColor,
+  colorRgb,
+  isFastest,
+  isSelected,
+  isEliminated,
+  knockout,
+  isOnTrack,
+  onSelect,
+}) => {
+  let rowBg = 'transparent';
+  if (isSelected && knockout) rowBg = 'rgba(230,57,70,0.09)';
+  else if (isSelected) rowBg = 'rgba(255,255,255,0.03)';
+  else if (knockout) rowBg = 'rgba(230,57,70,0.06)';
+
+  return (
+    <button
+      onClick={() => onSelect(code)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '30px 6px 52px 1fr 82px 42px',
+        alignItems: 'center',
+        padding: '9px 12px',
+        border: 'none',
+        borderBottom: '1px solid rgba(255,255,255,0.055)',
+        cursor: 'pointer',
+        transition: 'background 0.1s',
+        background: rowBg,
+        width: '100%',
+        textAlign: 'left',
+        opacity: isEliminated ? 0.3 : 1,
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.background = knockout
+            ? 'rgba(230,57,70,0.09)'
+            : 'rgba(255,255,255,0.015)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.background = knockout
+            ? 'rgba(230,57,70,0.06)'
+            : 'transparent';
+        }
+      }}
+    >
+      {/* Position */}
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '13px',
+        fontWeight: 800,
+        color: positionColor,
+        textAlign: 'center',
+      }}>
+        {pos}
+      </span>
+
+      {/* Team dot */}
+      <div style={{
+        width: '5px',
+        height: '5px',
+        borderRadius: '50%',
+        background: colorRgb,
+        opacity: 0.7,
+      }} />
+
+      {/* Driver code + on-track dot */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '13px',
+          fontWeight: 700,
+          color: knockout ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.85)',
+        }}>
+          {code}
+        </span>
+        {isOnTrack && (
+          <span
+            className="quali-blink"
+            style={{
+              width: '5px',
+              height: '5px',
+              borderRadius: '50%',
+              background: '#00e676',
+              boxShadow: '0 0 6px rgba(0,230,118,0.38)',
+              display: 'inline-block',
+              flexShrink: 0,
+            }}
+          />
+        )}
+      </div>
+
+      {/* Gap area */}
+      <div style={{ textAlign: 'right', paddingRight: '8px' }}>
+        {gap !== null && (
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: '#666680',
+          }}>
+            +{gap.toFixed(3)}
+          </span>
+        )}
+      </div>
+
+      {/* Lap time */}
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '12px',
+        fontWeight: 700,
+        color: knockout
+          ? 'rgba(255,255,255,0.5)'
+          : isFastest
+          ? '#b388ff'
+          : '#e8e8ee',
+        textAlign: 'right',
+      }}>
+        {formatLapTime(lapTime)}
+      </span>
+
+      {/* Sector status dots (placeholder - no sector data available) */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+      }}>
+        {[0, 1, 2].map((s) => (
+          <div
+            key={s}
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.1)',
+            }}
+          />
+        ))}
+      </div>
+    </button>
+  );
+});
+
 export const QualiLeaderboard: React.FC<QualiLeaderboardProps> = ({
   drivers,
   driverColors,
@@ -31,15 +206,20 @@ export const QualiLeaderboard: React.FC<QualiLeaderboardProps> = ({
   onTrackDrivers,
   totalDrivers,
 }) => {
-  const sortedDrivers = [...drivers].sort((a, b) => a.lapTime - b.lapTime);
+  const sortedDrivers = React.useMemo(
+    () => [...drivers].sort((a, b) => a.lapTime - b.lapTime),
+    [drivers]
+  );
   const fastestLap = sortedDrivers[0]?.lapTime ?? 0;
   const onTrackCount = onTrackDrivers.size;
 
-  const formatLapTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
-  };
+  // Stable click handler so memoized rows aren't invalidated when the parent
+  // passes a new onDriverClick identity each render.
+  const onDriverClickRef = React.useRef(onDriverClick);
+  onDriverClickRef.current = onDriverClick;
+  const handleSelect = React.useCallback((code: string) => {
+    onDriverClickRef.current(code);
+  }, []);
 
   const getPositionColor = (pos: number) => {
     if (pos <= 3) return "#00e676";
@@ -57,12 +237,8 @@ export const QualiLeaderboard: React.FC<QualiLeaderboardProps> = ({
   sortedDrivers.forEach((driver, idx) => {
     const pos = idx + 1;
     const color = driverColors[driver.code] || [128, 128, 128];
-    const isSelected = driver.code === selectedDriver;
-    const isEliminated = eliminatedDrivers.includes(driver.code);
     const knockout = isInKnockoutZone(pos);
-    const isOnTrack = onTrackDrivers.has(driver.code);
     const gap = idx === 0 ? null : driver.lapTime - fastestLap;
-    const isFastest = idx === 0;
 
     if (!eliminationLineInserted && knockout && eliminatesLabel) {
       eliminationLineInserted = true;
@@ -93,142 +269,22 @@ export const QualiLeaderboard: React.FC<QualiLeaderboardProps> = ({
       );
     }
 
-    let rowBg = 'transparent';
-    if (isSelected && knockout) rowBg = 'rgba(230,57,70,0.09)';
-    else if (isSelected) rowBg = 'rgba(255,255,255,0.03)';
-    else if (knockout) rowBg = 'rgba(230,57,70,0.06)';
-
     rows.push(
-      <button
+      <QualiRow
         key={driver.code}
-        onClick={() => onDriverClick(driver.code)}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '30px 6px 52px 1fr 82px 42px',
-          alignItems: 'center',
-          padding: '9px 12px',
-          border: 'none',
-          borderBottom: '1px solid rgba(255,255,255,0.055)',
-          cursor: 'pointer',
-          transition: 'background 0.1s',
-          background: rowBg,
-          width: '100%',
-          textAlign: 'left',
-          opacity: isEliminated ? 0.3 : 1,
-        }}
-        onMouseEnter={(e) => {
-          if (!isSelected) {
-            e.currentTarget.style.background = knockout
-              ? 'rgba(230,57,70,0.09)'
-              : 'rgba(255,255,255,0.015)';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected) {
-            e.currentTarget.style.background = knockout
-              ? 'rgba(230,57,70,0.06)'
-              : 'transparent';
-          }
-        }}
-      >
-        {/* Position */}
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '13px',
-          fontWeight: 800,
-          color: getPositionColor(pos),
-          textAlign: 'center',
-        }}>
-          {pos}
-        </span>
-
-        {/* Team dot */}
-        <div style={{
-          width: '5px',
-          height: '5px',
-          borderRadius: '50%',
-          background: `rgb(${color[0]},${color[1]},${color[2]})`,
-          opacity: 0.7,
-        }} />
-
-        {/* Driver code + on-track dot */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-        }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '13px',
-            fontWeight: 700,
-            color: knockout ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.85)',
-          }}>
-            {driver.code}
-          </span>
-          {isOnTrack && (
-            <span
-              className="quali-blink"
-              style={{
-                width: '5px',
-                height: '5px',
-                borderRadius: '50%',
-                background: '#00e676',
-                boxShadow: '0 0 6px rgba(0,230,118,0.38)',
-                display: 'inline-block',
-                flexShrink: 0,
-              }}
-            />
-          )}
-        </div>
-
-        {/* Gap area */}
-        <div style={{ textAlign: 'right', paddingRight: '8px' }}>
-          {gap !== null && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              color: '#666680',
-            }}>
-              +{gap.toFixed(3)}
-            </span>
-          )}
-        </div>
-
-        {/* Lap time */}
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '12px',
-          fontWeight: 700,
-          color: knockout
-            ? 'rgba(255,255,255,0.5)'
-            : isFastest
-            ? '#b388ff'
-            : '#e8e8ee',
-          textAlign: 'right',
-        }}>
-          {formatLapTime(driver.lapTime)}
-        </span>
-
-        {/* Sector status dots (placeholder - no sector data available) */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-        }}>
-          {[0, 1, 2].map((s) => (
-            <div
-              key={s}
-              style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.1)',
-              }}
-            />
-          ))}
-        </div>
-      </button>
+        code={driver.code}
+        pos={pos}
+        lapTime={driver.lapTime}
+        gap={gap}
+        positionColor={getPositionColor(pos)}
+        colorRgb={`rgb(${color[0]},${color[1]},${color[2]})`}
+        isFastest={idx === 0}
+        isSelected={driver.code === selectedDriver}
+        isEliminated={eliminatedDrivers.includes(driver.code)}
+        knockout={knockout}
+        isOnTrack={onTrackDrivers.has(driver.code)}
+        onSelect={handleSelect}
+      />
     );
   });
 

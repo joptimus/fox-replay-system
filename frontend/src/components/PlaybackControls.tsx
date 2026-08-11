@@ -20,13 +20,13 @@ interface PlaybackControlsProps {
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({ onPlayWithLights }) => {
-  const {
-    playback,
-    play,
-    pause,
-    setSpeed,
-    seek,
-  } = useReplayStore();
+  // Narrow subscriptions: playback changes at frame rate, but subscribing to
+  // the whole store would also re-render on every currentFrame write.
+  const playback = useReplayStore((state) => state.playback);
+  const play = useReplayStore((state) => state.play);
+  const pause = useReplayStore((state) => state.pause);
+  const setSpeed = useReplayStore((state) => state.setSpeed);
+  const seek = useReplayStore((state) => state.seek);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);

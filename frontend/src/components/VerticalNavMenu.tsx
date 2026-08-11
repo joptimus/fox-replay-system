@@ -96,10 +96,14 @@ export const VerticalNavMenu: React.FC = () => {
       {/* Session Type Buttons */}
       {sessionButtons.map(({ label, sessionType, tooltip }) => {
         const isActive = currentSessionType === sessionType;
+        const disabled = !session.metadata || session.isLoading;
         return (
           <button
             key={sessionType}
             onClick={() => {
+              // No-op on the already-active session, and never fire while a
+              // load is in flight (rapid clicks would race each other).
+              if (isActive || disabled) return;
               if (session.metadata?.year && session.metadata?.round) {
                 window.dispatchEvent(new CustomEvent('sessionTypeChange', {
                   detail: { sessionType, year: session.metadata.year, round: session.metadata.round }
@@ -119,18 +123,18 @@ export const VerticalNavMenu: React.FC = () => {
               color: isActive ? 'var(--accent-red)' : 'var(--text-faint)',
               fontSize: '10px',
               fontWeight: 400,
-              cursor: isActive ? 'default' : 'pointer',
+              cursor: isActive || disabled ? 'default' : 'pointer',
               fontFamily: 'var(--font-mono)',
               letterSpacing: '0.03em',
               padding: 0,
               transition: 'all 0.15s',
-              opacity: session.metadata ? 1 : 0.4,
-              pointerEvents: session.metadata ? 'auto' : 'none',
+              opacity: disabled ? 0.4 : 1,
+              pointerEvents: disabled ? 'none' : 'auto',
             }}
             title={tooltip}
-            disabled={!session.metadata}
+            disabled={disabled}
             onMouseEnter={(e) => {
-              if (!isActive && session.metadata) {
+              if (!isActive && !disabled) {
                 (e.currentTarget as any).style.color = 'var(--accent-red)';
                 (e.currentTarget as any).style.background = 'rgba(230, 57, 70, 0.05)';
               }

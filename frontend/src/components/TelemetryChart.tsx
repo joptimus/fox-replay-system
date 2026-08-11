@@ -2,7 +2,7 @@
  * Real-time telemetry visualization using Recharts
  */
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -30,12 +30,15 @@ export const TelemetryChart: React.FC = () => {
   const [speedUnit, setSpeedUnit] = useState<"kmh" | "mph">("kmh");
   const telemetryHistoryRef = useRef<TelemetryDataPoint[]>([]);
   const lastFrameTimeRef = useRef<number>(-1);
+  const frameCounterRef = useRef<number>(0);
+  // History is stored in km/h only; unit conversion happens at render time.
   const [telemetryData, setTelemetryData] = useState<TelemetryDataPoint[]>([]);
 
   // All hooks must be called unconditionally
   useEffect(() => {
     telemetryHistoryRef.current = [];
     lastFrameTimeRef.current = -1;
+    frameCounterRef.current = 0;
   }, [selectedDriver?.code]);
 
   useEffect(() => {
@@ -47,6 +50,7 @@ export const TelemetryChart: React.FC = () => {
 
     if (lastFrameTimeRef.current >= 0 && Math.abs(currentFrame.t - lastFrameTimeRef.current) > 1) {
       telemetryHistoryRef.current = [];
+      frameCounterRef.current = 0;
     }
 
     if (currentFrame.t !== lastFrameTimeRef.current) {
@@ -73,21 +77,23 @@ export const TelemetryChart: React.FC = () => {
           telemetryHistoryRef.current.shift();
         }
 
-        setTelemetryData([...telemetryHistoryRef.current]);
+        // Throttle chart updates to every 4th frame (~6Hz at 25fps playback);
+        // the sparkline doesn't need full-rate redraws.
+        frameCounterRef.current += 1;
+        if (frameCounterRef.current % 4 === 1) {
+          setTelemetryData([...telemetryHistoryRef.current]);
+        }
       }
     }
   }, [currentFrame, selectedDriver?.code]);
 
-  useEffect(() => {
-    if (telemetryHistoryRef.current.length === 0) return;
-
-    const convertedData = telemetryHistoryRef.current.map(point => ({
+  const chartData = useMemo(() => {
+    if (speedUnit === "kmh") return telemetryData;
+    return telemetryData.map(point => ({
       ...point,
-      speed: speedUnit === "kmh" ? point.speed : point.speed * 0.621371,
+      speed: point.speed * 0.621371,
     }));
-
-    setTelemetryData(convertedData);
-  }, [speedUnit]);
+  }, [telemetryData, speedUnit]);
 
   if (!selectedDriver || !currentFrame) {
     return (
@@ -469,7 +475,7 @@ export const TelemetryChart: React.FC = () => {
           marginBottom: '6px',
         }}>SPEED HISTORY</div>
         <ResponsiveContainer width="100%" height={100}>
-          <AreaChart data={telemetryData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorSpeed" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={hexColor} stopOpacity={0.4} />
@@ -497,9 +503,7 @@ export const TelemetryChart: React.FC = () => {
               strokeWidth={1.5}
               fillOpacity={1}
               fill="url(#colorSpeed)"
-              animationDuration={500}
-              animationEasing="ease-in-out"
-              isAnimationActive={true}
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>

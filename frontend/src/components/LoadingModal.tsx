@@ -24,7 +24,7 @@ const STEP_NAMES = [
 ];
 
 /** Hook that smoothly interpolates toward a target value using time-based lerp */
-function useSmoothedValue(target: number, smoothingMs = 600): number {
+function useSmoothedValue(target: number, smoothingMs = 600, active = true): number {
   const currentRef = useRef(0);
   const targetRef = useRef(target);
   const prevTimeRef = useRef<number | null>(null);
@@ -34,6 +34,14 @@ function useSmoothedValue(target: number, smoothingMs = 600): number {
   targetRef.current = target;
 
   useEffect(() => {
+    if (!active) {
+      // Modal closed — stop the animation loop entirely and reset so the next
+      // open starts from 0 instead of the previous session's progress.
+      currentRef.current = 0;
+      prevTimeRef.current = null;
+      setSmoothed(0);
+      return;
+    }
     const tick = (time: number) => {
       if (prevTimeRef.current === null) prevTimeRef.current = time;
       const dt = time - prevTimeRef.current;
@@ -52,7 +60,7 @@ function useSmoothedValue(target: number, smoothingMs = 600): number {
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [smoothingMs]);
+  }, [smoothingMs, active]);
 
   return smoothed;
 }
@@ -210,26 +218,44 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
   year = 2025,
   round = 1,
 }) => {
-  const { progress, error, shouldClose, getCloseDelayMs } = useLoadingState(sessionId, isOpen);
+  const { progress, error, isLoadingComplete, getCloseDelayMs } = useLoadingState(sessionId, isOpen);
   const setSessionLoading = useReplayStore((state) => state.setSessionLoading);
+  const setLoadingError = useReplayStore((state) => state.setLoadingError);
   const session = useReplayStore((state) => state.session);
   const [stepTimes, setStepTimes] = useState<(number | null)[]>([null, null, null, null, null]);
   const stepStartRef = useRef<number>(performance.now());
   const lastStepRef = useRef<number>(-1);
 
+  // Close once loading completes — always scheduling a timer (even when the
+  // minimum display time hasn't elapsed yet) so fast loads still close.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || error || !isLoadingComplete) return;
 
-    if (shouldClose()) {
-      const delay = getCloseDelayMs();
-      if (delay <= 0) {
-        setSessionLoading(false);
-      } else {
-        const timer = setTimeout(() => setSessionLoading(false), delay);
-        return () => clearTimeout(timer);
-      }
+    const timer = setTimeout(() => setSessionLoading(false), getCloseDelayMs());
+    return () => clearTimeout(timer);
+  }, [isOpen, error, isLoadingComplete, getCloseDelayMs, setSessionLoading]);
+
+  // Error-state actions: dismiss back to the landing page, or retry the same session
+  const handleErrorClose = useCallback(() => {
+    setLoadingError(null);
+    setSessionLoading(false);
+  }, [setLoadingError, setSessionLoading]);
+
+  const handleErrorRetry = useCallback(() => {
+    const metadata = useReplayStore.getState().session.metadata;
+    setLoadingError(null);
+    if (metadata?.year && metadata?.round) {
+      window.dispatchEvent(new CustomEvent('sessionTypeChange', {
+        detail: {
+          sessionType: metadata.session_type || 'R',
+          year: metadata.year,
+          round: metadata.round,
+        },
+      }));
+    } else {
+      setSessionLoading(false);
     }
-  }, [isOpen, shouldClose, getCloseDelayMs, setSessionLoading]);
+  }, [setLoadingError, setSessionLoading]);
 
   // Track step times
   useEffect(() => {
@@ -264,7 +290,7 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
   const trackName = dataService.getTrackName(year, round);
   const sessionType = session.metadata?.session_type || "R";
   const sessionLabel = { R: "Race", Q: "Qualifying", S: "Sprint", SQ: "Sprint Qualifying", FP1: "FP1", FP2: "FP2", FP3: "FP3" }[sessionType] || sessionType;
-  const smoothProgress = useSmoothedValue(progress);
+  const smoothProgress = useSmoothedValue(progress, 600, isOpen);
   const activeStep = Math.min(Math.floor(progress / 20), 4);
   const isComplete = progress >= 100;
 
@@ -498,13 +524,50 @@ export const LoadingModal: React.FC<LoadingModalProps> = ({
 
               {/* Error */}
               {error && (
-                <div style={{
-                  textAlign: "center",
-                  marginTop: "16px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "#ff6b6b",
-                }}>{error}</div>
+                <div style={{ textAlign: "center", marginTop: "16px" }}>
+                  <div style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "11px",
+                    color: "#ff6b6b",
+                  }}>{error}</div>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    gap: "10px",
+                    marginTop: "14px",
+                  }}>
+                    <button
+                      onClick={handleErrorRetry}
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        letterSpacing: "0.06em",
+                        color: "#e8e8ee",
+                        background: "rgba(230,57,70, 0.15)",
+                        border: "1px solid rgba(230,57,70, 0.4)",
+                        borderRadius: "6px",
+                        padding: "8px 18px",
+                        cursor: "pointer",
+                      }}
+                    >RETRY</button>
+                    <button
+                      onClick={handleErrorClose}
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        letterSpacing: "0.06em",
+                        color: "#666680",
+                        background: "rgba(255,255,255, 0.03)",
+                        border: "1px solid rgba(255,255,255, 0.1)",
+                        borderRadius: "6px",
+                        padding: "8px 18px",
+                        cursor: "pointer",
+                      }}
+                    >CLOSE</button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

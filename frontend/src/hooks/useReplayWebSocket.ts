@@ -29,7 +29,11 @@ export const useReplayWebSocket = (sessionId: string | null) => {
   const setLoadingError = useReplayStore((state) => state.setLoadingError);
   const setLoadingComplete = useReplayStore((state) => state.setLoadingComplete);
   const setSession = useReplayStore((state) => state.setSession);
-  const playback = useReplayStore((state) => state.playback);
+  // Subscribe only to the playback fields that drive effects — frameIndex is
+  // synced via a store subscription below to avoid re-rendering the host
+  // component on every animation tick.
+  const isPlaying = useReplayStore((state) => state.playback.isPlaying);
+  const playbackSpeed = useReplayStore((state) => state.playback.speed);
   const lastSentCommandRef = useRef<WebSocketMessage | null>(null);
   const sendCommandRef = useRef<(message: WebSocketMessage) => void>();
 
@@ -76,9 +80,16 @@ export const useReplayWebSocket = (sessionId: string | null) => {
         console.log("[WS Client] Connection opened, requesting initial frame");
         setIsConnected(true);
         reconnectAttemptRef.current = 0;
-        // Request initial frame when connection opens
+        // Fresh connection — forget the dedup state so the initial seek is
+        // never suppressed by a command sent on a previous connection.
+        lastSentCommandRef.current = null;
+        // Request the current frame (not 0) so a mid-race reconnect resumes
+        // where the user was instead of snapping back to the start.
         if (sendCommandRef.current) {
-          sendCommandRef.current({ action: "seek", frame: 0 });
+          sendCommandRef.current({
+            action: "seek",
+            frame: useReplayStore.getState().playback.frameIndex,
+          });
         }
       };
 
@@ -238,24 +249,30 @@ export const useReplayWebSocket = (sessionId: string | null) => {
       return;
     }
 
-    if (playback.isPlaying) {
+    if (isPlaying) {
       sendCommandRef.current?.({
         action: "play",
-        speed: playback.speed,
+        speed: playbackSpeed,
       });
     } else {
       sendCommandRef.current?.({ action: "pause" });
     }
-  }, [playback.isPlaying, playback.speed]);
+  }, [isPlaying, playbackSpeed]);
 
-  // Sync frame index (seeking) to WebSocket
+  // Sync frame index (seeking) to WebSocket — via a store subscription so
+  // frame ticks don't re-render the component tree hosting this hook.
   useEffect(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    sendCommandRef.current?.({ action: "seek", frame: playback.frameIndex });
-  }, [playback.frameIndex]);
+    const unsubscribe = useReplayStore.subscribe(
+      (state) => state.playback.frameIndex,
+      (frameIndex) => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        sendCommandRef.current?.({ action: "seek", frame: frameIndex });
+      }
+    );
+    return unsubscribe;
+  }, []);
 
   return {
     isConnected,

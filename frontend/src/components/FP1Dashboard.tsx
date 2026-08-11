@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentFrame, useReplayStore } from "../store/replayStore";
 import { TYRE_NAMES, TYRE_COLORS } from "../types";
@@ -25,15 +25,26 @@ const formatLapTimePanel = (seconds: number | null): string => {
   return `${minutes}:${secs.toFixed(3).padStart(6, '0')}`;
 };
 
+interface DriverSectorColors {
+  s1: string;
+  s2: string;
+  s3: string;
+}
+
+const NORMAL_SECTOR_COLOR = "#9ca3af";
+
+const DEFAULT_SECTOR_COLORS: DriverSectorColors = {
+  s1: NORMAL_SECTOR_COLOR,
+  s2: NORMAL_SECTOR_COLOR,
+  s3: NORMAL_SECTOR_COLOR,
+};
+
 const TelemetryPanel: React.FC<{
   driver: any;
   isOpen: boolean;
   onClose: () => void;
-  fastestS1: number;
-  fastestS2: number;
-  fastestS3: number;
-  getSectorColor: (sectorTime: number | null | undefined, fastestTime: number, driverCode: string, sectorNum: 1 | 2 | 3) => string;
-}> = ({ driver, isOpen, onClose, fastestS1, fastestS2, fastestS3, getSectorColor }) => {
+  sectorColors: DriverSectorColors;
+}> = ({ driver, isOpen, onClose, sectorColors }) => {
 
   return (
     <AnimatePresence>
@@ -136,8 +147,8 @@ const TelemetryPanel: React.FC<{
                     <span className="f1-monospace" style={{ fontSize: "0.75rem", color: "#9ca3af" }}>S1</span>
                     <span className="f1-monospace" style={{
                       fontSize: "0.85rem",
-                      color: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1),
-                      fontWeight: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1) !== "#9ca3af" ? 700 : 600,
+                      color: sectorColors.s1,
+                      fontWeight: sectorColors.s1 !== NORMAL_SECTOR_COLOR ? 700 : 600,
                     }}>{formatSectorTimePanel(driver.data.sector1)}</span>
                   </div>
                 )}
@@ -146,8 +157,8 @@ const TelemetryPanel: React.FC<{
                     <span className="f1-monospace" style={{ fontSize: "0.75rem", color: "#9ca3af" }}>S2</span>
                     <span className="f1-monospace" style={{
                       fontSize: "0.85rem",
-                      color: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2),
-                      fontWeight: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2) !== "#9ca3af" ? 700 : 600,
+                      color: sectorColors.s2,
+                      fontWeight: sectorColors.s2 !== NORMAL_SECTOR_COLOR ? 700 : 600,
                     }}>{formatSectorTimePanel(driver.data.sector2)}</span>
                   </div>
                 )}
@@ -156,8 +167,8 @@ const TelemetryPanel: React.FC<{
                     <span className="f1-monospace" style={{ fontSize: "0.75rem", color: "#9ca3af" }}>S3</span>
                     <span className="f1-monospace" style={{
                       fontSize: "0.85rem",
-                      color: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3),
-                      fontWeight: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3) !== "#9ca3af" ? 700 : 600,
+                      color: sectorColors.s3,
+                      fontWeight: sectorColors.s3 !== NORMAL_SECTOR_COLOR ? 700 : 600,
                     }}>{formatSectorTimePanel(driver.data.sector3)}</span>
                   </div>
                 )}
@@ -179,65 +190,69 @@ const TelemetryPanel: React.FC<{
 
 export const FP1Dashboard: React.FC = () => {
   const currentFrame = useCurrentFrame();
-  const session = useReplayStore((state) => state.session);
-  const metadata = session?.metadata;
+  const driverColors = useReplayStore((state) => state.session?.metadata?.driver_colors);
   const [selectedDriverCode, setSelectedDriverCode] = useState<string | null>(null);
 
-  if (!currentFrame || !metadata || !currentFrame.drivers || !metadata.driver_colors) {
+  const drivers = useMemo(() => {
+    if (!currentFrame?.drivers || !driverColors) return [];
+    return Object.entries(currentFrame.drivers)
+      .map(([code, data]) => ({
+        code,
+        data,
+        position: data.position,
+        color: driverColors[code] || [255, 255, 255],
+      }))
+      .sort((a, b) => a.position - b.position);
+  }, [currentFrame, driverColors]);
+
+  // Precompute session-fastest and per-driver best/worst sector colors once per
+  // frame so each cell is a simple lookup instead of an O(n^2) recomputation.
+  const sectorColorMap = useMemo(() => {
+    const collectTimes = (key: 'sector1' | 'sector2' | 'sector3') =>
+      drivers.map(d => d.data[key]).filter((t): t is number => t !== null && t !== undefined);
+
+    const s1Times = collectTimes('sector1');
+    const s2Times = collectTimes('sector2');
+    const s3Times = collectTimes('sector3');
+
+    const fastestS1 = Math.min(...drivers.filter(d => d.data.sector1).map(d => d.data.sector1 as number));
+    const fastestS2 = Math.min(...drivers.filter(d => d.data.sector2).map(d => d.data.sector2 as number));
+    const fastestS3 = Math.min(...drivers.filter(d => d.data.sector3).map(d => d.data.sector3 as number));
+
+    const minS1 = Math.min(...s1Times);
+    const minS2 = Math.min(...s2Times);
+    const minS3 = Math.min(...s3Times);
+    const maxS1 = Math.max(...s1Times);
+    const maxS2 = Math.max(...s2Times);
+    const maxS3 = Math.max(...s3Times);
+
+    const colorFor = (sectorTime: number | null | undefined, fastest: number, min: number, max: number): string => {
+      if (!sectorTime) return NORMAL_SECTOR_COLOR;
+
+      const isBest = sectorTime === min;
+      const isWorst = sectorTime === max;
+      const isFastest = Math.abs(sectorTime - fastest) < 0.1;
+
+      if (isFastest) return "#a855f7"; // Purple - session fastest
+      if (isBest && !isWorst) return "#22c55e"; // Green - driver's personal best
+      if (isWorst) return "#eab308"; // Yellow - driver's personal worst
+      return NORMAL_SECTOR_COLOR; // Gray - normal
+    };
+
+    const colors: Record<string, DriverSectorColors> = {};
+    for (const driver of drivers) {
+      colors[driver.code] = {
+        s1: colorFor(driver.data.sector1, fastestS1, minS1, maxS1),
+        s2: colorFor(driver.data.sector2, fastestS2, minS2, maxS2),
+        s3: colorFor(driver.data.sector3, fastestS3, minS3, maxS3),
+      };
+    }
+    return colors;
+  }, [drivers]);
+
+  if (!currentFrame || !currentFrame.drivers || !driverColors) {
     return <div className="p-4 f1-monospace">LOADING...</div>;
   }
-
-  const driverColors = metadata.driver_colors;
-  const drivers = Object.entries(currentFrame.drivers)
-    .map(([code, data]) => ({
-      code,
-      data,
-      position: data.position,
-      color: driverColors[code] || [255, 255, 255],
-    }))
-    .sort((a, b) => a.position - b.position);
-
-  const fastestS1 = Math.min(...drivers.filter(d => d.data.sector1).map(d => d.data.sector1 as number));
-  const fastestS2 = Math.min(...drivers.filter(d => d.data.sector2).map(d => d.data.sector2 as number));
-  const fastestS3 = Math.min(...drivers.filter(d => d.data.sector3).map(d => d.data.sector3 as number));
-
-  const getDriverSectorStats = (driverCode: string) => {
-    const driverSectors = drivers.map(d => ({
-      s1: d.data.sector1,
-      s2: d.data.sector2,
-      s3: d.data.sector3,
-      code: d.code,
-    })).filter(d => d.code === driverCode)[0];
-
-    if (!driverSectors) return { bestS1: null, bestS2: null, bestS3: null, worstS1: null, worstS2: null, worstS3: null };
-
-    const s1Times = drivers.map(d => d.data.sector1).filter((t): t is number => t !== null && t !== undefined);
-    const s2Times = drivers.map(d => d.data.sector2).filter((t): t is number => t !== null && t !== undefined);
-    const s3Times = drivers.map(d => d.data.sector3).filter((t): t is number => t !== null && t !== undefined);
-
-    return {
-      bestS1: driverSectors.s1 ? Math.min(...s1Times) === driverSectors.s1 : false,
-      bestS2: driverSectors.s2 ? Math.min(...s2Times) === driverSectors.s2 : false,
-      bestS3: driverSectors.s3 ? Math.min(...s3Times) === driverSectors.s3 : false,
-      worstS1: driverSectors.s1 ? Math.max(...s1Times) === driverSectors.s1 : false,
-      worstS2: driverSectors.s2 ? Math.max(...s2Times) === driverSectors.s2 : false,
-      worstS3: driverSectors.s3 ? Math.max(...s3Times) === driverSectors.s3 : false,
-    };
-  };
-
-  const getSectorColor = (sectorTime: number | null | undefined, fastestTime: number, driverCode: string, sectorNum: 1 | 2 | 3): string => {
-    if (!sectorTime) return "#9ca3af";
-
-    const stats = getDriverSectorStats(driverCode);
-    const isBest = sectorNum === 1 ? stats.bestS1 : sectorNum === 2 ? stats.bestS2 : stats.bestS3;
-    const isWorst = sectorNum === 1 ? stats.worstS1 : sectorNum === 2 ? stats.worstS2 : stats.worstS3;
-    const isFastest = Math.abs(sectorTime - fastestTime) < 0.1;
-
-    if (isFastest) return "#a855f7"; // Purple - session fastest
-    if (isBest && !isWorst) return "#22c55e"; // Green - driver's personal best
-    if (isWorst) return "#eab308"; // Yellow - driver's personal worst
-    return "#9ca3af"; // Gray - normal
-  };
 
   const formatSectorTime = (seconds: number | null): string => {
     if (!seconds || seconds <= 0) return "-";
@@ -337,6 +352,7 @@ export const FP1Dashboard: React.FC = () => {
             {drivers.map((driver) => {
               const isSelected = selectedDriverCode === driver.code;
               const hexColor = `rgb(${driver.color[0]}, ${driver.color[1]}, ${driver.color[2]})`;
+              const sectorColors = sectorColorMap[driver.code] ?? DEFAULT_SECTOR_COLORS;
 
               return (
                 <motion.div
@@ -390,8 +406,8 @@ export const FP1Dashboard: React.FC = () => {
                     textAlign: "right",
                     flex: 1,
                     minWidth: "60px",
-                    color: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1),
-                    fontWeight: getSectorColor(driver.data.sector1, fastestS1, driver.code, 1) !== "#9ca3af" ? 700 : 400,
+                    color: sectorColors.s1,
+                    fontWeight: sectorColors.s1 !== NORMAL_SECTOR_COLOR ? 700 : 400,
                   }}>
                     {formatSectorTime(driver.data.sector1 ?? null)}
                   </div>
@@ -401,8 +417,8 @@ export const FP1Dashboard: React.FC = () => {
                     textAlign: "right",
                     flex: 1,
                     minWidth: "60px",
-                    color: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2),
-                    fontWeight: getSectorColor(driver.data.sector2, fastestS2, driver.code, 2) !== "#9ca3af" ? 700 : 400,
+                    color: sectorColors.s2,
+                    fontWeight: sectorColors.s2 !== NORMAL_SECTOR_COLOR ? 700 : 400,
                   }}>
                     {formatSectorTime(driver.data.sector2 ?? null)}
                   </div>
@@ -412,8 +428,8 @@ export const FP1Dashboard: React.FC = () => {
                     textAlign: "right",
                     flex: 1,
                     minWidth: "60px",
-                    color: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3),
-                    fontWeight: getSectorColor(driver.data.sector3, fastestS3, driver.code, 3) !== "#9ca3af" ? 700 : 400,
+                    color: sectorColors.s3,
+                    fontWeight: sectorColors.s3 !== NORMAL_SECTOR_COLOR ? 700 : 400,
                   }}>
                     {formatSectorTime(driver.data.sector3 ?? null)}
                   </div>
@@ -437,10 +453,7 @@ export const FP1Dashboard: React.FC = () => {
             driver={selectedDriverData}
             isOpen={true}
             onClose={() => setSelectedDriverCode(null)}
-            fastestS1={fastestS1}
-            fastestS2={fastestS2}
-            fastestS3={fastestS3}
-            getSectorColor={getSectorColor}
+            sectorColors={sectorColorMap[selectedDriverData.code] ?? DEFAULT_SECTOR_COLORS}
           />
         )}
       </div>

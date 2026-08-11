@@ -203,18 +203,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     (r) => r.round === selectedRound
   );
 
-  const handleLoad = () => {
+  const handleLoad = useCallback(() => {
     onSessionSelect(selectedYear, selectedRound, selectedSessionType);
-  };
+  }, [onSessionSelect, selectedYear, selectedRound, selectedSessionType]);
 
   // Enter key shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && !isLoading) handleLoad();
+      if (e.key !== "Enter" || isLoading) return;
+      // Ignore when a form control has focus (e.g. committing a dropdown choice)
+      const target = e.target instanceof HTMLElement ? e.target : document.activeElement;
+      const tag = target?.tagName;
+      if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
+      handleLoad();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [isLoading, handleLoad]);
 
   const sessionLabel = SESSION_CHIPS.find(s => s.value === selectedSessionType)?.label || selectedSessionType;
 

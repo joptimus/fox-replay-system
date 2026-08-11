@@ -231,7 +231,9 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
                   </label>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      onClick={onToggleTemperatureUnit}
+                      onClick={() => {
+                        if (temperatureUnit !== 'C') onToggleTemperatureUnit();
+                      }}
                       style={{
                         padding: '4px 12px',
                         background: temperatureUnit === 'C' ? '#e10600' : '#374151',
@@ -247,7 +249,9 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
                       °C
                     </button>
                     <button
-                      onClick={onToggleTemperatureUnit}
+                      onClick={() => {
+                        if (temperatureUnit !== 'F') onToggleTemperatureUnit();
+                      }}
                       style={{
                         padding: '4px 12px',
                         background: temperatureUnit === 'F' ? '#e10600' : '#374151',

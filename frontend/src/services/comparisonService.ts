@@ -18,10 +18,14 @@ export const comparisonService = {
         driver_codes: driverCodes,
         lap_numbers: lapNumbers,
       }),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to fetch lap telemetry");
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(
+        `Failed to fetch lap telemetry (HTTP ${response.status})${errorBody ? `: ${errorBody}` : ""}`
+      );
     }
 
     const data = await response.json();
@@ -45,10 +49,14 @@ export const comparisonService = {
         driver_codes: driverCodes,
         lap_numbers: lapNumbers,
       }),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to fetch sector times");
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(
+        `Failed to fetch sector times (HTTP ${response.status})${errorBody ? `: ${errorBody}` : ""}`
+      );
     }
 
     const data = await response.json();

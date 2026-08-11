@@ -5,6 +5,7 @@
 
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
+import { shallow } from "zustand/shallow";
 import {
   FrameData,
   PlaybackState,
@@ -140,9 +141,13 @@ export const useReplayStore = create<ReplayStore>()(
       })),
 
     setFrameIndex: (frameIndex: number) =>
-      set((state) => ({
-        playback: { ...state.playback, frameIndex },
-      })),
+      set((state) =>
+        // Bail out without notifying subscribers when the frame didn't change —
+        // the rAF loop calls this at display rate but frames only advance at 25 FPS.
+        state.playback.frameIndex === frameIndex
+          ? state
+          : { playback: { ...state.playback, frameIndex } }
+      ),
 
     setTotalFrames: (total: number) =>
       set((state) => ({
@@ -194,12 +199,15 @@ export const usePlaybackState = () =>
   useReplayStore((state) => state.playback);
 
 export const usePlaybackControls = () =>
-  useReplayStore((state) => ({
-    play: state.play,
-    pause: state.pause,
-    setSpeed: state.setSpeed,
-    seek: state.seek,
-  }));
+  useReplayStore(
+    (state) => ({
+      play: state.play,
+      pause: state.pause,
+      setSpeed: state.setSpeed,
+      seek: state.seek,
+    }),
+    shallow
+  );
 
 export const useCurrentFrame = () =>
   useReplayStore((state) => state.currentFrame);
@@ -217,10 +225,13 @@ export const useToggleLeaderboard = () =>
   useReplayStore((state) => state.toggleLeaderboard);
 
 export const useLeaderboard = () =>
-  useReplayStore((state) => ({
-    isVisible: state.showLeaderboard,
-    toggle: state.toggleLeaderboard,
-  }));
+  useReplayStore(
+    (state) => ({
+      isVisible: state.showLeaderboard,
+      toggle: state.toggleLeaderboard,
+    }),
+    shallow
+  );
 
 export const useShowSectorColors = () =>
   useReplayStore((state) => state.showSectorColors);
@@ -229,10 +240,13 @@ export const useToggleSectorColors = () =>
   useReplayStore((state) => state.toggleSectorColors);
 
 export const useSectorColors = () =>
-  useReplayStore((state) => ({
-    isEnabled: state.showSectorColors,
-    toggle: state.toggleSectorColors,
-  }));
+  useReplayStore(
+    (state) => ({
+      isEnabled: state.showSectorColors,
+      toggle: state.toggleSectorColors,
+    }),
+    shallow
+  );
 
 export const useSelectedSectorId = () =>
   useReplayStore((state) => state.selectedSectorId);

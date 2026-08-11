@@ -29,6 +29,7 @@ export const QualiPlaybackControls: React.FC<QualiPlaybackControlsProps> = ({
   sessionDuration,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -44,23 +45,36 @@ export const QualiPlaybackControls: React.FC<QualiPlaybackControlsProps> = ({
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  const handleTrackClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  const seekFromPointer = useCallback(
+    (clientX: number) => {
       if (!trackRef.current || duration <= 0) return;
       const rect = trackRef.current.getBoundingClientRect();
-      const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       onSeek(fraction * duration);
     },
     [duration, onSeek]
   );
 
-  const handleTrackDrag = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.buttons !== 1) return;
-      handleTrackClick(e);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      isDragging.current = true;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      seekFromPointer(e.clientX);
     },
-    [handleTrackClick]
+    [seekFromPointer]
   );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDragging.current) return;
+      seekFromPointer(e.clientX);
+    },
+    [seekFromPointer]
+  );
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   return (
     <div style={{
@@ -115,8 +129,10 @@ export const QualiPlaybackControls: React.FC<QualiPlaybackControlsProps> = ({
       {/* Scrubber */}
       <div
         ref={trackRef}
-        onClick={handleTrackClick}
-        onMouseMove={handleTrackDrag}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         style={{
           flex: 1,
           height: '4px',
