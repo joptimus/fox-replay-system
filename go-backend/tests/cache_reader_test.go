@@ -90,8 +90,9 @@ func TestMsgpackCacheReader(t *testing.T) {
 	assert.Equal(t, "2025_r1_R_telemetry.msgpack", filename)
 
 	// Test DeleteCache
-	err = reader.DeleteCache("test_*.msgpack")
+	deleted, err := reader.DeleteCache("test_*.msgpack")
 	assert.NoError(t, err)
+	assert.Equal(t, 1, deleted, "Should report one deleted file")
 
 	// Verify file was deleted
 	exists = reader.CacheExists(testFilename)

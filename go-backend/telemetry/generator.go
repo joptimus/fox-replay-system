@@ -16,6 +16,19 @@ type FrameGenerator struct {
 	logger *zap.Logger
 }
 
+// resampledTiming holds a driver's timing data resampled to the uniform
+// timeline. The slices are indexed directly per frame, avoiding a boxed
+// map[string]interface{} per driver per frame.
+type resampledTiming struct {
+	gap      []float64
+	posRaw   []int
+	interval []float64
+	lapTime  []float64
+	sector1  []float64
+	sector2  []float64
+	sector3  []float64
+}
+
 // NewFrameGenerator creates a new frame generator
 func NewFrameGenerator(logger *zap.Logger) *FrameGenerator {
 	return &FrameGenerator{logger: logger}
@@ -99,7 +112,7 @@ func (fg *FrameGenerator) Generate(
 	// Timing arrays are aligned to each driver's original time base, so they must
 	// be resampled to the uniform timeline just like telemetry data.
 	t3 := time.Now()
-	timingByDriver := make(map[string][]map[string]interface{})
+	timingByDriver := make(map[string]*resampledTiming)
 	for code := range payload.Drivers {
 		origT := payload.Drivers[code].T
 
@@ -157,19 +170,15 @@ func (fg *FrameGenerator) Generate(
 			)
 		}
 
-		timing := make([]map[string]interface{}, len(timeline))
-		for i := 0; i < len(timeline); i++ {
-			timing[i] = map[string]interface{}{
-				"gap":             safeIndex(resGap, i),
-				"pos_raw":         safeIndexInt(resPosRaw, i),
-				"interval_smooth": safeIndex(resInterval, i),
-				"lap_time":        safeIndex(resLapTime, i),
-				"sector1":         safeIndex(resSector1, i),
-				"sector2":         safeIndex(resSector2, i),
-				"sector3":         safeIndex(resSector3, i),
-			}
+		timingByDriver[code] = &resampledTiming{
+			gap:      resGap,
+			posRaw:   resPosRaw,
+			interval: resInterval,
+			lapTime:  resLapTime,
+			sector1:  resSector1,
+			sector2:  resSector2,
+			sector3:  resSector3,
 		}
-		timingByDriver[code] = timing
 	}
 	fg.logger.Info("[TIMING] ExtractTimingData",
 		zap.Float64("durationSec", time.Since(t3).Seconds()),
@@ -206,29 +215,18 @@ func (fg *FrameGenerator) Generate(
 			}
 			driverData.RaceProgress = calculateRaceProgress(driverData.Dist, driverData.Lap, totalTrackDistance)
 
-			// Add timing data
-			if timing, ok := timingByDriver[code]; ok && i < len(timing) {
-				if gap, ok := timing[i]["gap"].(float64); ok {
-					driverData.Gap = &gap
-				}
-				if posRaw, ok := timing[i]["pos_raw"].(int); ok {
-					driverData.PosRaw = &posRaw
-				}
-				if interval, ok := timing[i]["interval_smooth"].(float64); ok {
-					driverData.IntervalSmooth = &interval
-				}
-				if lapTime, ok := timing[i]["lap_time"].(float64); ok {
-					driverData.LapTime = lapTime
-				}
-				if s1, ok := timing[i]["sector1"].(float64); ok {
-					driverData.Sector1 = s1
-				}
-				if s2, ok := timing[i]["sector2"].(float64); ok {
-					driverData.Sector2 = s2
-				}
-				if s3, ok := timing[i]["sector3"].(float64); ok {
-					driverData.Sector3 = s3
-				}
+			// Add timing data — index the resampled slices directly
+			if timing, ok := timingByDriver[code]; ok {
+				gap := safeIndex(timing.gap, i)
+				driverData.Gap = &gap
+				posRaw := safeIndexInt(timing.posRaw, i)
+				driverData.PosRaw = &posRaw
+				interval := safeIndex(timing.interval, i)
+				driverData.IntervalSmooth = &interval
+				driverData.LapTime = safeIndex(timing.lapTime, i)
+				driverData.Sector1 = safeIndex(timing.sector1, i)
+				driverData.Sector2 = safeIndex(timing.sector2, i)
+				driverData.Sector3 = safeIndex(timing.sector3, i)
 			}
 
 			frame.Drivers[code] = driverData

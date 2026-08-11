@@ -46,20 +46,23 @@ func (m *MsgpackCacheReader) CacheExists(filename string) bool {
 	return err == nil
 }
 
-// DeleteCache deletes cache files matching a pattern
-func (m *MsgpackCacheReader) DeleteCache(pattern string) error {
+// DeleteCache deletes cache files matching a pattern and returns how many files
+// were deleted.
+func (m *MsgpackCacheReader) DeleteCache(pattern string) (int, error) {
 	matches, err := filepath.Glob(filepath.Join(m.cachePath, pattern))
 	if err != nil {
-		return err
+		return 0, err
 	}
 
+	deleted := 0
 	for _, match := range matches {
 		if err := os.Remove(match); err != nil {
-			return err
+			return deleted, err
 		}
+		deleted++
 	}
 
-	return nil
+	return deleted, nil
 }
 
 // GetCacheFilename generates a cache filename from session parameters

@@ -22,11 +22,37 @@ type Manager struct {
 	maxSize  int
 }
 
-// NewManager creates a new session manager
+// NewManager creates a new session manager. A background sweeper periodically
+// removes stale sessions so they release their frame references without
+// waiting for the next Create call.
 func NewManager(maxSessions int) *Manager {
-	return &Manager{
+	m := &Manager{
 		sessions: make(map[string]*models.Session),
 		maxSize:  maxSessions,
+	}
+	go m.sweepLoop()
+	return m
+}
+
+// sweepLoop periodically removes stale sessions for the lifetime of the server.
+func (m *Manager) sweepLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		m.mu.Lock()
+		m.removeStaleLocked()
+		m.mu.Unlock()
+	}
+}
+
+// removeStaleLocked deletes sessions idle for more than an hour.
+// Caller must hold m.mu.
+func (m *Manager) removeStaleLocked() {
+	now := time.Now()
+	for id, sess := range m.sessions {
+		if now.Sub(sess.GetLastAccessed()) > time.Hour {
+			delete(m.sessions, id)
+		}
 	}
 }
 
@@ -39,15 +65,9 @@ func (m *Manager) Create(sessionID string) (*models.Session, error) {
 		return nil, ErrInvalidSessionID
 	}
 
-	// Clean up old inactive sessions (older than 1 hour) BEFORE the capacity
-	// check — otherwise a map full of stale sessions rejects all new creates
-	// forever, since cleanup only runs inside Create.
-	now := time.Now()
-	for id, sess := range m.sessions {
-		if now.Sub(sess.GetLastAccessed()) > time.Hour {
-			delete(m.sessions, id)
-		}
-	}
+	// Clean up old inactive sessions BEFORE the capacity check — otherwise a
+	// map full of stale sessions rejects all new creates until the next sweep.
+	m.removeStaleLocked()
 
 	if len(m.sessions) >= m.maxSize {
 		return nil, ErrTooManySessions

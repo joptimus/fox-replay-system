@@ -14,6 +14,17 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// writeWait bounds each WebSocket write so a dead peer can't block writers
+	// forever while holding the write mutex.
+	writeWait = 10 * time.Second
+	// pongWait is how long we wait for a pong (or any read) before treating the
+	// peer as dead.
+	pongWait = 60 * time.Second
+	// pingPeriod is how often keepalive pings are sent; must be less than pongWait.
+	pingPeriod = 30 * time.Second
+)
+
 // Handler handles WebSocket connections for frame streaming
 type Handler struct {
 	sessionMgr *session.Manager
@@ -50,18 +61,36 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// gorilla/websocket permits only one concurrent writer per connection.
-	// All writes (progress goroutine + streaming loop) must go through these helpers.
+	// All writes (progress goroutine + ping ticker + streaming loop) must go
+	// through these helpers. Each write carries a deadline so a dead peer can't
+	// block a writer forever while it holds writeMu.
 	var writeMu sync.Mutex
 	writeJSON := func(v interface{}) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
+		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		return conn.WriteJSON(v)
 	}
 	writeBinary := func(data []byte) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
+		conn.SetWriteDeadline(time.Now().Add(writeWait))
 		return conn.WriteMessage(websocket.BinaryMessage, data)
 	}
+	writePing := func() error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		conn.SetWriteDeadline(time.Now().Add(writeWait))
+		return conn.WriteMessage(websocket.PingMessage, nil)
+	}
+
+	// Keepalive: expect pongs (or any read) within pongWait, extending the read
+	// deadline on each pong so dead peers error out of the read loop and the
+	// existing return paths clean up.
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
 
 	// Get session
 	sess, err := h.sessionMgr.Get(sessionID)
@@ -84,6 +113,24 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	// sessions may never close ProgressCh, so done prevents a goroutine leak.
 	done := make(chan struct{})
 	defer close(done)
+
+	// Send keepalive pings so idle-but-alive peers keep extending the read
+	// deadline, and dead peers are detected instead of leaking goroutines.
+	go func() {
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := writePing(); err != nil {
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	go func() {
 		for {
 			select {
@@ -187,8 +234,9 @@ func (h *Handler) streamFrames60Hz(
 	lastFrameSent := -1
 	frameCh := make(chan int, 4) // buffered channel for seek requests
 
-	// Set up non-blocking reads for commands
-	conn.SetReadDeadline(time.Time{})
+	// Set up reads for commands. The read deadline stays armed — pongs from the
+	// keepalive pings extend it, so a dead peer errors out of the read loop.
+	conn.SetReadDeadline(time.Now().Add(pongWait))
 	doneCh := make(chan error, 1)
 
 	go func() {

@@ -110,9 +110,29 @@ func (w *F1CacheWriter) WriteCache(
 	binary.Write(&compressedBuf, binary.LittleEndian, compressedFrameLen)
 	compressedBuf.Write(compressionBuf.Bytes())
 
-	// Write to file
-	if err := os.WriteFile(filePath, compressedBuf.Bytes(), 0644); err != nil {
+	// Write atomically: write to a temp file in the same directory, then rename
+	// into place so a concurrent reader never observes a half-written cache.
+	tmpFile, err := os.CreateTemp(w.cachePath, filename+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp cache file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	if _, err := tmpFile.Write(compressedBuf.Bytes()); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
 		return fmt.Errorf("failed to write cache file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to close cache file: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to set cache file permissions: %w", err)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to finalize cache file: %w", err)
 	}
 
 	return nil
@@ -204,20 +224,23 @@ func (r *F1CacheReader) F1CacheExists(filename string) bool {
 	return err == nil
 }
 
-// DeleteF1Caches deletes .f1cache files matching a pattern
-func (w *F1CacheWriter) DeleteF1Caches(pattern string) error {
+// DeleteF1Caches deletes .f1cache files matching a pattern and returns how many
+// files were deleted.
+func (w *F1CacheWriter) DeleteF1Caches(pattern string) (int, error) {
 	matches, err := filepath.Glob(filepath.Join(w.cachePath, pattern))
 	if err != nil {
-		return err
+		return 0, err
 	}
 
+	deleted := 0
 	for _, match := range matches {
 		if err := os.Remove(match); err != nil {
-			return err
+			return deleted, err
 		}
+		deleted++
 	}
 
-	return nil
+	return deleted, nil
 }
 
 // ListF1Caches lists all available .f1cache files

@@ -83,7 +83,7 @@ type RaceControlMessage struct {
 }
 
 // NOTE: The former PythonBridge/Execute subprocess runner was removed — it had
-// no callers (main.go runs the extractor itself in generateCacheAsync) and it
+// no callers (main.go runs the extractor itself in generateFrames) and it
 // returned before the data payload arrived, yielding a nil result.
 
 // ValidatePayload checks that the payload has required data

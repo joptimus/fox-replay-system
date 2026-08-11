@@ -58,6 +58,8 @@ func main() {
 	sessionMgr := session.NewManager(100) // Max 100 concurrent sessions
 	cacheReader := cache.NewHybridCacheReader(*cacheDir, logger)
 	wsHandler := ws.NewHandler(sessionMgr, logger)
+	frameCache := newFrameStore(3) // Shared decoded frames, keyed by year/round/sessionType
+	guard := newGenerationGuard()
 
 	r := chi.NewRouter()
 
@@ -70,7 +72,7 @@ func main() {
 
 	// Routes
 	r.Get("/api/health", handleHealth)
-	r.Post("/api/sessions", handleCreateSessionRoute(sessionMgr, cacheReader, logger))
+	r.Post("/api/sessions", handleCreateSessionRoute(sessionMgr, cacheReader, frameCache, guard, logger))
 	r.Get("/api/sessions/{session_id}", handleGetSessionRoute(sessionMgr, logger))
 	r.Delete("/api/sessions/cache", handleDeleteCacheRoute(cacheReader, logger))
 
@@ -138,9 +140,160 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+// frameKey identifies a race's decoded frame set.
+func frameKey(year int, round int, sessionType string) string {
+	return fmt.Sprintf("%d_r%d_%s", year, round, sessionType)
+}
+
+// frameEntry holds a decoded, immutable frame set and its session metadata.
+type frameEntry struct {
+	frames []models.Frame
+	meta   models.SessionMetadata
+}
+
+// frameStore is a small LRU cache of decoded frame sets shared between sessions.
+// Frames are immutable after generation, so sessions hold references to the same
+// slice instead of each decoding (and holding) their own copy.
+type frameStore struct {
+	mu      sync.Mutex
+	maxSize int
+	entries map[string]*frameEntry
+	order   []string // LRU order: oldest first
+}
+
+func newFrameStore(maxSize int) *frameStore {
+	return &frameStore{
+		maxSize: maxSize,
+		entries: make(map[string]*frameEntry),
+	}
+}
+
+// Get returns the shared entry for key, marking it as recently used.
+func (fs *frameStore) Get(key string) (*frameEntry, bool) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	entry, ok := fs.entries[key]
+	if !ok {
+		return nil, false
+	}
+	fs.touchLocked(key)
+	return entry, true
+}
+
+// Put stores (or replaces) an entry, evicting the least recently used entry
+// once the cap is exceeded.
+func (fs *frameStore) Put(key string, frames []models.Frame, meta models.SessionMetadata) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if _, ok := fs.entries[key]; !ok && len(fs.entries) >= fs.maxSize && len(fs.order) > 0 {
+		oldest := fs.order[0]
+		fs.order = fs.order[1:]
+		delete(fs.entries, oldest)
+	}
+	fs.entries[key] = &frameEntry{frames: frames, meta: meta}
+	fs.touchLocked(key)
+}
+
+func (fs *frameStore) touchLocked(key string) {
+	for i, k := range fs.order {
+		if k == key {
+			fs.order = append(fs.order[:i], fs.order[i+1:]...)
+			break
+		}
+	}
+	fs.order = append(fs.order, key)
+}
+
+// generationResult carries the outcome of a single load/generate operation to
+// any sessions waiting on it. frames is nil when the operation failed.
+type generationResult struct {
+	done   chan struct{}
+	frames []models.Frame
+	meta   models.SessionMetadata
+	errMsg string
+}
+
+// generationGuard deduplicates concurrent frame loading/generation per race so
+// a burst of requests for the same uncached race shares a single extraction
+// instead of each spawning its own multi-minute python process.
+type generationGuard struct {
+	mu       sync.Mutex
+	inflight map[string]*generationResult
+}
+
+func newGenerationGuard() *generationGuard {
+	return &generationGuard{inflight: make(map[string]*generationResult)}
+}
+
+// join returns the in-flight generation for key, creating one if none exists.
+// The second return value is true when the caller is the leader responsible
+// for doing the work and calling finish.
+func (g *generationGuard) join(key string) (*generationResult, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if gen, ok := g.inflight[key]; ok {
+		return gen, false
+	}
+	gen := &generationResult{done: make(chan struct{})}
+	g.inflight[key] = gen
+	return gen, true
+}
+
+// finish releases the key and signals waiters that gen's result is ready.
+func (g *generationGuard) finish(key string, gen *generationResult) {
+	g.mu.Lock()
+	delete(g.inflight, key)
+	g.mu.Unlock()
+	close(gen.done)
+}
+
+// sessionMetadataFromCache builds session metadata from a disk cache read.
+func sessionMetadataFromCache(
+	year int,
+	round int,
+	sessionType string,
+	frames []models.Frame,
+	cacheMeta *cache.F1CacheMetadata,
+) models.SessionMetadata {
+	// Get total laps from cache metadata, or compute from frames
+	totalLaps := 0
+	if cacheMeta != nil {
+		totalLaps = cacheMeta.TotalLaps
+	}
+	if totalLaps == 0 {
+		for _, frame := range frames {
+			if frame.Lap > totalLaps {
+				totalLaps = frame.Lap
+			}
+		}
+	}
+
+	meta := models.SessionMetadata{
+		Year:        year,
+		Round:       round,
+		SessionType: sessionType,
+		TotalFrames: len(frames),
+		TotalLaps:   totalLaps,
+	}
+	if cacheMeta != nil {
+		meta.DriverNumbers = cacheMeta.DriverNumbers
+		meta.DriverTeams = cacheMeta.DriverTeams
+		meta.DriverColors = cacheMeta.DriverColors
+		meta.TrackStatuses = cacheMeta.TrackStatuses
+		meta.TrackGeometry = cacheMeta.TrackGeometry
+		meta.RaceStartTime = cacheMeta.RaceStartTime
+		meta.WeatherData = cacheMeta.WeatherData
+		meta.RaceControlMessages = cacheMeta.RaceControlMessages
+		meta.QualiSegments = cacheMeta.QualiSegments
+	}
+	return meta
+}
+
 func handleCreateSessionRoute(
 	sessionMgr *session.Manager,
 	cacheReader *cache.HybridCacheReader,
+	store *frameStore,
+	guard *generationGuard,
 	logger *zap.Logger,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -159,49 +312,23 @@ func handleCreateSessionRoute(
 			return
 		}
 
-		// Check cache first
+		key := frameKey(req.Year, req.RoundNum, req.SessionType)
+
+		// Serve directly from the shared in-memory frame store when possible —
+		// the frames are already decoded, so this is cheap.
 		if !req.Refresh {
-			frames, cacheMeta, err := cacheReader.ReadFrames(req.Year, req.RoundNum, req.SessionType)
-			if err == nil && len(frames) > 0 {
-				logger.Info("Cache hit", zap.Int("year", req.Year), zap.Int("round", req.RoundNum), zap.String("sessionType", req.SessionType))
-
-				// Get total laps from cache metadata, or compute from frames
-				totalLaps := 0
-				if cacheMeta != nil {
-					totalLaps = cacheMeta.TotalLaps
-				}
-				if totalLaps == 0 {
-					for _, frame := range frames {
-						if frame.Lap > totalLaps {
-							totalLaps = frame.Lap
-						}
-					}
-				}
-
-				sess.SetFrames(frames)
+			if entry, ok := store.Get(key); ok {
+				logger.Info("In-memory frame store hit",
+					zap.Int("year", req.Year),
+					zap.Int("round", req.RoundNum),
+					zap.String("sessionType", req.SessionType),
+				)
+				sess.SetFrames(entry.frames)
+				sess.SetMetadata(entry.meta)
 				sess.SetState(models.StateReady)
 				// No generation will run for this session — close ProgressCh so the
 				// WebSocket progress forwarder terminates instead of leaking.
 				close(sess.ProgressCh)
-				meta := models.SessionMetadata{
-					Year:        req.Year,
-					Round:       req.RoundNum,
-					SessionType: req.SessionType,
-					TotalFrames: len(frames),
-					TotalLaps:   totalLaps,
-				}
-				if cacheMeta != nil {
-					meta.DriverNumbers = cacheMeta.DriverNumbers
-					meta.DriverTeams = cacheMeta.DriverTeams
-					meta.DriverColors = cacheMeta.DriverColors
-					meta.TrackStatuses = cacheMeta.TrackStatuses
-					meta.TrackGeometry = cacheMeta.TrackGeometry
-					meta.RaceStartTime = cacheMeta.RaceStartTime
-					meta.WeatherData = cacheMeta.WeatherData
-					meta.RaceControlMessages = cacheMeta.RaceControlMessages
-					meta.QualiSegments = cacheMeta.QualiSegments
-				}
-				sess.SetMetadata(meta)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -209,26 +336,18 @@ func handleCreateSessionRoute(
 					SessionID: sessionID,
 					Status:    models.StateReady,
 					Metadata: map[string]interface{}{
-						"total_frames": len(frames),
+						"total_frames": len(entry.frames),
 					},
 				})
 				return
 			}
 		}
 
-		// Cache miss or refresh requested - generate in background
-
-		logger.Info("Cache miss, generating from telemetry",
-			zap.String("sessionID", sessionID),
-			zap.Int("year", req.Year),
-			zap.Int("round", req.RoundNum),
-			zap.String("sessionType", req.SessionType),
-		)
-
+		// Disk cache reads and telemetry generation both run in the background so
+		// the POST returns immediately; the WebSocket wait loop handles the
+		// LOADING state and surfaces progress/errors.
 		sess.SetState(models.StateLoading)
-
-		// Generate cache in background using Python bridge
-		go generateCacheAsync(sessionID, req.Year, req.RoundNum, req.SessionType, req.Refresh, sess, cacheReader, logger)
+		go loadOrGenerateAsync(sessionID, req.Year, req.RoundNum, req.SessionType, req.Refresh, sess, cacheReader, store, guard, logger)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -278,10 +397,10 @@ func handleDeleteCacheRoute(
 	return func(w http.ResponseWriter, r *http.Request) {
 		pattern := r.URL.Query().Get("pattern")
 		if pattern == "" {
-			pattern = "*.msgpack" // Default: delete all msgpack caches
+			pattern = "*" // Default: delete all caches
 		}
 
-		err := cacheReader.DeleteCaches(pattern)
+		deleted, err := cacheReader.DeleteCaches(pattern)
 		if err != nil {
 			logger.Error("failed to delete cache", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -289,11 +408,14 @@ func handleDeleteCacheRoute(
 			return
 		}
 
-		logger.Info("cache deleted", zap.String("pattern", pattern))
+		logger.Info("cache deleted", zap.String("pattern", pattern), zap.Int("deleted", deleted))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "cache deleted"})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "cache deleted",
+			"deleted": deleted,
+		})
 	}
 }
 
@@ -307,8 +429,104 @@ func sendProgress(sess *models.Session, pct int, msg string) {
 	}
 }
 
-// generateCacheAsync generates telemetry cache using Python script and updates session
-func generateCacheAsync(
+// loadOrGenerateAsync loads frames from the disk cache or generates them from
+// telemetry, deduplicating concurrent work per race via the generation guard
+// and publishing decoded frames to the shared store.
+func loadOrGenerateAsync(
+	sessionID string,
+	year int,
+	round int,
+	sessionType string,
+	refresh bool,
+	sess *models.Session,
+	cacheReader *cache.HybridCacheReader,
+	store *frameStore,
+	guard *generationGuard,
+	logger *zap.Logger,
+) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("panic in loadOrGenerateAsync", zap.Any("panic", r))
+			sess.SetLoadingError(fmt.Sprintf("panic during cache generation: %v", r))
+			sess.SetState(models.StateError)
+		}
+		close(sess.ProgressCh)
+	}()
+
+	key := frameKey(year, round, sessionType)
+	gen, leader := guard.join(key)
+	if !leader {
+		// Another request is already loading/generating this race — wait for its
+		// result instead of spawning a duplicate extraction.
+		logger.Info("Attaching to in-progress generation",
+			zap.String("sessionID", sessionID),
+			zap.String("key", key),
+		)
+		sendProgress(sess, 0, "Waiting for in-progress generation...")
+		<-gen.done
+		if gen.frames == nil {
+			errMsg := gen.errMsg
+			if errMsg == "" {
+				errMsg = "telemetry generation failed"
+			}
+			sess.SetLoadingError(errMsg)
+			sess.SetState(models.StateError)
+			return
+		}
+		sess.SetFrames(gen.frames)
+		sess.SetMetadata(gen.meta)
+		sess.SetState(models.StateReady)
+		return
+	}
+
+	// Leader: publish the outcome to waiters and release the key when done.
+	defer func() {
+		if gen.frames == nil {
+			gen.errMsg = sess.GetLoadingError()
+		}
+		guard.finish(key, gen)
+	}()
+
+	// Try the disk cache first (unless a refresh was requested).
+	if !refresh {
+		frames, cacheMeta, err := cacheReader.ReadFrames(year, round, sessionType)
+		if err == nil && len(frames) > 0 {
+			logger.Info("Cache hit", zap.Int("year", year), zap.Int("round", round), zap.String("sessionType", sessionType))
+			meta := sessionMetadataFromCache(year, round, sessionType, frames, cacheMeta)
+			store.Put(key, frames, meta)
+			gen.frames = frames
+			gen.meta = meta
+			sess.SetFrames(frames)
+			sess.SetMetadata(meta)
+			sess.SetState(models.StateReady)
+			return
+		}
+	}
+
+	logger.Info("Cache miss, generating from telemetry",
+		zap.String("sessionID", sessionID),
+		zap.Int("year", year),
+		zap.Int("round", round),
+		zap.String("sessionType", sessionType),
+	)
+
+	frames, meta, ok := generateFrames(sessionID, year, round, sessionType, refresh, sess, cacheReader, logger)
+	if !ok {
+		return // generateFrames already set the session error state
+	}
+
+	store.Put(key, frames, meta)
+	gen.frames = frames
+	gen.meta = meta
+	sess.SetFrames(frames)
+	sess.SetMetadata(meta)
+	sess.SetState(models.StateReady)
+}
+
+// generateFrames generates telemetry frames using the Python extractor and
+// writes the resulting .f1cache. It reports errors on the session and returns
+// ok=false on failure.
+func generateFrames(
 	sessionID string,
 	year int,
 	round int,
@@ -317,19 +535,10 @@ func generateCacheAsync(
 	sess *models.Session,
 	cacheReader *cache.HybridCacheReader,
 	logger *zap.Logger,
-) {
+) ([]models.Frame, models.SessionMetadata, bool) {
 	const maxStderrLines = 30
-	const maxStdoutLineBytes = 512 * 1024 * 1024 // 512MB JSON line budget for large telemetry payloads
-	const maxStderrLineBytes = 1 * 1024 * 1024   // 1MB per stderr line
-
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Error("panic in generateCacheAsync", zap.Any("panic", r))
-			sess.SetLoadingError(fmt.Sprintf("panic during cache generation: %v", r))
-			sess.SetState(models.StateError)
-		}
-		close(sess.ProgressCh)
-	}()
+	const maxStderrLineBytes = 1 * 1024 * 1024 // 1MB per stderr line
+	const extractorTimeout = 15 * time.Minute  // generous cap so a hung extractor can't strand the session
 
 	logger.Info("Starting cache generation",
 		zap.String("sessionID", sessionID),
@@ -346,14 +555,18 @@ func generateCacheAsync(
 	logger.Info("Executing Python extractor",
 		zap.Strings("args", args),
 	)
-	cmd := exec.Command("python3", args...)
+	// Run the extractor under a timeout so a hung python process is killed and
+	// waiting WebSocket clients get an actionable error instead of LOADING forever.
+	ctx, cancel := context.WithTimeout(context.Background(), extractorTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "python3", args...)
 
 	// Get stdout pipe to read output as it streams
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		logger.Error("failed to get stdout pipe", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 	stderr, _ := cmd.StderrPipe()
 
@@ -361,7 +574,7 @@ func generateCacheAsync(
 	if err := cmd.Start(); err != nil {
 		logger.Error("failed to start telemetry generation", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	go func() {
@@ -459,11 +672,20 @@ func generateCacheAsync(
 		logger.Error("error reading scanner", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetLoadingError(fmt.Sprintf("extractor output read error: %v", err))
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	// Wait for command to finish
 	if err := cmd.Wait(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			logger.Error("telemetry extractor timed out",
+				zap.Duration("timeout", extractorTimeout),
+				zap.String("sessionID", sessionID),
+			)
+			sess.SetLoadingError("telemetry fetch timed out")
+			sess.SetState(models.StateError)
+			return nil, models.SessionMetadata{}, false
+		}
 		errMsg := sess.GetLoadingError()
 		if errMsg == "" {
 			errMsg = fmt.Sprintf("extractor process failed: %v", err)
@@ -475,14 +697,14 @@ func generateCacheAsync(
 			zap.String("extractorError", errMsg),
 		)
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	if cacheFilePath == "" {
 		logger.Error("no cache file from extractor", zap.String("sessionID", sessionID))
 		sess.SetLoadingError("extractor did not create cache file")
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	// Read msgpack file written by Python
@@ -492,7 +714,7 @@ func generateCacheAsync(
 		logger.Error("failed to read msgpack cache", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetLoadingError(fmt.Sprintf("failed to read cache file: %v", err))
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	// Deserialize msgpack payload
@@ -504,16 +726,10 @@ func generateCacheAsync(
 		logger.Error("failed to unmarshal msgpack", zap.Error(err), zap.String("sessionID", sessionID))
 		sess.SetLoadingError(fmt.Sprintf("failed to deserialize telemetry: %v", err))
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	rawPayload := &payload
-	if rawPayload == nil {
-		logger.Error("msgpack payload is nil", zap.String("sessionID", sessionID))
-		sess.SetLoadingError("telemetry payload is empty")
-		sess.SetState(models.StateError)
-		return
-	}
 
 	sendProgress(sess, 92, "Generating frames in Go...")
 	generator := telemetry.NewFrameGenerator(logger)
@@ -529,7 +745,7 @@ func generateCacheAsync(
 			sess.SetLoadingError("go frame generation produced zero frames")
 		}
 		sess.SetState(models.StateError)
-		return
+		return nil, models.SessionMetadata{}, false
 	}
 
 	trackStatusMaps := make([]map[string]interface{}, len(rawPayload.TrackStatuses))
@@ -613,15 +829,12 @@ func generateCacheAsync(
 		QualiSegments:       rawPayload.QualiSegments,
 	}
 
-	// Update session with generated frames
-	sess.SetFrames(frames)
-	sess.SetMetadata(sessionMeta)
-	sess.SetState(models.StateReady)
-
 	logger.Info("cache generation complete",
 		zap.String("sessionID", sessionID),
 		zap.Int("frames", len(frames)),
 	)
+
+	return frames, sessionMeta, true
 }
 
 func handleStaticFile(relativePath string) http.HandlerFunc {
@@ -661,7 +874,11 @@ func handleFastF1DebugTest(logger *zap.Logger) http.HandlerFunc {
 			args = append(args, driverCode)
 		}
 
-		cmd := exec.Command("python3", args...)
+		// Bound the script runtime so a hung python process can't block the
+		// request forever or accumulate orphaned processes on retries.
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "python3", args...)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -673,8 +890,14 @@ func handleFastF1DebugTest(logger *zap.Logger) http.HandlerFunc {
 		)
 
 		if err := cmd.Run(); err != nil {
-			logger.Error("FastF1 debug test failed", zap.Error(err), zap.String("stderr", stderr.String()))
 			w.Header().Set("Content-Type", "application/json")
+			if ctx.Err() == context.DeadlineExceeded {
+				logger.Error("FastF1 debug test timed out")
+				w.WriteHeader(http.StatusGatewayTimeout)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Script timed out"})
+				return
+			}
+			logger.Error("FastF1 debug test failed", zap.Error(err), zap.String("stderr", stderr.String()))
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Script failed: %s", stderr.String())})
 			return
@@ -718,7 +941,11 @@ func handlePythonTelemetry(scriptPath string, logger *zap.Logger) http.HandlerFu
 		}
 		lapsStr := strings.Join(lapNumbersStr, ",")
 
-		cmd := exec.Command("python3", scriptPath,
+		// Bound the script runtime so a hung python process can't block the
+		// request forever or accumulate orphaned processes on retries.
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "python3", scriptPath,
 			fmt.Sprintf("%d", req.Year),
 			fmt.Sprintf("%d", req.RoundNum),
 			req.SessionType,
@@ -738,6 +965,14 @@ func handlePythonTelemetry(scriptPath string, logger *zap.Logger) http.HandlerFu
 		)
 
 		if err := cmd.Run(); err != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				logger.Error("telemetry script timed out",
+					zap.String("script", scriptPath),
+				)
+				w.WriteHeader(http.StatusGatewayTimeout)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Telemetry request timed out"})
+				return
+			}
 			logger.Error("telemetry script failed",
 				zap.String("script", scriptPath),
 				zap.Error(err),

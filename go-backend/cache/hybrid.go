@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 
 	"f1-replay-go/models"
 	"go.uber.org/zap"
@@ -139,19 +140,35 @@ func (h *HybridCacheReader) migrateToF1Cache(
 	}
 }
 
-// DeleteCaches deletes both .f1cache and .msgpack files matching a pattern
-func (h *HybridCacheReader) DeleteCaches(pattern string) error {
+// DeleteCaches deletes both .f1cache and .msgpack files matching a base pattern
+// (e.g. "*" or "2025_r1_*") and returns how many files were deleted. Cache
+// extensions are appended here, so the pattern must not include them.
+func (h *HybridCacheReader) DeleteCaches(pattern string) (int, error) {
+	// Strip cache extensions so callers passing "*.f1cache"/"*.msgpack" don't
+	// end up with double-extension globs that match nothing.
+	base := strings.TrimSuffix(strings.TrimSuffix(pattern, ".f1cache"), ".msgpack")
+	if base == "" {
+		base = "*"
+	}
+
 	// Delete .f1cache files
-	if err := h.f1cacheWriter.DeleteF1Caches(pattern + ".f1cache"); err != nil {
+	f1Deleted, err := h.f1cacheWriter.DeleteF1Caches(base + ".f1cache")
+	if err != nil {
 		h.logger.Error("Failed to delete .f1cache files", zap.Error(err))
-		return err
+		return f1Deleted, err
 	}
 
 	// Delete old .msgpack files
-	if err := h.msgpackReader.DeleteCache(pattern + ".msgpack"); err != nil {
+	msgpackDeleted, err := h.msgpackReader.DeleteCache(base + ".msgpack")
+	if err != nil {
 		h.logger.Error("Failed to delete .msgpack files", zap.Error(err))
-		return err
+		return f1Deleted + msgpackDeleted, err
 	}
 
-	return nil
+	h.logger.Info("Deleted cache files",
+		zap.String("pattern", base),
+		zap.Int("f1cacheDeleted", f1Deleted),
+		zap.Int("msgpackDeleted", msgpackDeleted))
+
+	return f1Deleted + msgpackDeleted, nil
 }
