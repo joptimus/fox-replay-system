@@ -698,9 +698,19 @@ def main():
         for attempt in range(max_load_attempts):
             session.load(telemetry=True, weather=True)
 
-            print(f"DEBUG: session.load() attempt {attempt + 1} complete. laps count: {len(session.laps) if session.laps is not None else 'None'}", file=sys.stderr)
+            # session.laps raises DataNotLoadedError when the timing data download failed
+            try:
+                laps = session.laps
+            except fastf1.exceptions.DataNotLoadedError:
+                laps = None
 
-            if session.laps is None or session.laps.empty:
+            print(f"DEBUG: session.load() attempt {attempt + 1} complete. laps count: {len(laps) if laps is not None else 'None'}", file=sys.stderr)
+
+            if laps is None:
+                emit_error(f"Could not download timing data for {args.year} round {args.round} {args.session_type}. The F1 livetiming API refused the request — check that F1_USERNAME/F1_PASSWORD are set for an active F1 TV subscription.")
+                sys.exit(1)
+
+            if laps.empty:
                 emit_error(f"No lap data available for {args.year} round {args.round} {args.session_type}. The session may not have occurred yet.")
                 sys.exit(1)
 

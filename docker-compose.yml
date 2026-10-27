@@ -4,9 +4,15 @@ services:
     container_name: fox-replay
     ports:
       - "3100:80"
+    environment:
+      # F1 TV account — FastF1 >= 3.9 needs it to download livetiming archive data
+      - F1_USERNAME=${F1_USERNAME}
+      - F1_PASSWORD=${F1_PASSWORD}
     volumes:
       - fox-replay-cache:/app/computed_data
+      - fastf1-cache:/app/.fastf1-cache
     restart: unless-stopped
 
 volumes:
   fox-replay-cache:
+  fastf1-cache:
