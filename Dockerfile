@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /build/f1-replay-go .
 # ============================================================
 # Stage 2: Build React frontend
 # ============================================================
-FROM node:20-bookworm-slim AS frontend-builder
+FROM node:24.22.1-bookworm-slim AS frontend-builder
 
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
